@@ -84,17 +84,7 @@ jobs:
           # Standard single release artifact
           cp android/app/build/outputs/apk/release/app-release.apk "DayByDay-v${VERSION}.apk"
 
-          # Check if this version tag already exists on GitHub
-          if git ls-remote --tags origin | grep -q "refs/tags/v${VERSION}$"; then
-            echo "TAG_EXISTS=true" >> $GITHUB_OUTPUT
-            echo "Version v${VERSION} tag already exists — skipping release publish."
-          else
-            echo "TAG_EXISTS=false" >> $GITHUB_OUTPUT
-            echo "New version v${VERSION} detected — will publish release."
-          fi
-
       - name: Generate Release Changelog
-        if: steps.versioning.outputs.TAG_EXISTS == 'false'
         run: |
           VERSION="${{ steps.versioning.outputs.APP_VERSION }}"
           echo "## DayByDay v${VERSION}" > release_body.md
@@ -109,8 +99,7 @@ jobs:
           echo "1. Download \`DayByDay-v${VERSION}.apk\` below." >> release_body.md
           echo "2. Install over your existing app — all user data is preserved." >> release_body.md
 
-      - name: Publish GitHub Release
-        if: steps.versioning.outputs.TAG_EXISTS == 'false'
+      - name: Publish or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.versioning.outputs.APP_TAG }}
@@ -126,11 +115,6 @@ jobs:
       - name: Build Summary
         run: |
           VERSION="${{ steps.versioning.outputs.APP_VERSION }}"
-          TAG_EXISTS="${{ steps.versioning.outputs.TAG_EXISTS }}"
           echo "### Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** v${VERSION}" >> $GITHUB_STEP_SUMMARY
-          if [ "$TAG_EXISTS" = "false" ]; then
-            echo "**Release:** Published DayByDay-v${VERSION}.apk to GitHub Releases" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Release:** Skipped — v${VERSION} already released. Run \`.\scripts\release.ps1\` to bump version and publish a new release." >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "**Release:** Published / Updated DayByDay-v${VERSION}.apk to GitHub Releases" >> $GITHUB_STEP_SUMMARY
