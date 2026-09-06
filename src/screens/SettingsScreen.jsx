@@ -34,12 +34,7 @@ import {
   RELEASES_PAGE_URL,
   DIRECT_APK_URL,
 } from '../utils/updateChecker';
-import {
-  getApiBaseUrl,
-  setApiBaseUrl,
-  checkApiHealth,
-  hasRemoteBackend,
-} from '../utils/api';
+
 
 export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const {
@@ -64,6 +59,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     logoutUser,
     profilePicture,
     setProfilePicture,
+    syncWithCloud,
+    syncStatus,
   } = useHabits();
 
   const fileInputRef = useRef(null);
@@ -79,34 +76,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [changelogModalOpen, setChangelogModalOpen] = useState(false);
   const [changelogData, setChangelogData] = useState(null);
   const [loadingChangelog, setLoadingChangelog] = useState(false);
-  const [serverUrlInput, setServerUrlInput] = useState(() => getApiBaseUrl());
-  const [showServerEditor, setShowServerEditor] = useState(false);
-  const [testingServer, setTestingServer] = useState(false);
-  const [serverStatusResult, setServerStatusResult] = useState(null);
 
-  const handleTestAndSaveServer = async () => {
-    const clean = serverUrlInput.trim().replace(/\/$/, '');
-    setTestingServer(true);
-    setServerStatusResult(null);
-    try {
-      if (!clean) {
-        setApiBaseUrl('');
-        setServerStatusResult({ ok: true, message: 'Server URL cleared (Local mode)' });
-        return;
-      }
-      const health = await checkApiHealth(clean);
-      if (health.ok) {
-        setApiBaseUrl(clean);
-        setServerStatusResult({ ok: true, message: `Connected! Latency: ${health.latency || 25}ms` });
-      } else {
-        setServerStatusResult({ ok: false, message: health.message || 'Server did not respond with 200 OK' });
-      }
-    } catch (err) {
-      setServerStatusResult({ ok: false, message: err.message || 'Connection failed' });
-    } finally {
-      setTestingServer(false);
-    }
-  };
 
   const handleViewChangelog = async () => {
     setLoadingChangelog(true);
@@ -395,60 +365,30 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* SECTION: CLOUD SYNC & SERVER */}
+      {/* SECTION: CLOUD SYNC */}
       <div className="settings-group">
-        <span className="group-label">CLOUD SYNC & SERVER</span>
+        <span className="group-label">CLOUD SYNC</span>
         <div className="settings-group-content">
-          <div
-            className="settings-row-item clickable"
-            onClick={() => setShowServerEditor(!showServerEditor)}
-          >
+          <div className="settings-row-item">
             <div className="row-left">
               <Cloud size={18} className="text-blue-400" />
               <div>
-                <span className="row-title">Backend Server & Remote Sync</span>
-                <span className="row-hint">
-                  {getApiBaseUrl() ? getApiBaseUrl() : hasRemoteBackend() ? 'Same-Origin Web API' : 'Local-First Mode (No Remote Server)'}
-                </span>
+                <span className="row-title">Cloud Synchronization</span>
+                <span className="row-hint">Automatic live backup & partner sync</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`sync-status-indicator ${hasRemoteBackend() ? 'connected' : 'local'}`}>
-                {hasRemoteBackend() ? 'Connected' : 'Local'}
-              </span>
-              <ChevronRight size={18} className={`transition-transform ${showServerEditor ? 'rotate-90' : ''}`} />
+              <button
+                type="button"
+                className="sync-now-btn"
+                onClick={syncWithCloud}
+                disabled={syncStatus === 'syncing'}
+              >
+                <RefreshCw size={12} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
+                <span>{syncStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
             </div>
           </div>
-
-          {showServerEditor && (
-            <div className="server-editor-panel">
-              <p className="server-editor-desc">
-                Connect your DayByDay Vercel URL to synchronize habits and pods in real-time across your PC, iPhone, and Android devices:
-              </p>
-              <div className="server-input-action-row">
-                <input
-                  type="url"
-                  placeholder="https://your-daybyday.vercel.app"
-                  value={serverUrlInput}
-                  onChange={(e) => setServerUrlInput(e.target.value)}
-                  className="server-config-input"
-                />
-                <button
-                  className="server-save-action-btn font-semibold"
-                  disabled={testingServer}
-                  onClick={handleTestAndSaveServer}
-                >
-                  {testingServer ? 'Testing...' : 'Test & Save'}
-                </button>
-              </div>
-              {serverStatusResult && (
-                <div className={`server-inline-alert ${serverStatusResult.ok ? 'success' : 'failed'}`}>
-                  {serverStatusResult.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                  <span>{serverStatusResult.message}</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 

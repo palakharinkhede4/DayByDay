@@ -15,6 +15,7 @@ import {
   pairPartnerRemote,
   unpairPartnerRemote,
   deleteHabitRemote,
+  hasRemoteBackend,
 } from '../utils/api';
 import {
   initPersistentStorage,
@@ -748,13 +749,13 @@ export const HabitProvider = ({ children }) => {
       }
     }
 
-    // Context-sensitive error reporting
+    // Error reporting
     const hasRemote = hasRemoteBackend();
-    if (!hasRemote) {
-      throw new Error(`Account @${cleanUsername} was not found on this device. If you created this account on the web or another device, please connect your Cloud Server URL or import your backup below.`);
-    }
     if (remoteError) {
-      throw new Error(`Could not reach cloud server (${remoteError}). Check your connection or verify server URL.`);
+      if (remoteError.toLowerCase().includes('failed to fetch') || remoteError.toLowerCase().includes('network')) {
+        throw new Error('Unable to connect to cloud. Please check your internet connection.');
+      }
+      throw new Error(remoteError);
     }
     throw new Error(`Account @${cleanUsername} not found. Check your username or tap "Create Account".`);
   };

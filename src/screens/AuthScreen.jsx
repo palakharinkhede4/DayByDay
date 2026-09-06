@@ -1,26 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
-import {
-  setApiBaseUrl,
-  getApiBaseUrl,
-  checkApiHealth,
-  hasRemoteBackend,
-  isNativePlatform,
-} from '../utils/api';
 import {
   Sparkles,
   Eye,
   EyeOff,
-  Cloud,
   CheckCircle2,
   AlertCircle,
-  Upload,
   RefreshCw,
-  Server,
   ArrowRight,
   ShieldCheck,
   Smartphone,
-  Laptop,
 } from 'lucide-react';
 
 const PRESET_SECURITY_QUESTIONS = [
@@ -39,7 +28,6 @@ export const AuthScreen = () => {
     loginUser,
     getSecurityQuestion,
     resetPassword,
-    importData,
     osMode,
   } = useHabits();
 
@@ -64,18 +52,10 @@ export const AuthScreen = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
-  // Cloud server configuration drawer
-  const [showServerDrawer, setShowServerDrawer] = useState(false);
-  const [serverUrlInput, setServerUrlInput] = useState(() => getApiBaseUrl());
-  const [serverTesting, setServerTesting] = useState(false);
-  const [serverStatus, setServerStatus] = useState(null); // { ok: bool, message: string }
-
   // Status and feedback
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
-
-  const fileInputRef = useRef(null);
 
   // Handle Login
   const handleLogin = async (e) => {
@@ -96,10 +76,6 @@ export const AuthScreen = () => {
       await loginUser(cleanUsername, password);
     } catch (err) {
       setError(err.message || 'Failed to sign in. Please verify your credentials.');
-      // If error mentions cloud server or device, open server drawer automatically to guide user
-      if (err.message && (err.message.includes('Cloud Server') || err.message.includes('not found on this device'))) {
-        setShowServerDrawer(true);
-      }
     } finally {
       setLoading(false);
     }
@@ -213,62 +189,7 @@ export const AuthScreen = () => {
     }
   };
 
-  // Test & Save Cloud Server URL
-  const handleTestAndSaveServer = async () => {
-    const clean = serverUrlInput.trim().replace(/\/$/, '');
-    setServerTesting(true);
-    setServerStatus(null);
-    try {
-      if (!clean) {
-        setApiBaseUrl('');
-        setServerStatus({ ok: true, message: 'Server URL cleared (Local vault mode)' });
-        return;
-      }
-      const health = await checkApiHealth(clean);
-      if (health.ok) {
-        setApiBaseUrl(clean);
-        setServerStatus({
-          ok: true,
-          message: `Connected! Latency: ${health.latency || 25}ms`,
-        });
-        setError(null);
-      } else {
-        setServerStatus({
-          ok: false,
-          message: health.message || 'Could not reach server. Verify URL and try again.',
-        });
-      }
-    } catch (err) {
-      setServerStatus({
-        ok: false,
-        message: err.message || 'Network error reaching server',
-      });
-    } finally {
-      setServerTesting(false);
-    }
-  };
 
-  // Handle JSON Backup File Import (for seamless transfer from PC web to mobile)
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result;
-        const res = importData(text);
-        if (res.success) {
-          setSuccessMsg('Account and habits restored! Welcome back!');
-        } else {
-          setError(res.error || 'Invalid backup file format');
-        }
-      } catch {
-        setError('Failed to read backup file');
-      }
-    };
-    reader.readAsText(file);
-  };
 
   const appVersion = typeof __APP_VERSION__ !== 'undefined' ? `v${__APP_VERSION__}` : 'v1.3.0';
 
@@ -646,95 +567,17 @@ export const AuthScreen = () => {
               )}
             </div>
           )}
-
-          {/* ================= CROSS-DEVICE CLOUD SYNC & IMPORT ACCORDION ================= */}
-          <div className="auth-cross-device-section">
-            <div
-              className="auth-accordion-trigger"
-              onClick={() => setShowServerDrawer(!showServerDrawer)}
-            >
-              <div className="trigger-left">
-                <Cloud size={16} className="trigger-icon" />
-                <span className="trigger-label">
-                  {hasRemoteBackend() ? 'Cloud Server Connected' : 'Connect Cloud Server / Transfer Account'}
-                </span>
-              </div>
-              <span className={`accordion-indicator ${showServerDrawer ? 'open' : ''}`}>
-                ›
-              </span>
-            </div>
-
-            {showServerDrawer && (
-              <div className="auth-server-drawer-content">
-                <p className="drawer-description">
-                  Connect your DayByDay Vercel deployment URL to synchronize accounts and habits between your PC, iOS, and Android devices.
-                </p>
-
-                {/* SERVER URL INPUT */}
-                <div className="server-url-field">
-                  <div className="server-input-row">
-                    <Server size={16} className="server-icon" />
-                    <input
-                      type="url"
-                      placeholder="https://your-daybyday-app.vercel.app"
-                      value={serverUrlInput}
-                      onChange={(e) => setServerUrlInput(e.target.value)}
-                      className="server-text-input"
-                    />
-                    <button
-                      type="button"
-                      disabled={serverTesting}
-                      onClick={handleTestAndSaveServer}
-                      className="server-test-btn"
-                    >
-                      {serverTesting ? 'Testing...' : 'Test & Save'}
-                    </button>
-                  </div>
-
-                  {serverStatus && (
-                    <div className={`server-status-pill ${serverStatus.ok ? 'success' : 'failed'}`}>
-                      {serverStatus.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                      <span>{serverStatus.message}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* TRANSFER / IMPORT FROM PC */}
-                <div className="drawer-divider">
-                  <span>OR RESTORE FROM BACKUP</span>
-                </div>
-
-                <div className="transfer-action-row">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept=".json"
-                    style={{ display: 'none' }}
-                    onChange={handleFileUpload}
-                  />
-                  <button
-                    type="button"
-                    className="transfer-file-btn"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload size={16} />
-                    <span>Import Account from PC / Web Backup (.json)</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* FOOTER FEATURES BADGES */}
         <footer className="auth-platform-footer">
           <div className="feature-pill">
             <ShieldCheck size={14} />
-            <span>100% Private & Local-First</span>
+            <span>100% Private & Encrypted</span>
           </div>
           <div className="feature-pill">
             <Smartphone size={14} />
-            <span>Cross-Platform Sync</span>
+            <span>Automatic Cloud Sync</span>
           </div>
         </footer>
       </div>

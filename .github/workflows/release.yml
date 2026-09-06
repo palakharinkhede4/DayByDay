@@ -43,7 +43,7 @@ jobs:
       - name: Build Web Production Assets
         run: npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL || vars.VITE_API_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || vars.VITE_API_URL || 'https://day-by-day-palak-2599.vercel.app' }}
 
       - name: Sync Web Assets to Capacitor Android
         run: npx cap sync android

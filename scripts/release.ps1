@@ -6,7 +6,8 @@
 # =============================================================================
 
 param(
-    [string]$BumpType = "patch"
+    [string]$BumpType = "patch",
+    [string]$Message = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,7 +60,8 @@ Write-Host "Updated updateChecker.js" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Committing version bump and all changes..." -ForegroundColor Cyan
 git add -A
-git commit -m "release: v$next - modern pastel navy app icon, full-page native AuthScreen, and cloud sync bridge"
+$commitMsg = if ($Message) { "release: v$next - $Message" } else { "release: v$next - clean native auth, DB cloud sync & eliminate technical UI" }
+git commit -m $commitMsg
 git push origin main
 
 Write-Host ""

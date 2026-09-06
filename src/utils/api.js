@@ -1,5 +1,7 @@
 // DayByDay Remote Sync Client & Offline-First API Gateway
 
+export const DEFAULT_API_URL = 'https://day-by-day-palak-2599.vercel.app';
+
 export const isNativePlatform = () => {
   if (typeof window === 'undefined') return false;
   return Boolean(
@@ -11,7 +13,7 @@ export const isNativePlatform = () => {
 };
 
 export const getApiBaseUrl = () => {
-  if (typeof window === 'undefined') return '';
+  if (typeof window === 'undefined') return DEFAULT_API_URL;
   const customUrl = localStorage.getItem('daybyday_server_url') || localStorage.getItem('duotrack_server_url');
   if (customUrl && customUrl.trim()) {
     return customUrl.trim().replace(/\/$/, '');
@@ -19,11 +21,12 @@ export const getApiBaseUrl = () => {
   if (import.meta?.env?.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
     return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
   }
-  // When running on public web / Vercel
-  if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost')) {
+  // When running on public web / Vercel with same origin
+  if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
     return window.location.origin;
   }
-  return '';
+  // Default cloud API for native apps (Android/iOS) and standalone clients
+  return DEFAULT_API_URL;
 };
 
 export const setApiBaseUrl = (url) => {
@@ -45,11 +48,7 @@ export const clearApiBaseUrl = () => {
 
 export const hasRemoteBackend = () => {
   const baseUrl = getApiBaseUrl();
-  if (baseUrl && baseUrl.trim()) return true;
-  if (typeof window !== 'undefined' && window.location.protocol.startsWith('http') && !isNativePlatform()) {
-    return true;
-  }
-  return false;
+  return Boolean(baseUrl && baseUrl.trim());
 };
 
 // Safe JSON parser to prevent "Unexpected token <, <!doctype" fatal errors
@@ -58,12 +57,12 @@ async function parseJsonSafe(res) {
   const text = await res.text();
   
   if (text.trim().startsWith('<') || (!contentType.includes('application/json') && text.includes('<!DOCTYPE'))) {
-    throw new Error('Server returned an HTML document instead of JSON. Check your backend configuration.');
+    throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
   }
   try {
     return JSON.parse(text);
   } catch (e) {
-    throw new Error('Invalid server JSON response');
+    throw new Error('Invalid response from cloud service');
   }
 }
 
@@ -81,7 +80,7 @@ export const checkApiHealth = async (url) => {
     const latency = Date.now() - start;
     if (res.ok) {
       const data = await parseJsonSafe(res);
-      return { ok: true, latency, message: data.message || 'Connected to Vercel API' };
+      return { ok: true, latency, message: data.message || 'Connected to DayByDay Cloud' };
     }
     return { ok: false, message: `Server responded with HTTP ${res.status}` };
   } catch (err) {
