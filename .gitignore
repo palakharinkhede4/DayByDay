@@ -8,11 +8,30 @@ dist/
 dist-ssr/
 build/
 
-# Secrets & Environment
+# Secrets & Environment (Strictly Protected)
 .env
 .env.*
 *.env
+*.env.local
+*.env.production
+*.env.development
+*.env.test
+secrets/
+credentials/
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.secret*
+credentials*.json
+service-account*.json
 scripts/*.mjs
+scripts/scratch/
+scripts/*.local.*
 
 # Local Environment & Logs
 *.local

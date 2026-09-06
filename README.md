@@ -184,7 +184,7 @@ CREATE INDEX IF NOT EXISTS idx_habits_user ON daybyday_habits(user_id);
 Configure the following environment variable on your hosting platform:
 
 ```env
-DATABASE_URL=postgres://user:password@ep-sample-pool.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql://<username>:<password>@<neon_hostname>/<database>?sslmode=require
 ```
 
 If `DATABASE_URL` is omitted, the application automatically falls back to local storage and in-memory persistence.

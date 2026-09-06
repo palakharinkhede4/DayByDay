@@ -22,6 +22,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Security Audit & Secret Scanner
+        run: |
+          echo "Scanning repository for exposed secrets and database URLs..."
+          FORBIDDEN_PATTERN='(npg_[a-zA-Z0-9_-]+|postgresql:\/\/[^<@[:space:]]+:[^@[:space:]]+@[^[:space:]]+|postgres:\/\/[^<@[:space:]]+:[^@[:space:]]+@[^[:space:]]+|neondb_owner)'
+          if git grep -E -I "$FORBIDDEN_PATTERN" -- ':!package-lock.json' ':!.github/workflows/*'; then
+            echo "::error::SECURITY VIOLATION: Hardcoded database secret or connection string detected!"
+            exit 1
+          fi
+          echo "Security audit passed: Clean codebase with 0 exposed secrets."
+
       - name: Set up Java 21 (Microsoft OpenJDK)
         uses: actions/setup-java@v4
         with:
