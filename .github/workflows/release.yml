@@ -55,15 +55,14 @@ jobs:
           ./gradlew assembleRelease --no-daemon
           cd ..
 
-      - name: Extract Version & Prepare Versioned Artifacts
+      - name: Extract Version & Prepare Versioned Artifact
         id: versioning
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "APP_VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "APP_TAG=v${VERSION}" >> $GITHUB_OUTPUT
           
-          # Prepare both rolling DayByDay.apk and versioned DayByDay-vX.Y.Z.apk
-          cp android/app/build/outputs/apk/release/app-release.apk DayByDay.apk
+          # Standard single release artifact
           cp android/app/build/outputs/apk/release/app-release.apk "DayByDay-v${VERSION}.apk"
 
       - name: Generate Release Changelog
@@ -87,30 +86,16 @@ jobs:
           echo "" >> release_body.md
           echo "" >> release_body.md
           echo "### Android Installation:" >> release_body.md
-          echo "1. Download \`DayByDay.apk\` (or \`DayByDay-v${VERSION}.apk\`) below." >> release_body.md
+          echo "1. Download \`DayByDay-v${VERSION}.apk\` below." >> release_body.md
           echo "2. Install over your existing app (in-place update certificate preserved; user data maintained)." >> release_body.md
 
-      - name: Publish Versioned Release (Preserved Permanently)
+      - name: Publish Standardized GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.versioning.outputs.APP_TAG }}
           name: "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}"
           body_path: release_body.md
-          files: |
-            DayByDay.apk
-            DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Rolling Latest Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: "DayByDay v${{ steps.versioning.outputs.APP_VERSION }} (Latest Build)"
-          body_path: release_body.md
-          files: DayByDay.apk
+          files: DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk
           draft: false
           prerelease: false
           make_latest: true
