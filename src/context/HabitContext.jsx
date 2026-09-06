@@ -189,6 +189,13 @@ export const HabitProvider = ({ children }) => {
   };
 
   // 4. OS Engine ('ios' | 'android')
+  const [osMode, setOsMode] = useState(() => {
+    const saved = localStorage.getItem('daybyday_os');
+    if (saved === 'android' || saved === 'ios') return saved;
+    return detectInitialOS();
+  });
+
+  // 5. Accent theme color
   const [themeColor, setThemeColor] = useState(() => {
     const saved = localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme');
     if (!saved || saved === 'fit') return 'sapphire';
@@ -379,6 +386,10 @@ export const HabitProvider = ({ children }) => {
     } else {
       localStorage.removeItem('daybyday_focus_habit_id');
     }
+  };
+
+  const stopLiveActivity = () => {
+    // Live activity is disabled; no-op stub
   };
 
   const setLiveActivityEnabled = (enabled) => {

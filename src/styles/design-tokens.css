@@ -1,54 +1,54 @@
 /* ==========================================================================
-   DAYBYDAY DESIGN SYSTEM: GOOGLE FIT ATHLETIC ACTIVITY PALETTE (DEFAULT)
+   DAYBYDAY DESIGN SYSTEM: PASTEL DEEP NAVY PALETTE (DEFAULT)
    & MATERIAL 3 EXPRESSIVE DYNAMIC PALETTE (OPTIONAL ANDROID THEME)
    LIGHT / DARK / AUTO THEME MODES
    ========================================================================== */
 
 :root {
-  /* Sapphire Executive Activity Tokens (Default Palette) */
-  --sapphire-blue: #2563EB;     /* Executive Dark Sapphire */
-  --sapphire-blue-glow: rgba(37, 99, 235, 0.45);
-  --sapphire-blue-light: #60A5FA;
+  /* Deep Pastel Navy Tokens (Default Palette) */
+  --sapphire-blue: #1A56C4;     /* Deep Pastel Navy Primary */
+  --sapphire-blue-glow: rgba(26, 86, 196, 0.40);
+  --sapphire-blue-light: #93C5FD;
 
-  --electric-cyan: #00D2FF;     /* Focus / Streak Electric Cyan */
-  --electric-cyan-glow: rgba(0, 210, 255, 0.45);
-  --electric-cyan-light: #7DD3FC;
+  --electric-cyan: #7EB8F7;     /* Soft Sky Blue Accent */
+  --electric-cyan-glow: rgba(126, 184, 247, 0.40);
+  --electric-cyan-light: #BFDBFE;
 
   --fit-green: #00D284;
-  --fit-blue: #2563EB;
-  --fit-cyan: #00D2FF;
+  --fit-blue: #1A56C4;
+  --fit-cyan: #7EB8F7;
   --fit-coral: #FF5252;
   --fit-amber: #FBBC04;
   --fit-purple: #8B5CF6;
 
-  /* Default Active User Colors: Dark Sapphire & Electric Cyan */
-  --user1-color: #2563EB;       /* Primary Habit Completion (Sapphire Blue) */
-  --user1-glow: rgba(37, 99, 235, 0.45);
-  --user1-light: #60A5FA;
+  /* Default Active User Colors: Deep Navy & Soft Sky Blue */
+  --user1-color: #1A56C4;       /* Primary Habit Completion (Deep Navy) */
+  --user1-glow: rgba(26, 86, 196, 0.40);
+  --user1-light: #93C5FD;
 
-  --user2-color: #00D2FF;       /* Co-op / Momentum (Electric Cyan) */
-  --user2-glow: rgba(0, 210, 255, 0.45);
-  --user2-light: #7DD3FC;
+  --user2-color: #7EB8F7;       /* Co-op / Momentum (Soft Sky Blue) */
+  --user2-glow: rgba(126, 184, 247, 0.40);
+  --user2-light: #BFDBFE;
 
-  --primary: #2563EB;
-  --primary-glow: rgba(37, 99, 235, 0.45);
-  --accent: #00D2FF;
-  --accent-glow: rgba(0, 210, 255, 0.45);
+  --primary: #1A56C4;
+  --primary-glow: rgba(26, 86, 196, 0.40);
+  --accent: #7EB8F7;
+  --accent-glow: rgba(126, 184, 247, 0.40);
 
   --accent-flame: #FBBC04;
-  --success: #2563EB;
+  --success: #1A56C4;
   --warning: #FBBC04;
-  --info: #00D2FF;
+  --info: #7EB8F7;
   --danger: #FF5252;
 
   --dial-track-color: rgba(255, 255, 255, 0.08);
   --dial-track-inner: rgba(255, 255, 255, 0.05);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #00D2FF 100%);
-  --fit-grad-primary: linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #00D2FF 100%);
-  --fit-grad-heart: linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%);
-  --fit-grad-move: linear-gradient(135deg, #2563EB 0%, #00D2FF 100%);
+  --gradient-primary: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 50%, #7EB8F7 100%);
+  --fit-grad-primary: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 50%, #7EB8F7 100%);
+  --fit-grad-heart: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 100%);
+  --fit-grad-move: linear-gradient(135deg, #1A56C4 0%, #7EB8F7 100%);
   --fit-grad-flame: linear-gradient(135deg, #FBBC04 0%, #FF6D00 100%);
 
   /* Transitions */
@@ -64,26 +64,26 @@
   --font-family: 'Roboto Flex', 'Outfit', -apple-system, sans-serif;
   --font-heading: 'Outfit', sans-serif;
 
-  /* Dark Sapphire Athletic Base */
-  --bg-app: #080C16;
-  --bg-surface: #0F172A;
-  --bg-surface-container: #17233D;
-  --bg-surface-high: #1E2E4E;
-  --bg-surface-highest: #283C64;
-  --bg-tonal: rgba(37, 99, 235, 0.12);
+  /* Deep Navy Athletic Base */
+  --bg-app: #060A14;
+  --bg-surface: #0C1424;
+  --bg-surface-container: #131E38;
+  --bg-surface-high: #192850;
+  --bg-surface-highest: #213468;
+  --bg-tonal: rgba(26, 86, 196, 0.12);
 
-  --text-primary: #F8FAFC;
+  --text-primary: #F0F4FC;
   --text-secondary: #94A3B8;
   --text-tertiary: #64748B;
   --text-inverse: #0B0E11;
 
-  --primary: #2563EB;
+  --primary: #1A56C4;
   --on-primary: #FFFFFF;
-  --primary-container: rgba(37, 99, 235, 0.2);
-  --on-primary-container: #93C5FD;
+  --primary-container: rgba(26, 86, 196, 0.20);
+  --on-primary-container: #BFDBFE;
 
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-focus: #2563EB;
+  --border-focus: #1A56C4;
 
   /* M3 Standard Geometry */
   --radius-xs: 8px;
@@ -100,7 +100,7 @@
 
   --card-backdrop: none;
   --nav-blur: none;
-  --os-name: "Android · Google Fit Style";
+  --os-name: "Android · Deep Navy Style";
 }
 
 /* ==========================================
@@ -110,26 +110,26 @@
   --font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-heading: 'Plus Jakarta Sans', sans-serif;
 
-  /* iOS Frosted Athletic Dark Theme */
-  --bg-app: #080C16;
-  --bg-surface: rgba(15, 23, 42, 0.78);
-  --bg-surface-container: rgba(23, 35, 61, 0.72);
-  --bg-surface-high: rgba(30, 46, 78, 0.82);
-  --bg-surface-highest: rgba(40, 60, 100, 0.90);
-  --bg-tonal: rgba(37, 99, 235, 0.14);
+  /* iOS Frosted Deep Navy Dark Theme */
+  --bg-app: #060A14;
+  --bg-surface: rgba(12, 20, 36, 0.78);
+  --bg-surface-container: rgba(19, 30, 56, 0.72);
+  --bg-surface-high: rgba(25, 40, 80, 0.82);
+  --bg-surface-highest: rgba(33, 52, 104, 0.90);
+  --bg-tonal: rgba(26, 86, 196, 0.14);
 
-  --text-primary: #F8FAFC;
+  --text-primary: #F0F4FC;
   --text-secondary: #94A3B8;
   --text-tertiary: #64748B;
   --text-inverse: #020617;
 
-  --primary: #2563EB;
+  --primary: #1A56C4;
   --on-primary: #FFFFFF;
-  --primary-container: rgba(37, 99, 235, 0.25);
-  --on-primary-container: #93C5FD;
+  --primary-container: rgba(26, 86, 196, 0.25);
+  --on-primary-container: #BFDBFE;
 
   --border-subtle: rgba(255, 255, 255, 0.1);
-  --border-focus: #2563EB;
+  --border-focus: #1A56C4;
 
   /* iOS Cupertino Geometry */
   --radius-xs: 8px;
@@ -255,15 +255,15 @@
 
 /* Palette Themes */
 [data-theme="sapphire"] {
-  --primary: #2563EB;
-  --primary-glow: rgba(37, 99, 235, 0.45);
-  --accent: #00D2FF;
-  --accent-glow: rgba(0, 210, 255, 0.45);
-  --gradient-primary: linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #00D2FF 100%);
-  --user1-color: #2563EB;
-  --user1-glow: rgba(37, 99, 235, 0.45);
-  --user2-color: #00D2FF;
-  --user2-glow: rgba(0, 210, 255, 0.45);
+  --primary: #1A56C4;
+  --primary-glow: rgba(26, 86, 196, 0.40);
+  --accent: #7EB8F7;
+  --accent-glow: rgba(126, 184, 247, 0.40);
+  --gradient-primary: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 50%, #7EB8F7 100%);
+  --user1-color: #1A56C4;
+  --user1-glow: rgba(26, 86, 196, 0.40);
+  --user2-color: #7EB8F7;
+  --user2-glow: rgba(126, 184, 247, 0.40);
 }
 
 [data-theme="fit"] {
