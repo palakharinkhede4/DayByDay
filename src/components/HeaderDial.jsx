@@ -105,7 +105,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
         <div className="progress-narrative">
           <h2 className="narrative-heading font-bold">
             {currentPercent === 100
-              ? 'All habits completed! 🎉'
+              ? 'All habits completed today'
               : currentPercent > 0
               ? `${completedCount} of ${habits.length} habits done`
               : 'Ready to build your streaks'}

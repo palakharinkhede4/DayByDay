@@ -78,7 +78,7 @@ export const TrackScreen = () => {
 
   const handleSendNudge = () => {
     triggerCelebration();
-    triggerIslandNotification(`High-five sent to @${trackedPartner.username}! ✋`, '🎉');
+    triggerIslandNotification(`High-five sent to @${trackedPartner.username}!`, 'check');
   };
 
   return (

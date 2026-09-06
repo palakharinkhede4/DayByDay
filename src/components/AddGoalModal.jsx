@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
+import {
+  Sparkles,
+  Dumbbell,
+  Code,
+  BookOpen,
+  Activity,
+  Smartphone,
+  Target,
+  Check,
+  X,
+  Bell,
+  Clock,
+} from 'lucide-react';
 
 const DAYS_OF_WEEK = [
   { key: 'Mon', label: 'M' },
@@ -12,13 +25,25 @@ const DAYS_OF_WEEK = [
 ];
 
 const PRESETS = [
-  { id: 'journaling', name: 'Journaling', category: 'Mind', desc: 'Daily reflections & thoughts', target: 1, unit: 'entry', icon: '✍️', time: '21:30' },
-  { id: 'running', name: 'Morning Run', category: 'Fitness', desc: 'Cardio distance', target: 3, unit: 'km', icon: '🏃', time: '07:00' },
-  { id: 'coding', name: 'Code Practice', category: 'Work', desc: 'Deep work & building', target: 60, unit: 'min', icon: '💻', time: '10:00' },
-  { id: 'reading', name: 'Reading', category: 'Mind', desc: 'Books or articles', target: 15, unit: 'pages', icon: '📚', time: '20:00' },
-  { id: 'stretching', name: 'Stretching & Mobility', category: 'Health', desc: 'Post-workout recovery', target: 10, unit: 'min', icon: '🧘', time: '08:00' },
-  { id: 'screen_limit', name: 'Screen Limit', category: 'Lifestyle', desc: 'Digital detox check', target: 2, unit: 'hours', icon: '📵', time: '22:00' },
+  { id: 'journaling', name: 'Journaling', category: 'Mind', desc: 'Daily reflections & thoughts', target: 1, unit: 'entry', icon: 'mind', time: '21:30' },
+  { id: 'running', name: 'Morning Run', category: 'Fitness', desc: 'Cardio distance', target: 3, unit: 'km', icon: 'fitness', time: '07:00' },
+  { id: 'coding', name: 'Code Practice', category: 'Work', desc: 'Deep work & building', target: 60, unit: 'min', icon: 'work', time: '10:00' },
+  { id: 'reading', name: 'Reading', category: 'Mind', desc: 'Books or articles', target: 15, unit: 'pages', icon: 'reading', time: '20:00' },
+  { id: 'stretching', name: 'Stretching & Mobility', category: 'Health', desc: 'Post-workout recovery', target: 10, unit: 'min', icon: 'health', time: '08:00' },
+  { id: 'screen_limit', name: 'Screen Limit', category: 'Lifestyle', desc: 'Digital detox check', target: 2, unit: 'hours', icon: 'lifestyle', time: '22:00' },
 ];
+
+function getPresetIcon(icon) {
+  switch (icon) {
+    case 'mind': return <Sparkles size={18} className="text-purple-400" />;
+    case 'fitness': return <Dumbbell size={18} className="text-rose-400" />;
+    case 'work': return <Code size={18} className="text-blue-400" />;
+    case 'reading': return <BookOpen size={18} className="text-amber-400" />;
+    case 'health': return <Activity size={18} className="text-emerald-400" />;
+    case 'lifestyle': return <Smartphone size={18} className="text-indigo-400" />;
+    default: return <Target size={18} className="text-emerald-500" />;
+  }
+}
 
 export const AddGoalModal = ({ isOpen, onClose }) => {
   const { addGoal, habits, requestNotificationPermission } = useHabits();
@@ -29,7 +54,7 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
   const [customCategory, setCustomCategory] = useState('Health');
   const [customTarget, setCustomTarget] = useState(1);
   const [customUnit, setCustomUnit] = useState('times');
-  const [customIcon, setCustomIcon] = useState('🎯');
+  const [customIcon, setCustomIcon] = useState('target');
 
   // Reminder settings
   const [enableReminder, setEnableReminder] = useState(false);
@@ -98,18 +123,23 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-sheet add-goal-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-grabber"></div>
-
-        <div className="modal-header">
-          <div>
-            <span className="modal-pill-tag">HABIT CREATOR</span>
-            <h2 className="modal-title">Add a New Habit</h2>
-          </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">✕</button>
+        {/* Modal Handlebar / Header */}
+        <div className="modal-handle-bar">
+          <div className="modal-pill-indicator"></div>
         </div>
 
-        {/* Tab switcher */}
-        <div className="add-tabs">
+        <div className="modal-header-row">
+          <div>
+            <h2 className="modal-title font-extrabold">Add New Habit</h2>
+            <p className="modal-subtitle">Track personal consistency or collaborate with friends</p>
+          </div>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Mode Selector Tabs */}
+        <div className="modal-mode-tabs">
           <button
             type="button"
             className={`tab-btn ${tab === 'preset' ? 'active' : ''}`}
@@ -133,7 +163,9 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
               return (
                 <div key={p.id} className="preset-row-item">
                   <div className="preset-info">
-                    <span className="preset-icon">{p.icon}</span>
+                    <div className="preset-icon-badge">
+                      {getPresetIcon(p.icon)}
+                    </div>
                     <div>
                       <span className="preset-name font-bold">{p.name}</span>
                       <span className="preset-sub">{p.desc} · {p.target} {p.unit} · {p.category}</span>
@@ -144,7 +176,14 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
                     onClick={() => !alreadyAdded && handleAddPreset(p)}
                     disabled={alreadyAdded}
                   >
-                    {alreadyAdded ? 'Added ✓' : '+ Add'}
+                    {alreadyAdded ? (
+                      <>
+                        <Check size={13} />
+                        <span>Added</span>
+                      </>
+                    ) : (
+                      <span>+ Add</span>
+                    )}
                   </button>
                 </div>
               );
@@ -186,6 +225,7 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
                 <input
                   type="number"
                   min="1"
+                  max="100000"
                   value={customTarget}
                   onChange={(e) => setCustomTarget(e.target.value)}
                   className="form-input"
@@ -206,22 +246,20 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="form-group half">
-                <label className="form-label">Icon</label>
+                <label className="form-label">Icon Style</label>
                 <select
                   value={customIcon}
                   onChange={(e) => setCustomIcon(e.target.value)}
                   className="form-input"
                 >
-                  <option value="🎯">🎯 Target</option>
-                  <option value="🏃">🏃 Runner</option>
-                  <option value="📚">📚 Book</option>
-                  <option value="🧘">🧘 Mindfulness</option>
-                  <option value="💧">💧 Water</option>
-                  <option value="💪">💪 Fitness</option>
-                  <option value="💻">💻 Code / Work</option>
-                  <option value="✍️">✍️ Writing</option>
-                  <option value="🥗">🥗 Nutrition</option>
-                  <option value="🌱">🌱 Habit</option>
+                  <option value="target">Target</option>
+                  <option value="fitness">Fitness / Workout</option>
+                  <option value="reading">Reading / Learning</option>
+                  <option value="meditation">Mindfulness</option>
+                  <option value="water">Hydration</option>
+                  <option value="work">Work / Code</option>
+                  <option value="health">Health / Wellness</option>
+                  <option value="sleep">Rest / Sleep</option>
                 </select>
               </div>
             </div>
@@ -229,9 +267,12 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
             {/* SCHEDULED REMINDERS & NOTIFICATIONS */}
             <div className="reminder-settings-card">
               <div className="reminder-toggle-row">
-                <div>
-                  <span className="reminder-title font-bold">Schedule Reminder Notification</span>
-                  <span className="reminder-hint">Get alerted on your device at a specific time</span>
+                <div className="reminder-left-title">
+                  <Bell size={16} className="text-amber-400" />
+                  <div>
+                    <span className="reminder-title font-bold">Schedule Reminder</span>
+                    <span className="reminder-hint">Get alerted at a specific time</span>
+                  </div>
                 </div>
                 <label className="switch">
                   <input

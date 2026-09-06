@@ -71,7 +71,7 @@ export const startOrUpdateLiveActivity = async ({
     habitId: habit.id,
     habitName: habit.name,
     category: habit.category || 'Daily',
-    icon: habit.icon || '🎯',
+    icon: habit.icon || 'target',
     currentValue: Number(userValue) || 0,
     targetValue: Number(targetValue) || 1,
     unit: unit,
@@ -129,8 +129,8 @@ export const startOrUpdateLiveActivity = async ({
           : 0
       );
 
-      const title = `${payload.icon} ${payload.habitName} • ${pct}%`;
-      const body = `${payload.currentValue} / ${payload.targetValue} ${payload.unit} | Streak: ${payload.streak}d 🔥${
+      const title = `${payload.habitName} • ${pct}%`;
+      const body = `${payload.currentValue} / ${payload.targetValue} ${payload.unit} | Streak: ${payload.streak}d${
         payload.partnerUsername ? ` | @${payload.partnerUsername}: ${payload.partnerProgressPercent}%` : ''
       }`;
 

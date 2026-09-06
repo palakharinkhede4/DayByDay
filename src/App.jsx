@@ -6,7 +6,6 @@ import { TrackScreen } from './screens/TrackScreen';
 import { TogetherScreen } from './screens/TogetherScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { BottomNavBar } from './components/BottomNavBar';
 import { PairingModal } from './components/PairingModal';
 import { AddGoalModal } from './components/AddGoalModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -47,12 +46,6 @@ const MainAppContent = () => {
             onOpenAddGoal={() => setIsAddGoalOpen(true)}
           />
         )}
-
-        {/* Mobile Bottom Navigation Bar (Hidden on Desktop via CSS) */}
-        <BottomNavBar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
       </AppLayout>
 
       {/* Modals */}

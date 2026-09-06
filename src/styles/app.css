@@ -4297,6 +4297,7 @@ button:active {
   .beyond-cards-grid {
     grid-template-columns: repeat(2, 1fr) !important;
   }
+  .bottom-navigation-bar,
   .bottom-nav-bar {
     display: none !important;
   }

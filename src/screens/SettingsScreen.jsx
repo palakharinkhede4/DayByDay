@@ -1,13 +1,31 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
-import { checkApiHealth } from '../utils/api';
+import {
+  Users,
+  Key,
+  Copy,
+  Check,
+  LogOut,
+  Moon,
+  Sun,
+  Laptop,
+  Palette,
+  Zap,
+  Target,
+  Sparkles,
+  ListChecks,
+  Download,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+} from 'lucide-react';
 
 export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const {
     user,
     partner,
     isSolo,
-    pairWithPartner,
     unpairPartner,
     pod,
     themeColor,
@@ -18,11 +36,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     removeGoal,
     exportData,
     resetAllData,
-    requestNotificationPermission,
-    serverUrl,
-    setServerUrl,
-    syncStatus,
-    syncWithCloud,
     logoutUser,
     activeFocusHabit,
     activeFocusHabitId,
@@ -33,50 +46,20 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   } = useHabits();
 
   const [copiedCode, setCopiedCode] = useState(false);
-  const [gentleNotifications, setGentleNotifications] = useState(true);
   const [editingGoals, setEditingGoals] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [partnerCodeInput, setPartnerCodeInput] = useState('');
-  const [pairingLoading, setPairingLoading] = useState(false);
-  const [pairingError, setPairingError] = useState(null);
 
-  const [customServerUrl, setCustomServerUrl] = useState(serverUrl || '');
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionTestResult, setConnectionTestResult] = useState(null);
-
-  const handleCopyCode = () => {
-    const code = user?.secretCode || pod.code;
-    navigator.clipboard.writeText(code);
+  const handleCopyCode = async () => {
+    const code = user?.secretCode || pod.code || '';
+    if (!code) return;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(code);
+      }
+    } catch {}
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
-  };
-
-  const handlePairSubmit = async (e) => {
-    e.preventDefault();
-    if (!partnerCodeInput.trim()) return;
-    setPairingLoading(true);
-    setPairingError(null);
-    try {
-      await pairWithPartner(partnerCodeInput.trim().toUpperCase());
-      setPartnerCodeInput('');
-    } catch (err) {
-      setPairingError(err.message || 'Could not pair with this code');
-    } finally {
-      setPairingLoading(false);
-    }
-  };
-
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setConnectionTestResult(null);
-    const res = await checkApiHealth(customServerUrl);
-    setConnectionTestResult(res);
-    setTestingConnection(false);
-    if (res.ok) {
-      setServerUrl(customServerUrl);
-      syncWithCloud();
-    }
   };
 
   const themeOptions = [
@@ -86,17 +69,19 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     { id: 'sunset', label: 'Sunset & Pink', c1: '#F97316', c2: '#EC4899' },
   ];
 
+  const userInitial = (user?.displayName || user?.username || 'U')[0].toUpperCase();
+
   return (
     <div className="screen-settings-container">
       {/* Top Title */}
       <div className="settings-header">
-        <h1 className="settings-main-title">Settings</h1>
+        <h1 className="settings-main-title font-extrabold">Settings</h1>
       </div>
 
       {/* USER PROFILE CARD */}
       <div className="profile-card">
         <div className="profile-avatar-circle font-extrabold">
-          <span>{(!user?.avatar || user?.avatar === 'star') ? (user?.displayName || user?.username || 'U')[0].toUpperCase() : user.avatar}</span>
+          <span>{userInitial}</span>
         </div>
         <div className="profile-info">
           <h2 className="profile-name font-bold">
@@ -108,7 +93,11 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
         {user && (
           <div className="profile-actions-row">
-            <button className="signout-profile-btn font-medium" onClick={logoutUser} title="Sign Out / Switch Account">
+            <button
+              className="signout-profile-btn font-medium"
+              onClick={logoutUser}
+              title="Sign Out / Switch Account"
+            >
               Sign Out
             </button>
           </div>
@@ -120,111 +109,54 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         <div className="secret-code-settings-card">
           <div className="code-card-left">
             <span className="code-card-title font-bold">Your Secret Code</span>
-            <p className="code-card-hint">Share this code with a partner to let them track your habits or pair up.</p>
+            <p className="code-card-hint">
+              Share this code with a partner in the Track tab or add friends to your Together pod.
+            </p>
             <span className="code-card-val font-mono font-black">{user.secretCode}</span>
           </div>
           <button className="code-card-copy-btn font-bold" onClick={handleCopyCode}>
-            <span>{copiedCode ? 'Copied! ✓' : 'Copy Code'}</span>
+            {copiedCode ? <Check size={16} /> : <Copy size={16} />}
+            <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
           </button>
         </div>
       )}
 
-      {/* SECTION: ACCOUNTABILITY / PARTNER */}
-      <div className="settings-group">
-        <span className="group-label">ACCOUNTABILITY & PAIRING</span>
-        <div className="settings-group-content">
-          {!isSolo ? (
-            <>
-              <div className="settings-row-item">
-                <div className="row-left">
-                  <span className="row-icon">👥</span>
-                  <div>
-                    <span className="row-title">Paired Partner</span>
-                    <span className="row-hint">Tracking together in a shared Pod</span>
-                  </div>
-                </div>
-                <span className="row-value font-bold">@{partner?.username || 'partner'}</span>
-              </div>
-
-              <div className="settings-row-item">
-                <div className="row-left">
-                  <span className="row-icon">🔑</span>
-                  <div>
-                    <span className="row-title">Your Secret Code</span>
-                    <span className="row-hint">Share with others to let them track your progress</span>
-                  </div>
-                </div>
-                <button className="mini-copy-btn" onClick={handleCopyCode}>
-                  {user?.secretCode} {copiedCode ? '✓' : '📋'}
-                </button>
-              </div>
-
-              <div
-                className="settings-row-item clickable danger-row"
-                onClick={() => setShowLeaveConfirm(true)}
-              >
-                <div className="row-left">
-                  <span className="row-icon">🚪</span>
-                  <span className="row-title danger-text">Switch to Solo Tracking</span>
-                </div>
-                <span className="row-arrow danger-text">›</span>
-              </div>
-            </>
-          ) : (
-            <div className="solo-pairing-box">
-              <div className="solo-info-row">
-                <span className="row-icon">👤</span>
+      {/* SECTION: PAIRED PARTNER (Shows only when actively paired) */}
+      {!isSolo && (
+        <div className="settings-group">
+          <span className="group-label">PAIRED ACCOUNTABILITY</span>
+          <div className="settings-group-content">
+            <div className="settings-row-item">
+              <div className="row-left">
+                <Users size={18} className="text-emerald-500" />
                 <div>
-                  <span className="solo-title font-bold">Solo Tracking Active</span>
-                  <p className="solo-desc">
-                    You are tracking your personal habits independently. Want a partner or friend to keep an eye on you?
-                  </p>
+                  <span className="row-title">Paired Partner</span>
+                  <span className="row-hint">Active 1-on-1 accountability pod</span>
                 </div>
               </div>
-
-              <div className="my-code-banner">
-                <span className="code-label">Your Secret Sharing Code:</span>
-                <div className="code-row-copy">
-                  <span className="my-secret-val font-bold">{user?.secretCode || 'DUO-1000'}</span>
-                  <button className="code-copy-btn" onClick={handleCopyCode}>
-                    {copiedCode ? 'Copied! ✓' : 'Share Code 🔗'}
-                  </button>
-                </div>
-                <span className="code-sub">Anyone with this code can connect to view or sync your progress.</span>
-              </div>
-
-              <form onSubmit={handlePairSubmit} className="pair-partner-form">
-                <label className="pair-form-label">Enter a Friend's Secret Code:</label>
-                <div className="pair-input-group">
-                  <input
-                    type="text"
-                    placeholder="e.g. ALEX-4821"
-                    value={partnerCodeInput}
-                    onChange={(e) => setPartnerCodeInput(e.target.value.toUpperCase())}
-                    maxLength={12}
-                    className="pair-code-input font-bold"
-                  />
-                  <button
-                    type="submit"
-                    disabled={pairingLoading || partnerCodeInput.trim().length < 4}
-                    className="pair-submit-btn"
-                  >
-                    {pairingLoading ? 'Connecting...' : 'Connect'}
-                  </button>
-                </div>
-                {pairingError && <span className="pair-error-text">⚠️ {pairingError}</span>}
-              </form>
+              <span className="row-value font-bold">@{partner?.username || 'partner'}</span>
             </div>
-          )}
+
+            <div
+              className="settings-row-item clickable danger-row"
+              onClick={() => setShowLeaveConfirm(true)}
+            >
+              <div className="row-left">
+                <LogOut size={18} className="danger-text" />
+                <span className="row-title danger-text">Disconnect from Partner</span>
+              </div>
+              <ChevronRight size={18} className="danger-text" />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* LEAVE POD CONFIRMATION MODAL */}
       {showLeaveConfirm && (
         <div className="inline-confirm-card">
-          <p className="confirm-title">Return to Solo Mode?</p>
+          <p className="confirm-title">Disconnect from Partner?</p>
           <p className="confirm-desc">
-            You will disconnect from @{partner?.username}. You can pair back anytime by entering their secret code.
+            You will return to solo tracking. You can reconnect anytime in the Track tab.
           </p>
           <div className="confirm-btn-row">
             <button className="confirm-btn cancel" onClick={() => setShowLeaveConfirm(false)}>
@@ -237,7 +169,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 setShowLeaveConfirm(false);
               }}
             >
-              Confirm Solo Mode
+              Disconnect
             </button>
           </div>
         </div>
@@ -250,7 +182,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           {/* THEME MODE: LIGHT / DARK / AUTO */}
           <div className="settings-row-item">
             <div className="row-left">
-              <span className="row-icon">🌓</span>
+              <Moon size={18} className="text-indigo-400" />
               <div>
                 <span className="row-title">Color Mode</span>
                 <span className="row-hint">Light, Dark, or System Auto</span>
@@ -261,28 +193,30 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 className={`mode-pill-btn ${themeMode === 'light' ? 'active' : ''}`}
                 onClick={() => setThemeMode('light')}
               >
-                ☀️ Light
+                <Sun size={13} />
+                <span>Light</span>
               </button>
               <button
                 className={`mode-pill-btn ${themeMode === 'dark' ? 'active' : ''}`}
                 onClick={() => setThemeMode('dark')}
               >
-                🌙 Dark
+                <Moon size={13} />
+                <span>Dark</span>
               </button>
               <button
                 className={`mode-pill-btn ${themeMode === 'auto' ? 'active' : ''}`}
                 onClick={() => setThemeMode('auto')}
               >
-                ⚙️ Auto
+                <Laptop size={13} />
+                <span>System</span>
               </button>
             </div>
           </div>
 
-
           {/* COLOR SWATCH ACCENTS */}
           <div className="settings-row-item">
             <div className="row-left">
-              <span className="row-icon">🎨</span>
+              <Palette size={18} className="text-purple-400" />
               <span className="row-title">Accent Palette</span>
             </div>
             <div className="color-swatch-picker">
@@ -304,17 +238,15 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
       {/* SECTION: LIVE ACTIVITIES & DYNAMIC ISLAND */}
       <div className="settings-group">
-        <span className="group-label">LIVE ACTIVITIES & DYNAMIC ISLAND</span>
+        <span className="group-label">LIVE NOTIFICATIONS & FOCUS</span>
         <div className="settings-group-content">
           {/* Main Toggle */}
           <div className="settings-row-item">
             <div className="row-left">
-              <span className="row-icon">⚡</span>
+              <Zap size={18} className="text-amber-400" />
               <div>
-                <span className="row-title">Live Updates & Dynamic Island</span>
-                <span className="row-hint">
-                  ActivityKit on iOS & Ongoing Status on Android
-                </span>
+                <span className="row-title">Live Updates & Dynamic HUD</span>
+                <span className="row-hint">Real-time status banner for active habits</span>
               </div>
             </div>
             <label className="toggle-switch">
@@ -324,8 +256,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 onChange={(e) => {
                   setLiveActivityEnabled(e.target.checked);
                   triggerIslandNotification(
-                    e.target.checked ? 'Live Activities Enabled!' : 'Live Activities Paused',
-                    '⚡'
+                    e.target.checked ? 'Live Updates Active' : 'Live Updates Paused',
+                    'zap'
                   );
                 }}
               />
@@ -337,7 +269,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           {liveActivityEnabled && (
             <div className="settings-row-item">
               <div className="row-left">
-                <span className="row-icon">🎯</span>
+                <Target size={18} className="text-rose-400" />
                 <div>
                   <span className="row-title">Active Focus Habit</span>
                   <span className="row-hint">
@@ -350,7 +282,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 value={activeFocusHabitId}
                 onChange={(e) => setActiveFocusHabitId(e.target.value)}
               >
-                <option value="">⚡ Auto (Next Pending Habit)</option>
+                <option value="">Auto (Next Pending Habit)</option>
                 {habits.map((h) => (
                   <option key={h.id} value={h.id}>
                     {h.name} ({h.target} {h.unit})
@@ -363,34 +295,33 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           {/* Test Island Pulse */}
           <div
             className="settings-row-item clickable"
-            onClick={() => triggerIslandNotification('Dynamic Island Pulse: Streak 12d 🔥', '🎉')}
+            onClick={() => triggerIslandNotification('Dynamic HUD Test: Active consistency streak', 'sparkles')}
           >
             <div className="row-left">
-              <span className="row-icon">✨</span>
+              <Sparkles size={18} className="text-emerald-400" />
               <div>
-                <span className="row-title">Preview Dynamic Island Animation</span>
-                <span className="row-hint">Tap to trigger an interactive Island celebration</span>
+                <span className="row-title">Preview Notification Animation</span>
+                <span className="row-hint">Tap to preview dynamic celebration banner</span>
               </div>
             </div>
-            <span className="row-arrow">›</span>
+            <ChevronRight size={18} />
           </div>
         </div>
       </div>
 
-
       {/* SECTION: GOALS */}
       <div className="settings-group">
-        <span className="group-label">GOALS & HABITS</span>
+        <span className="group-label">HABIT CONFIGURATION</span>
         <div className="settings-group-content">
           <div
             className="settings-row-item clickable"
             onClick={() => setEditingGoals((prev) => !prev)}
           >
             <div className="row-left">
-              <span className="row-icon">📝</span>
-              <span className="row-title">Manage Habits</span>
+              <ListChecks size={18} className="text-cyan-400" />
+              <span className="row-title">Manage Tracked Habits</span>
             </div>
-            <span className="row-arrow">{editingGoals ? '⌄' : '›'}</span>
+            {editingGoals ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
           </div>
 
           {editingGoals && (
@@ -405,32 +336,33 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                     onClick={() => removeGoal(h.id)}
                     title="Remove goal"
                   >
-                    Remove
+                    <Trash2 size={14} />
+                    <span>Remove</span>
                   </button>
                 </div>
               ))}
-              <button className="add-goal-mini-btn" onClick={onOpenAddGoal}>
-                + Add New Habit
+              <button className="add-goal-mini-btn font-bold" onClick={onOpenAddGoal}>
+                <Plus size={14} />
+                <span>Add New Habit</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-
       {/* SECTION: DATA BACKUP & WIPE */}
       <div className="settings-group">
-        <span className="group-label">PRIVACY & DATA</span>
+        <span className="group-label">PRIVACY & VAULT</span>
         <div className="settings-group-content">
           <div className="settings-row-item clickable" onClick={exportData}>
             <div className="row-left">
-              <span className="row-icon">💾</span>
+              <Download size={18} className="text-blue-400" />
               <div>
-                <span className="row-title">Export All Data (JSON)</span>
-                <span className="row-hint">Download local encrypted backup to your device</span>
+                <span className="row-title">Export Backup (JSON)</span>
+                <span className="row-hint">Download encrypted local backup to your device</span>
               </div>
             </div>
-            <span className="row-arrow">↓</span>
+            <ChevronRight size={18} />
           </div>
 
           <div
@@ -438,13 +370,13 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             onClick={() => setShowResetConfirm(true)}
           >
             <div className="row-left">
-              <span className="row-icon">🗑️</span>
+              <Trash2 size={18} className="danger-text" />
               <div>
-                <span className="row-title danger-text">Wipe Data & Log Out</span>
-                <span className="row-hint">Permanently delete stored habits and credentials</span>
+                <span className="row-title danger-text">Wipe Data & Sign Out</span>
+                <span className="row-hint">Permanently delete stored habits and local vault credentials</span>
               </div>
             </div>
-            <span className="row-arrow danger-text">›</span>
+            <ChevronRight size={18} className="danger-text" />
           </div>
         </div>
       </div>
@@ -453,7 +385,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         <div className="inline-confirm-card">
           <p className="confirm-title">Permanently Erase All Data?</p>
           <p className="confirm-desc">
-            This will wipe your local habits, secret codes, and log you out.
+            This will wipe your local habits, secret codes, and sign you out.
           </p>
           <div className="confirm-btn-row">
             <button className="confirm-btn cancel" onClick={() => setShowResetConfirm(false)}>

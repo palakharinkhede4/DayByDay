@@ -99,7 +99,7 @@ export const OnboardingModal = () => {
         cleanUsername,
         password,
         displayName.trim() || cleanUsername,
-        '🌱',
+        '',
         finalQuestion,
         securityAnswer.trim()
       );

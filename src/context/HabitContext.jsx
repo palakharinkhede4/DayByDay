@@ -464,7 +464,7 @@ export const HabitProvider = ({ children }) => {
               setHabits(remoteData.habits);
             }
             if (remoteData.lastActivity) {
-              triggerIslandNotification(remoteData.lastActivity, '🔥');
+              triggerIslandNotification(remoteData.lastActivity, 'flame');
               sound.complete();
             }
           }
@@ -479,7 +479,7 @@ export const HabitProvider = ({ children }) => {
   }, [pod.code, pod.isPaired, activeUserId]);
 
   // Trigger Dynamic Island temporary expansion banner
-  const triggerIslandNotification = (text, icon = '⚡') => {
+  const triggerIslandNotification = (text, icon = 'zap') => {
     setIslandMessage({ text, icon });
     setTimeout(() => {
       setIslandMessage(null);
@@ -525,7 +525,7 @@ export const HabitProvider = ({ children }) => {
         }
 
         // 2. Dynamic Island banner
-        triggerIslandNotification(`Reminder: ${h.name} (${h.target || 1} ${h.unit || ''})`, '⏰');
+        triggerIslandNotification(`Reminder: ${h.name} (${h.target || 1} ${h.unit || ''})`, 'clock');
 
         // 3. Audio cue
         sound.complete();
@@ -538,11 +538,11 @@ export const HabitProvider = ({ children }) => {
   }, [habits]);
 
   // Register New User (Supports remote Neon DB backend with automatic local Storage Vault fallback)
-  const registerUser = async (username, password, displayName = '', avatar = '🌱', securityQuestion = '', securityAnswer = '') => {
+  const registerUser = async (username, password, displayName = '', avatar = '', securityQuestion = '', securityAnswer = '') => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     const cleanDisplay = displayName || cleanUsername;
-    const cleanAvatar = (!avatar || avatar === 'star') ? '🌱' : avatar;
+    const cleanAvatar = (!avatar || avatar === 'star' || avatar === 'user') ? '' : avatar;
     const prefix = cleanUsername.slice(0, 3).toUpperCase();
     const rand = Math.floor(1000 + Math.random() * 9000);
     const localSecretCode = `${prefix}-${rand}`;
@@ -585,7 +585,7 @@ export const HabitProvider = ({ children }) => {
     }));
 
     triggerCelebration();
-    triggerIslandNotification(`Welcome @${newUser.username}!`, '🎉');
+    triggerIslandNotification(`Welcome @${newUser.username}!`, 'sparkles');
     return newUser;
   };
 
@@ -618,7 +618,7 @@ export const HabitProvider = ({ children }) => {
             : null,
         }));
         triggerCelebration();
-        triggerIslandNotification(`Welcome back @${res.user.username}!`, '👋');
+        triggerIslandNotification(`Welcome back @${res.user.username}!`, 'user');
         return res;
       }
     } catch (err) {
@@ -633,7 +633,7 @@ export const HabitProvider = ({ children }) => {
         if (parsed.password === password) {
           setUser(parsed.user);
           triggerCelebration();
-          triggerIslandNotification(`Welcome back @${parsed.user.username}!`, '👋');
+          triggerIslandNotification(`Welcome back @${parsed.user.username}!`, 'user');
           return { user: parsed.user };
         } else {
           throw new Error('Incorrect password');
@@ -679,7 +679,7 @@ export const HabitProvider = ({ children }) => {
         throw new Error('Security answer does not match');
       }
     }
-    triggerIslandNotification('Password reset successfully!', '🔑');
+    triggerIslandNotification('Password reset successfully!', 'key');
     return { ok: true };
   };
 
@@ -707,7 +707,7 @@ export const HabitProvider = ({ children }) => {
     localStorage.removeItem('daybyday_tracked_partner');
     localStorage.removeItem('daybyday_group_pod');
     await clearVaultSession();
-    triggerIslandNotification('Logged out', '👤');
+    triggerIslandNotification('Signed out', 'user');
   };
 
   // 1-on-1 Track Partner by Secret Code
@@ -737,7 +737,7 @@ export const HabitProvider = ({ children }) => {
         username: namePart.toLowerCase(),
         displayName: namePart,
         secretCode: cleanCode,
-        avatar: '🏃',
+        avatar: '',
         todayPercent: 0,
         streak: 0,
         lastActive: 'Active today',
@@ -752,7 +752,7 @@ export const HabitProvider = ({ children }) => {
     setTrackedPartner(partnerData);
     localStorage.setItem('daybyday_tracked_partner', JSON.stringify(partnerData));
     triggerCelebration();
-    triggerIslandNotification(`Tracking @${partnerData.username}!`, '🎯');
+    triggerIslandNotification(`Tracking @${partnerData.username}!`, 'target');
     return partnerData;
   };
 
@@ -760,7 +760,7 @@ export const HabitProvider = ({ children }) => {
     sound.tap();
     setTrackedPartner(null);
     localStorage.removeItem('daybyday_tracked_partner');
-    triggerIslandNotification('Stopped tracking partner', '👋');
+    triggerIslandNotification('Stopped tracking partner', 'untrack');
   };
 
   // Group Pod (up to 10 users)
@@ -779,7 +779,7 @@ export const HabitProvider = ({ children }) => {
           id: user?.id || 'usr_me',
           username: user?.username || 'you',
           displayName: user?.displayName || 'You',
-          avatar: user?.avatar || '🌱',
+          avatar: user?.avatar || '',
           role: 'Owner',
           todayPercent: currentPercent,
           streak: pod.currentStreak || 0,
@@ -794,7 +794,7 @@ export const HabitProvider = ({ children }) => {
     setGroupPod(newPod);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(newPod));
     triggerCelebration();
-    triggerIslandNotification(`Group ${cleanName} created!`, '👥');
+    triggerIslandNotification(`Group ${cleanName} created!`, 'users');
     return newPod;
   };
 
@@ -817,7 +817,7 @@ export const HabitProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
       maxMembers: 10,
       members: [
-        { id: 'usr_leader', username: 'alex', displayName: 'Alex', avatar: '⚡', role: 'Owner', todayPercent: 70, streak: 5 }
+        { id: 'usr_leader', username: 'alex', displayName: 'Alex', avatar: '', role: 'Owner', todayPercent: 70, streak: 5 }
       ],
       sharedGoals: [
         { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
@@ -834,7 +834,7 @@ export const HabitProvider = ({ children }) => {
         id: user?.id || 'usr_me',
         username: user?.username || 'you',
         displayName: user?.displayName || 'You',
-        avatar: user?.avatar || '🌱',
+        avatar: user?.avatar || '',
         role: 'Member',
         todayPercent: currentPercent,
         streak: pod.currentStreak || 0,
@@ -844,7 +844,7 @@ export const HabitProvider = ({ children }) => {
     setGroupPod(podToJoin);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(podToJoin));
     triggerCelebration();
-    triggerIslandNotification(`Joined Pod ${cleanCode}!`, '🎉');
+    triggerIslandNotification(`Joined Pod ${cleanCode}!`, 'users');
     return podToJoin;
   };
 
@@ -852,7 +852,7 @@ export const HabitProvider = ({ children }) => {
     sound.tap();
     setGroupPod(null);
     localStorage.removeItem('daybyday_group_pod');
-    triggerIslandNotification('Left group pod', '👋');
+    triggerIslandNotification('Left group pod', 'user');
   };
 
   const addSharedGoal = (name, target, unit) => {
@@ -871,7 +871,7 @@ export const HabitProvider = ({ children }) => {
     };
     setGroupPod(updated);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
-    triggerIslandNotification(`Shared goal added!`, '✨');
+    triggerIslandNotification('Shared goal added!', 'target');
   };
 
   const updateSharedGoalProgress = (goalId, delta) => {
@@ -911,7 +911,7 @@ export const HabitProvider = ({ children }) => {
           }
         }));
         triggerCelebration();
-        triggerIslandNotification(`Paired with @${res.partner.username}!`, '🤝');
+        triggerIslandNotification(`Paired with @${res.partner.username}!`, 'users');
         return res;
       }
     } catch (err) {
@@ -921,7 +921,7 @@ export const HabitProvider = ({ children }) => {
         username: partnerName.toLowerCase(),
         displayName: partnerName,
         secretCode: cleanCode,
-        avatar: '🤝'
+        avatar: ''
       };
       setPartner(fallbackPartner);
       setPod((prev) => ({
@@ -934,7 +934,7 @@ export const HabitProvider = ({ children }) => {
           initial: partnerName[0].toUpperCase(),
         }
       }));
-      triggerIslandNotification(`Paired with ${partnerName}!`, '🤝');
+      triggerIslandNotification(`Paired with ${partnerName}!`, 'users');
     }
   };
 
@@ -953,7 +953,7 @@ export const HabitProvider = ({ children }) => {
       code: user?.secretCode || 'DBD-1000',
       user2: { name: 'Partner', email: '', initial: 'P' }
     }));
-    triggerIslandNotification('Switched to Solo Mode', '👤');
+    triggerIslandNotification('Solo mode active', 'user');
   };
 
   // Calculate Overall Daily Goals Reached Percentage
@@ -1048,7 +1048,7 @@ export const HabitProvider = ({ children }) => {
         const nowDone = isCompleted;
         if (!wasDone && nowDone) {
           sound.complete();
-          triggerIslandNotification(`${h.name} completed!`, '🎉');
+          triggerIslandNotification(`${h.name} completed!`, 'check');
         }
 
         return updated;
@@ -1105,7 +1105,7 @@ export const HabitProvider = ({ children }) => {
       }
       return next;
     });
-    triggerIslandNotification(`Added goal: ${safeGoal.name}`, '✨');
+    triggerIslandNotification(`Added habit: ${safeGoal.name}`, 'plus');
   };
 
   // Remove Goal
@@ -1115,7 +1115,7 @@ export const HabitProvider = ({ children }) => {
     if (user?.id) {
       deleteHabitRemote(user.id, goalId).catch(() => {});
     }
-    triggerIslandNotification('Habit removed', '🗑️');
+    triggerIslandNotification('Habit removed', 'trash');
   };
 
   // Request Notifications
@@ -1178,12 +1178,12 @@ export const HabitProvider = ({ children }) => {
         setHabits(remoteData.habits);
         setSyncStatus('synced');
         setLastSyncedAt(Date.now());
-        triggerIslandNotification('Synced with Cloud!', '☁️');
+        triggerIslandNotification('Synced with Cloud', 'cloud');
       } else if (remoteData && remoteData.notFound) {
         await pushFullSync(pod.code, activeUserId, pod, habits);
         setSyncStatus('synced');
         setLastSyncedAt(Date.now());
-        triggerIslandNotification('Pod initialized on Cloud!', '🚀');
+        triggerIslandNotification('Pod initialized on Cloud', 'cloud');
       } else {
         setSyncStatus('offline');
       }

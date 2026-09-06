@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
 import { DynamicIslandHud } from './DynamicIslandHud';
 import {
@@ -10,7 +10,9 @@ import {
   Sun,
   Moon,
   Plus,
+  Flame,
 } from 'lucide-react';
+import { BottomNavBar } from './BottomNavBar';
 
 export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) => {
   const {
@@ -20,11 +22,26 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
     osMode,
   } = useHabits();
 
-  const isMobile = typeof window !== 'undefined' && (
-    window.innerWidth <= 768 ||
-    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-    Boolean(window.Capacitor?.isNativePlatform?.())
-  );
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      window.innerWidth <= 768 ||
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      Boolean(window.Capacitor?.isNativePlatform?.())
+    );
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(
+        window.innerWidth <= 768 ||
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+        Boolean(window.Capacitor?.isNativePlatform?.())
+      );
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const toggleTheme = () => {
     if (themeMode === 'dark') setThemeMode('light');
@@ -50,8 +67,10 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
             {/* Left: Brand */}
             <div className="nav-brand-group">
               <div className="brand-logo" onClick={() => onTabChange('habits')}>
-                <span className="brand-flame-icon font-black">🔥</span>
-                <span className="brand-name font-black">DayByDay</span>
+                <div className="brand-logo-badge">
+                  <Flame size={16} className="brand-logo-flame" strokeWidth={2.4} />
+                </div>
+                <span className="brand-name font-bold">DayByDay</span>
               </div>
             </div>
 
@@ -119,6 +138,14 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
           {children}
         </div>
       </main>
+
+      {/* MOBILE-ONLY BOTTOM NAVIGATION BAR (Strictly excluded from desktop) */}
+      {isMobile && (
+        <BottomNavBar
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+        />
+      )}
     </div>
   );
 };

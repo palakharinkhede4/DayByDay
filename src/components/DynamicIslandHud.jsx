@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useHabits } from '../context/HabitContext';
+import {
+  Footprints,
+  Moon,
+  Sparkles,
+  Droplets,
+  BookOpen,
+  Dumbbell,
+  Heart,
+  Target,
+  Flame,
+  Check,
+  X,
+  Zap,
+} from 'lucide-react';
 
 export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
   const {
@@ -9,13 +23,9 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
     quickIncrementFocusHabit,
     toggleFocusHabitCompleted,
     currentPercent,
-    partnerPercent,
     islandMessage,
     pod,
-    partner,
-    isSolo,
     liveActivityEnabled,
-    setLiveActivityEnabled,
     triggerIslandNotification,
   } = useHabits();
 
@@ -43,7 +53,7 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
   // Determine context-sensitive quick increment label
   const getIncrementLabel = () => {
     if (!habit) return '+1';
-    if (typeof habit.user1 === 'boolean') return isDone ? 'Uncheck' : '✓ Mark Done';
+    if (typeof habit.user1 === 'boolean') return isDone ? 'Uncheck' : 'Mark Done';
     if (habit.unit === 'steps') return '+1,000';
     if (habit.unit === 'min') return '+5m';
     if (habit.unit === 'pints') return '+1 pint';
@@ -56,18 +66,28 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
     return typeof val === 'number' && val % 1 !== 0 ? val.toFixed(1) : String(val);
   };
 
-  const getCategoryIcon = (icon) => {
-    const map = {
-      steps: '🏃',
-      sleep: '🌙',
-      meditation: '🧘',
-      water: '💧',
-      reading: '📚',
-      workouts: '💪',
-      vitamins: '💊',
-      savings: '💰',
-    };
-    return map[icon] || habit?.icon || '🎯';
+  const getCategoryIcon = (iconId) => {
+    switch (iconId) {
+      case 'steps':
+      case 'fitness':
+        return <Footprints size={14} className="text-emerald-400" />;
+      case 'sleep':
+        return <Moon size={14} className="text-indigo-400" />;
+      case 'meditation':
+      case 'mind':
+        return <Sparkles size={14} className="text-purple-400" />;
+      case 'water':
+        return <Droplets size={14} className="text-cyan-400" />;
+      case 'reading':
+        return <BookOpen size={14} className="text-amber-400" />;
+      case 'workouts':
+        return <Dumbbell size={14} className="text-rose-400" />;
+      case 'vitamins':
+      case 'health':
+        return <Heart size={14} className="text-pink-400" />;
+      default:
+        return <Target size={14} className="text-emerald-400" />;
+    }
   };
 
   return (
@@ -82,11 +102,13 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
         tabIndex={0}
         aria-label="Dynamic Island Focus Habit HUD"
       >
-        {/* 1. ALERT / CELEBRATION STATE */}
+        {/* 1. ALERT STATE */}
         {islandMessage ? (
           <div className="island-banner-alert">
             <span className="alert-pulse-dot"></span>
-            <span className="alert-icon">{islandMessage.icon}</span>
+            <span className="alert-icon">
+              <Sparkles size={13} className="text-emerald-400" />
+            </span>
             <span className="alert-message">{islandMessage.text}</span>
           </div>
         ) : expanded ? (
@@ -95,24 +117,26 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
             {/* Top Row: Focus Habit Title & Streak */}
             <div className="hud-header">
               <div className="hud-title-group">
-                <span className="hud-habit-glyph">{getCategoryIcon(habit?.icon)}</span>
+                <span className="hud-habit-glyph">{getCategoryIcon(habit?.icon || habit?.id)}</span>
                 <div>
-                  <h4 className="hud-habit-name">{habit?.name || 'Daily Focus'}</h4>
-                  <span className="hud-habit-tag">{habit?.category || 'Daily'} • {isDone ? 'COMPLETED' : 'IN PROGRESS'}</span>
+                  <h4 className="hud-habit-name font-bold">{habit?.name || 'Daily Focus'}</h4>
+                  <span className="hud-habit-tag font-semibold">
+                    {habit?.category || 'Daily'} • {isDone ? 'COMPLETED' : 'IN PROGRESS'}
+                  </span>
                 </div>
               </div>
 
               <div className="hud-header-right">
-                <div className="hud-streak-badge" title="Current streak">
-                  <span>🔥</span>
+                <div className="hud-streak-badge font-bold" title="Current streak">
+                  <Flame size={12} className="text-amber-500" />
                   <span>{habit?.streak || 1}d</span>
                 </div>
                 <button
                   className="hud-close-btn"
                   onClick={() => setExpanded(false)}
-                  title="Collapse Dynamic Island"
+                  title="Collapse"
                 >
-                  ✕
+                  <X size={14} />
                 </button>
               </div>
             </div>
@@ -120,10 +144,10 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
             {/* Middle: Progress Bar and Readout */}
             <div className="hud-meter-section">
               <div className="hud-meter-labels">
-                <span className="hud-meter-reading">
+                <span className="hud-meter-reading font-medium">
                   {formatDisplayVal(currentValue)} / {formatDisplayVal(targetValue)} {habit?.unit || ''}
                 </span>
-                <span className={`hud-meter-pct ${isDone ? 'done' : ''}`}>{pct}%</span>
+                <span className={`hud-meter-pct font-bold ${isDone ? 'done' : ''}`}>{pct}%</span>
               </div>
 
               <div className="hud-progress-track">
@@ -134,64 +158,49 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
               </div>
             </div>
 
-            {/* 1-Tap Quick Action Buttons directly in Dynamic Island */}
+            {/* Quick Action Buttons */}
             <div className="hud-actions-row">
               <button
-                className="hud-quick-btn increment"
+                className="hud-quick-btn increment font-semibold"
                 onClick={() => {
                   quickIncrementFocusHabit();
-                  triggerIslandNotification(`${habit?.name} updated!`, getCategoryIcon(habit?.icon));
+                  triggerIslandNotification(`${habit?.name} updated!`, 'zap');
                 }}
               >
-                <span>⚡ {getIncrementLabel()}</span>
+                <Zap size={13} />
+                <span>{getIncrementLabel()}</span>
               </button>
 
               <button
-                className={`hud-quick-btn complete ${isDone ? 'completed' : ''}`}
+                className={`hud-quick-btn complete font-semibold ${isDone ? 'completed' : ''}`}
                 onClick={() => {
                   toggleFocusHabitCompleted();
                   triggerIslandNotification(
-                    isDone ? `${habit?.name} reset` : `${habit?.name} completed! 🎉`,
-                    isDone ? '↺' : '✓'
+                    isDone ? `${habit?.name} marked pending` : `${habit?.name} finished!`,
+                    'check'
                   );
                 }}
               >
-                <span>{isDone ? '↺ Undo' : '✓ Mark Done'}</span>
+                <Check size={14} strokeWidth={2.6} />
+                <span>{isDone ? 'Done' : 'Complete'}</span>
               </button>
             </div>
 
-            {/* Accountability Pulse Subtitle */}
-            <div className="hud-accountability-bar">
-              <div className="hud-partner-pulse">
-                <span className={`pulse-indicator ${!isSolo ? 'pod-active' : ''}`}></span>
-                {!isSolo ? (
-                  <span className="hud-pulse-text">
-                    @{partner?.username || 'Partner'}: {partnerPercent}% completed today
-                  </span>
-                ) : (
-                  <span className="hud-pulse-text">
-                    Pod Sync: {currentPercent}% today
-                  </span>
-                )}
-              </div>
-              <span className="hud-live-tag">LIVE</span>
-            </div>
-
-            {/* Focus Habit Quick Switcher */}
-            {habits && habits.length > 1 && (
-              <div className="hud-habit-switcher">
-                <span className="switcher-label">Switch Focus Habit:</span>
-                <div className="switcher-scroll-row">
+            {/* Switch Focus Habit */}
+            {habits.length > 1 && (
+              <div className="hud-switch-section">
+                <span className="hud-switch-label">Switch Focus Habit:</span>
+                <div className="hud-habit-chips">
                   {habits.map((h) => (
                     <button
                       key={h.id}
-                      className={`switcher-pill ${h.id === habit?.id ? 'active' : ''}`}
+                      className={`hud-chip ${h.id === habit?.id ? 'active' : ''}`}
                       onClick={() => {
                         setActiveFocusHabitId(h.id);
-                        triggerIslandNotification(`Focus switched to ${h.name}`, getCategoryIcon(h.icon));
+                        triggerIslandNotification(`Focus: ${h.name}`, 'target');
                       }}
                     >
-                      <span>{getCategoryIcon(h.icon)}</span>
+                      <span>{getCategoryIcon(h.icon || h.id)}</span>
                       <span>{h.name}</span>
                     </button>
                   ))}
@@ -204,8 +213,8 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
           <div className="island-compact-view">
             {/* Leading (Left) */}
             <div className="compact-leading">
-              <span className="compact-icon">{getCategoryIcon(habit?.icon)}</span>
-              <span className="compact-label">{habit?.name || 'DayByDay'}</span>
+              <span className="compact-icon">{getCategoryIcon(habit?.icon || habit?.id)}</span>
+              <span className="compact-label font-medium">{habit?.name || 'DayByDay'}</span>
             </div>
 
             {/* Physical Hardware Cam / Sensor Cutout */}
@@ -236,9 +245,9 @@ export const DynamicIslandHud = ({ isDesktopMockup = false }) => {
                     transform="rotate(-90 11 11)"
                   />
                 </svg>
-                <span className="mini-ring-text">{pct}%</span>
+                <span className="mini-ring-text font-bold">{pct}%</span>
               </div>
-              <span className="compact-flame">🔥</span>
+              <Flame size={12} className="text-amber-500" />
             </div>
           </div>
         )}
