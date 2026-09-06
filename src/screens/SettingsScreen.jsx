@@ -422,21 +422,24 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       <div className="settings-group">
         <span className="group-label">APP UPDATES</span>
         <div className="settings-group-content">
-          <div className="settings-row-item clickable" onClick={handleCheckUpdate}>
-            <div className="row-left">
-              <RefreshCw
-                size={18}
-                className={`text-emerald-400 ${checkingUpdate ? 'animate-spin' : ''}`}
-              />
-              <div>
-                <span className="row-title">Check for Updates</span>
-                <span className="row-hint">Verify if a newer Android build is available on GitHub</span>
+          {/* Check for Updates — Android only (web/iOS gets the app from the web, no APK needed) */}
+          {(osMode === 'android' || Boolean(window.Capacitor?.isNativePlatform?.())) && (
+            <div className="settings-row-item clickable" onClick={handleCheckUpdate}>
+              <div className="row-left">
+                <RefreshCw
+                  size={18}
+                  className={`text-blue-400 ${checkingUpdate ? 'animate-spin' : ''}`}
+                />
+                <div>
+                  <span className="row-title">Check for Updates</span>
+                  <span className="row-hint">Verify if a newer Android build is available on GitHub</span>
+                </div>
               </div>
+              <button className="check-update-trigger-btn font-semibold" disabled={checkingUpdate}>
+                {checkingUpdate ? 'Checking...' : 'Check'}
+              </button>
             </div>
-            <button className="check-update-trigger-btn font-semibold" disabled={checkingUpdate}>
-              {checkingUpdate ? 'Checking...' : 'Check'}
-            </button>
-          </div>
+          )}
 
           <div className="settings-row-item clickable" onClick={handleViewChangelog}>
             <div className="row-left">
@@ -449,19 +452,22 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             <ChevronRight size={18} />
           </div>
 
-          <div
-            className="settings-row-item clickable"
-            onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
-          >
-            <div className="row-left">
-              <ExternalLink size={18} className="text-cyan-400" />
-              <div>
-                <span className="row-title">Latest Releases Download Page</span>
-                <span className="row-hint">Direct access to DayByDay release builds and changelog</span>
+          {/* Latest Releases Download Page — Android only */}
+          {(osMode === 'android' || Boolean(window.Capacitor?.isNativePlatform?.())) && (
+            <div
+              className="settings-row-item clickable"
+              onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
+            >
+              <div className="row-left">
+                <ExternalLink size={18} className="text-cyan-400" />
+                <div>
+                  <span className="row-title">Latest Releases Download Page</span>
+                  <span className="row-hint">Direct access to DayByDay release builds and changelog</span>
+                </div>
               </div>
+              <ChevronRight size={18} />
             </div>
-            <ChevronRight size={18} />
-          </div>
+          )}
         </div>
       </div>
 
@@ -685,7 +691,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         <div className="dev-info-col">
           <div className="dev-title-row">
             <span className="dev-app-title font-extrabold">DayByDay</span>
-            <span className="dev-version-badge font-mono font-bold">v1.2.0</span>
+            <span className="dev-version-badge font-mono font-bold">v{__APP_VERSION__}</span>
           </div>
           <span className="dev-author-tag font-bold">
             Developed by Palak Harinkhede
