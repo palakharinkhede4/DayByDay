@@ -34,6 +34,7 @@ export const TogetherScreen = () => {
   const [goalTarget, setGoalTarget] = useState(10);
   const [goalUnit, setGoalUnit] = useState('reps');
   const [error, setError] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
 
   const handleCopyCode = async (code) => {
     try {
@@ -72,15 +73,18 @@ export const TogetherScreen = () => {
     setIsCreating(false);
   };
 
-  const handleJoin = (e) => {
+  const handleJoin = async (e) => {
     e.preventDefault();
     if (!joinCode.trim()) return;
     setError('');
+    setIsJoining(true);
     try {
-      joinGroupPod(joinCode.trim());
+      await joinGroupPod(joinCode.trim());
       setJoinCode('');
     } catch (err) {
       setError(err.message || 'Could not join pod. Check the code and try again.');
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -361,10 +365,10 @@ export const TogetherScreen = () => {
                   />
                   <button
                     type="submit"
-                    disabled={joinCode.trim().length < 4}
+                    disabled={joinCode.trim().length < 4 || isJoining}
                     className="group-secondary-btn font-bold"
                   >
-                    <span>Join Pod</span>
+                    <span>{isJoining ? 'Joining...' : 'Join Pod'}</span>
                     <ArrowRight size={16} />
                   </button>
                 </form>

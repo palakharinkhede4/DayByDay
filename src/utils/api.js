@@ -412,10 +412,14 @@ export const fetchUserRemote = async (usernameOrCode) => {
     const isCode = usernameOrCode.includes('-');
     const param = isCode ? `code=${encodeURIComponent(usernameOrCode)}` : `username=${encodeURIComponent(usernameOrCode)}`;
     const res = await apiFetch(`${baseUrl}/api/user?${param}`);
+    if (res.status === 404) {
+      // Throw so callers like trackPartnerByCode get a meaningful error
+      throw new Error('User not found');
+    }
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch (err) {
-    return null;
+    throw err;
   }
 };
 

@@ -523,11 +523,19 @@ export const HabitProvider = ({ children }) => {
           persistSessionSnapshot(user, partner, habits, pod, groupPod || recovered?.groupPod);
         }
 
-        // Automatic Cloud Sync on Startup: pull latest preferences & habits from Cloud DB
+        // Automatic Cloud Sync on Startup: pull latest preferences, habits & secret code from Cloud DB
         const activeUser = user || recovered?.user;
         if (activeUser?.username) {
           fetchUserRemote(activeUser.username).then((remoteData) => {
             if (remoteData && remoteData.user) {
+              // Sync secret code — ensures Track screen shows the current server-side code, not a stale cache
+              const freshCode = remoteData.user.secretCode || remoteData.user.secret_code;
+              if (freshCode && freshCode !== activeUser.secretCode && freshCode !== activeUser.secret_code) {
+                const updatedUser = { ...activeUser, secretCode: freshCode, secret_code: freshCode };
+                setUser(updatedUser);
+                localStorage.setItem('daybyday_user', JSON.stringify(updatedUser));
+              }
+
               if (remoteData.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
                 setHabits(remoteData.habits);
                 localStorage.setItem('daybyday_habits', JSON.stringify(remoteData.habits));
@@ -1074,6 +1082,7 @@ export const HabitProvider = ({ children }) => {
     const cleanCode = code.trim().toUpperCase();
 
     let partnerData = null;
+    let fetchError = null;
     try {
       const remote = await fetchUserRemote(cleanCode);
       if (remote && remote.user) {
@@ -1094,11 +1103,22 @@ export const HabitProvider = ({ children }) => {
           profilePicture: remote.preferences?.profilePicture || remote.user?.profilePicture || null,
           lastActive: 'Active today'
         };
+      } else if (remote && remote.error) {
+        fetchError = remote.error;
       }
-    } catch { }
+    } catch (err) {
+      fetchError = err.message;
+    }
 
     if (!partnerData) {
-      throw new Error(`User with secret code "${cleanCode}" not found. Verify the code and try again.`);
+      // Provide the correct secret code format as a hint in the error
+      const myCurrentCode = user?.secretCode || user?.secret_code;
+      const formatHint = myCurrentCode ? ` Codes look like "${myCurrentCode}".` : '';
+      throw new Error(
+        fetchError && !fetchError.toLowerCase().includes('not found')
+          ? fetchError
+          : `No user found with code "${cleanCode}".${formatHint} Ask your friend to share their code from the Track screen.`
+      );
     }
 
     setTrackedPartner(partnerData);
@@ -1167,20 +1187,18 @@ export const HabitProvider = ({ children }) => {
   const joinGroupPod = async (code) => {
     sound.complete();
     const cleanCode = (code || '').trim().toUpperCase();
-    if (!cleanCode.startsWith('POD-')) throw new Error('Invalid Pod Code format. Must start with POD-');
+    if (!cleanCode) throw new Error('Please enter a pod code');
 
     let podToJoin = null;
     try {
       podToJoin = await joinGroupPodRemote(user?.id, cleanCode);
     } catch (e) {
-      console.warn('Remote join pod notice:', e.message);
-      if (e.message && (e.message.includes('capacity') || e.message.includes('not found') || e.message.includes('Invalid'))) {
-        throw e;
-      }
+      // Always surface errors from the server — capacity limit, not found, etc.
+      throw new Error(e.message || `Group pod "${cleanCode}" not found. Verify the code and try again.`);
     }
 
     if (!podToJoin) {
-      throw new Error(`Group pod "${cleanCode}" not found. Please verify the code.`);
+      throw new Error(`Group pod "${cleanCode}" not found. Verify the code and try again.`);
     }
 
     setGroupPod(podToJoin);
