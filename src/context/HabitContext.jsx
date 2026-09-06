@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { sound } from '../utils/sound';
-import { sanitizeInput, exportLocalBackup, wipeLocalData } from '../utils/security';
+import { sanitizeInput, exportLocalBackup, parseLocalBackup, wipeLocalData } from '../utils/security';
 import {
   fetchRemotePod,
   pushHabitUpdate,
@@ -1176,6 +1176,25 @@ export const HabitProvider = ({ children }) => {
     });
   };
 
+  // Import local backup file
+  const importData = (jsonString) => {
+    sound.tap();
+    const result = parseLocalBackup(jsonString);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    const d = result.data;
+    if (d.user) setUser(d.user);
+    if (d.partner) setPartner(d.partner);
+    if (Array.isArray(d.habits) && d.habits.length > 0) setHabits(d.habits);
+    if (Array.isArray(d.beyondGoals)) setBeyondGoals(d.beyondGoals);
+    if (d.pod) setPod(d.pod);
+    if (d.themeColor) setThemeColor(d.themeColor);
+    if (d.themeMode) setThemeMode(d.themeMode);
+    triggerIslandNotification('Backup data restored successfully', 'sparkles');
+    return { success: true };
+  };
+
   // Wipe data and reset to fresh state
   const resetAllData = async () => {
     sound.tap();
@@ -1325,6 +1344,7 @@ export const HabitProvider = ({ children }) => {
         triggerCelebration,
         requestNotificationPermission,
         exportData,
+        importData,
         resetAllData,
         trackedPartner,
         trackPartnerByCode,

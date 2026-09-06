@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useHabits } from '../context/HabitContext';
 import {
   Users,
@@ -15,11 +15,22 @@ import {
   Sparkles,
   ListChecks,
   Download,
+  Upload,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
   Trash2,
   ChevronDown,
   ChevronRight,
   Plus,
 } from 'lucide-react';
+import {
+  checkForAppUpdate,
+  openExternalUrl,
+  RELEASES_PAGE_URL,
+  DIRECT_APK_URL,
+} from '../utils/updateChecker';
 
 export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const {
@@ -38,6 +49,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     habits,
     removeGoal,
     exportData,
+    importData,
     resetAllData,
     logoutUser,
     activeFocusHabit,
@@ -48,10 +60,54 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     triggerIslandNotification,
   } = useHabits();
 
+  const fileInputRef = useRef(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [editingGoals, setEditingGoals] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [importStatus, setImportStatus] = useState(null);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateModalOpen(true);
+    try {
+      const res = await checkForAppUpdate();
+      setUpdateInfo(res);
+    } catch {
+      setUpdateInfo({
+        success: false,
+        releasePageUrl: RELEASES_PAGE_URL,
+        directApkUrl: DIRECT_APK_URL,
+      });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result;
+        const res = importData(text);
+        if (res.success) {
+          setImportStatus('Backup restored successfully!');
+        } else {
+          setImportStatus(`Restore failed: ${res.error}`);
+        }
+      } catch {
+        setImportStatus('Failed to parse backup file.');
+      }
+      setTimeout(() => setImportStatus(null), 3500);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const handleCopyCode = async () => {
     const code = user?.secretCode || pod.code || '';
@@ -375,20 +431,48 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* SECTION: DATA BACKUP & WIPE */}
+      {/* SECTION: DATA BACKUP & RESTORE */}
       <div className="settings-group">
-        <span className="group-label">PRIVACY & VAULT</span>
+        <span className="group-label">DATA & VAULT PORTABILITY</span>
         <div className="settings-group-content">
           <div className="settings-row-item clickable" onClick={exportData}>
             <div className="row-left">
               <Download size={18} className="text-blue-400" />
               <div>
                 <span className="row-title">Export Backup (JSON)</span>
-                <span className="row-hint">Download encrypted local backup to your device</span>
+                <span className="row-hint">Save encrypted local backup of all habits and streaks</span>
               </div>
             </div>
             <ChevronRight size={18} />
           </div>
+
+          <div
+            className="settings-row-item clickable"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="row-left">
+              <Upload size={18} className="text-emerald-400" />
+              <div>
+                <span className="row-title">Import Backup (JSON)</span>
+                <span className="row-hint">Restore your habits and data from a previously saved backup</span>
+              </div>
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImportFile}
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+            />
+            <ChevronRight size={18} />
+          </div>
+
+          {importStatus && (
+            <div className="backup-status-banner">
+              <CheckCircle2 size={16} className="text-emerald-400" />
+              <span>{importStatus}</span>
+            </div>
+          )}
 
           <div
             className="settings-row-item clickable danger-row"
@@ -402,6 +486,42 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               </div>
             </div>
             <ChevronRight size={18} className="danger-text" />
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: APP UPDATES & RELEASES */}
+      <div className="settings-group">
+        <span className="group-label">APP UPDATES</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item clickable" onClick={handleCheckUpdate}>
+            <div className="row-left">
+              <RefreshCw
+                size={18}
+                className={`text-emerald-400 ${checkingUpdate ? 'animate-spin' : ''}`}
+              />
+              <div>
+                <span className="row-title">Check for Updates</span>
+                <span className="row-hint">Verify if a newer Android build is available on GitHub</span>
+              </div>
+            </div>
+            <button className="check-update-trigger-btn font-semibold" disabled={checkingUpdate}>
+              {checkingUpdate ? 'Checking...' : 'Check'}
+            </button>
+          </div>
+
+          <div
+            className="settings-row-item clickable"
+            onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
+          >
+            <div className="row-left">
+              <ExternalLink size={18} className="text-cyan-400" />
+              <div>
+                <span className="row-title">Latest Releases Download Page</span>
+                <span className="row-hint">Direct access to DayByDay release builds and changelog</span>
+              </div>
+            </div>
+            <ChevronRight size={18} />
           </div>
         </div>
       </div>
@@ -425,6 +545,101 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             >
               Confirm Wipe
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* UPDATE STATUS MODAL */}
+      {updateModalOpen && (
+        <div className="update-modal-backdrop" onClick={() => setUpdateModalOpen(false)}>
+          <div className="update-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="update-modal-header">
+              <div className="update-icon-circle">
+                {checkingUpdate ? (
+                  <RefreshCw size={24} className="animate-spin text-emerald-400" />
+                ) : updateInfo?.updateAvailable ? (
+                  <Sparkles size={24} className="text-emerald-400" />
+                ) : (
+                  <CheckCircle2 size={24} className="text-blue-400" />
+                )}
+              </div>
+              <h3 className="update-modal-title font-extrabold">
+                {checkingUpdate
+                  ? 'Checking GitHub Releases...'
+                  : updateInfo?.updateAvailable
+                  ? 'Update Available'
+                  : 'Up to Date'}
+              </h3>
+              <p className="update-modal-subtitle">
+                {checkingUpdate
+                  ? 'Connecting to GitHub to find the latest DayByDay build...'
+                  : updateInfo?.updateAvailable
+                  ? 'A newer build of DayByDay is available for download.'
+                  : 'You have the latest version installed.'}
+              </p>
+            </div>
+
+            {!checkingUpdate && updateInfo && (
+              <div className="update-details-box">
+                <div className="update-detail-row">
+                  <span className="detail-label">Release</span>
+                  <span className="detail-value font-mono font-bold">
+                    {updateInfo.releaseName || 'Latest Release'}
+                  </span>
+                </div>
+                {updateInfo.formattedDate && (
+                  <div className="update-detail-row">
+                    <span className="detail-label">Published</span>
+                    <span className="detail-value">{updateInfo.formattedDate}</span>
+                  </div>
+                )}
+                {updateInfo.apkSize && (
+                  <div className="update-detail-row">
+                    <span className="detail-label">Package Size</span>
+                    <span className="detail-value font-mono">{updateInfo.apkSize}</span>
+                  </div>
+                )}
+                <div className="update-detail-row">
+                  <span className="detail-label">Compatibility</span>
+                  <span className="detail-value text-emerald-400 font-medium">
+                    In-place update (data & habits preserved)
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="update-modal-actions">
+              {updateInfo?.updateAvailable && (
+                <button
+                  className="update-action-btn primary font-bold"
+                  onClick={() => {
+                    openExternalUrl(updateInfo.directApkUrl || DIRECT_APK_URL);
+                    setUpdateModalOpen(false);
+                  }}
+                >
+                  <Download size={16} />
+                  <span>Download Latest APK</span>
+                </button>
+              )}
+
+              <button
+                className="update-action-btn secondary font-medium"
+                onClick={() => {
+                  openExternalUrl(updateInfo?.releasePageUrl || RELEASES_PAGE_URL);
+                  setUpdateModalOpen(false);
+                }}
+              >
+                <ExternalLink size={16} />
+                <span>Open Releases Page</span>
+              </button>
+
+              <button
+                className="update-action-btn close font-medium"
+                onClick={() => setUpdateModalOpen(false)}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         </div>
       )}

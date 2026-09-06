@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+def getAppVersionCode() {
+    def envRun = System.getenv("GITHUB_RUN_NUMBER")
+    if (envRun != null && envRun.isInteger()) {
+        return 1000 + envRun.toInteger()
+    }
+    if (project.hasProperty('versionCode')) {
+        return project.property('versionCode').toInteger()
+    }
+    return 100
+}
+
 android {
     namespace = "com.daybyday.habittracker"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,7 +18,7 @@ android {
         applicationId "com.daybyday.habittracker"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode getAppVersionCode()
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -16,8 +27,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildTypes {
+    signingConfigs {
         release {
+            storeFile file('daybyday.keystore')
+            storePassword 'daybydayapp'
+            keyAlias 'daybyday'
+            keyPassword 'daybydayapp'
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.release
+        }
+        release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -48,6 +48,28 @@ export const exportLocalBackup = (data) => {
 };
 
 /**
+ * Validate and parse a DayByDay JSON backup file.
+ */
+export const parseLocalBackup = (jsonString) => {
+  try {
+    const parsed = JSON.parse(jsonString);
+    const data = parsed.data || parsed;
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid backup file structure.');
+    }
+    return {
+      success: true,
+      data,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message || 'Failed to read backup file.',
+    };
+  }
+};
+
+/**
  * Secure local wipe of all habit, pod, and preference data.
  */
 export const wipeLocalData = () => {
