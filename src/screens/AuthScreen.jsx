@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { formatErrorMessage } from '../utils/api';
 import {
   Sparkles,
   Eye,
@@ -40,6 +41,9 @@ export const AuthScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [partnerCode, setPartnerCode] = useState('');
   const [hasPartnerCode, setHasPartnerCode] = useState(false);
 
@@ -75,7 +79,7 @@ export const AuthScreen = () => {
     try {
       await loginUser(cleanUsername, password);
     } catch (err) {
-      setError(err.message || 'Failed to sign in. Please verify your credentials.');
+      setError(formatErrorMessage(err, 'Failed to sign in. Please verify your credentials.'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +124,7 @@ export const AuthScreen = () => {
         securityAnswer.trim()
       );
     } catch (err) {
-      setError(err.message || 'Failed to create account. Please try again.');
+      setError(formatErrorMessage(err, 'Failed to create account. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -146,7 +150,7 @@ export const AuthScreen = () => {
         setError('No security question found for this account.');
       }
     } catch (err) {
-      setError(err.message || 'Account not found.');
+      setError(formatErrorMessage(err, 'Account not found.'));
     } finally {
       setLoading(false);
     }
@@ -183,7 +187,7 @@ export const AuthScreen = () => {
         }
       }, 1000);
     } catch (err) {
-      setError(err.message || 'Incorrect answer or failed to reset password.');
+      setError(formatErrorMessage(err, 'Incorrect answer or failed to reset password.'));
     } finally {
       setLoading(false);
     }
@@ -224,6 +228,8 @@ export const AuthScreen = () => {
               className={`auth-segment-pill ${mode === 'login' ? 'active' : ''}`}
               onClick={() => {
                 setMode('login');
+                setPassword('');
+                setConfirmPassword('');
                 setError(null);
                 setSuccessMsg(null);
               }}
@@ -235,6 +241,8 @@ export const AuthScreen = () => {
               className={`auth-segment-pill ${mode === 'register' ? 'active' : ''}`}
               onClick={() => {
                 setMode('register');
+                setPassword('');
+                setConfirmPassword('');
                 setError(null);
                 setSuccessMsg(null);
               }}
@@ -381,11 +389,21 @@ export const AuthScreen = () => {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
                       placeholder="Min 4 chars"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="auth-text-input no-prefix"
                     />
+                    <button
+                      type="button"
+                      className="auth-input-action-btn"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -393,13 +411,23 @@ export const AuthScreen = () => {
                   <label className="auth-field-label">Confirm</label>
                   <div className="auth-input-wrapper">
                     <input
-                      type={showPassword ? 'text' : 'password'}
+                      type={showConfirmPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
                       placeholder="Repeat"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="auth-text-input no-prefix"
                     />
+                    <button
+                      type="button"
+                      className="auth-input-action-btn"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      tabIndex={-1}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -525,25 +553,49 @@ export const AuthScreen = () => {
                   <div className="auth-form-row">
                     <div className="auth-form-group half-width">
                       <label className="auth-field-label">New Password</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="Min 4 chars"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="auth-text-input no-prefix"
-                      />
+                      <div className="auth-input-wrapper">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="new-password"
+                          placeholder="Min 4 chars"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="auth-text-input no-prefix"
+                        />
+                        <button
+                          type="button"
+                          className="auth-input-action-btn"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          tabIndex={-1}
+                          aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
                     </div>
                     <div className="auth-form-group half-width">
                       <label className="auth-field-label">Confirm</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="Confirm"
-                        value={confirmNewPassword}
-                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                        className="auth-text-input no-prefix"
-                      />
+                      <div className="auth-input-wrapper">
+                        <input
+                          type={showConfirmNewPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="new-password"
+                          placeholder="Confirm"
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          className="auth-text-input no-prefix"
+                        />
+                        <button
+                          type="button"
+                          className="auth-input-action-btn"
+                          onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
+                          tabIndex={-1}
+                          aria-label={showConfirmNewPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showConfirmNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
 

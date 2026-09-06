@@ -23,6 +23,7 @@ import {
   leaveGroupPodRemote,
   hasRemoteBackend,
   getApiBaseUrl,
+  formatErrorMessage,
 } from '../utils/api';
 import {
   initPersistentStorage,
@@ -203,10 +204,10 @@ export const HabitProvider = ({ children }) => {
     return detectInitialOS();
   });
 
-  // 5. Accent theme color
+  // 5. Accent theme color (Default to Sunset & Crimson)
   const [themeColor, setThemeColor] = useState(() => {
     const saved = localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme');
-    if (!saved || saved === 'fit') return 'sapphire';
+    if (!saved || saved === 'fit' || saved === 'sapphire') return 'sunset';
     return saved;
   });
 
@@ -762,39 +763,50 @@ export const HabitProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
     };
 
-    const currentPrefs = {
-      themeColor,
-      themeMode,
-      useMaterial3Theme,
-      customCategories,
-      profilePicture,
-      activeFocusHabitId,
-      beyondGoals,
+    // Clean fresh default preferences for newly registered accounts
+    const freshPrefs = {
+      themeColor: 'sunset',
+      themeMode: 'dark',
+      useMaterial3Theme: false,
+      customCategories: ['Daily', 'Health', 'Fitness', 'Mind'],
+      profilePicture: null,
+      activeFocusHabitId: '',
+      beyondGoals: [],
     };
+
+    // Clear any stale local account records for this username
+    localStorage.removeItem(`daybyday_local_acc_${cleanUsername}`);
+    localStorage.removeItem(`duotrack_local_acc_${cleanUsername}`);
 
     try {
       const res = await registerUserRemote(cleanUsername, password, cleanDisplay, cleanAvatar, securityQuestion, securityAnswer);
       if (res && res.user) {
         newUser = res.user;
-        // Immediately sync local habits and current preferences to cloud account
-        syncUserHabitsRemote(newUser.id, habits, currentPrefs).catch(() => {});
+        // Immediately sync fresh initial habits and default sunset preferences to cloud account
+        syncUserHabitsRemote(newUser.id, INITIAL_HABITS, freshPrefs).catch(() => {});
       }
     } catch (err) {
-      console.warn('Registration notice:', err.message);
-      if (err.message && (err.message.toLowerCase().includes('already taken') || err.message.toLowerCase().includes('exists'))) {
+      const msg = formatErrorMessage(err);
+      console.warn('Registration notice:', msg);
+      if (msg.toLowerCase().includes('already taken') || msg.toLowerCase().includes('exists')) {
         throw new Error('Username is already taken. Please choose another username or sign in.');
       }
-      if (err.message && (err.message.toLowerCase().includes('network') || err.message.toLowerCase().includes('failed to fetch') || err.message.toLowerCase().includes('unreachable'))) {
+      if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('unreachable')) {
         throw new Error('Unable to connect to DayByDay Cloud. Please check your internet connection.');
       }
-      throw err;
+      throw new Error(msg);
     }
+
+    // Apply fresh preferences immediately to UI
+    applyPreferences(freshPrefs);
+    setHabits(INITIAL_HABITS);
+    localStorage.setItem('daybyday_habits', JSON.stringify(INITIAL_HABITS));
 
     // Always store offline credential record in vault so native/offline access is instantaneous
     localStorage.setItem(`daybyday_local_acc_${cleanUsername}`, JSON.stringify({
       user: newUser,
       password,
-      preferences: currentPrefs,
+      preferences: freshPrefs,
       securityQuestion,
       securityAnswer: (securityAnswer || '').trim().toLowerCase(),
     }));
@@ -820,6 +832,13 @@ export const HabitProvider = ({ children }) => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     let remoteError = null;
+
+    // Flush any cached credentials from other accounts
+    Object.keys(localStorage).forEach((k) => {
+      if ((k.startsWith('daybyday_local_acc_') || k.startsWith('duotrack_local_acc_')) && !k.endsWith(`_${cleanUsername}`)) {
+        localStorage.removeItem(k);
+      }
+    });
 
     try {
       const res = await loginUserRemote(cleanUsername, password);
@@ -875,11 +894,11 @@ export const HabitProvider = ({ children }) => {
         return res;
       }
     } catch (err) {
-      remoteError = err.message;
-      console.warn('Remote login notice:', err.message);
+      remoteError = formatErrorMessage(err);
+      console.warn('Remote login notice:', remoteError);
       // If server explicitly rejected password or user credentials
-      if (err.message && (err.message.includes('Invalid username') || err.message.includes('password'))) {
-        throw err;
+      if (remoteError.includes('Invalid username') || remoteError.toLowerCase().includes('password')) {
+        throw new Error(remoteError);
       }
     }
 
@@ -903,7 +922,6 @@ export const HabitProvider = ({ children }) => {
     }
 
     // Error reporting
-    const hasRemote = hasRemoteBackend();
     if (remoteError) {
       if (remoteError.toLowerCase().includes('failed to fetch') || remoteError.toLowerCase().includes('network')) {
         throw new Error('Unable to connect to cloud. Please check your internet connection.');
@@ -935,7 +953,9 @@ export const HabitProvider = ({ children }) => {
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     try {
       await resetPasswordRemote(cleanUsername, securityAnswer, newPassword);
-    } catch { }
+    } catch (err) {
+      throw new Error(formatErrorMessage(err, 'Failed to reset password'));
+    }
 
     const localAcc = localStorage.getItem(`daybyday_local_acc_${cleanUsername}`);
     if (localAcc) {
@@ -951,15 +971,45 @@ export const HabitProvider = ({ children }) => {
     return { ok: true };
   };
 
-  // Logout / Switch Account (Keeps habits safely preserved on device!)
+  // Logout / Switch Account: Cleanly flush all user-specific cache and reset preferences to defaults
   const logoutUser = async () => {
     sound.tap();
     setUser(null);
     setPartner(null);
     setTrackedPartner(null);
     setGroupPod(null);
+    setProfilePicture(null);
+    setActiveFocusHabitId('');
+    setBeyondGoals([]);
+
+    // Clear user storage keys
+    localStorage.removeItem('daybyday_user');
+    localStorage.removeItem('daybyday_partner');
     localStorage.removeItem('daybyday_tracked_partner');
     localStorage.removeItem('daybyday_group_pod');
+    localStorage.removeItem('daybyday_profile_picture');
+    localStorage.removeItem('daybyday_active_focus_habit');
+    localStorage.removeItem('daybyday_beyond_goals');
+    localStorage.removeItem('daybyday_theme');
+    localStorage.removeItem('daybyday_theme_mode');
+    localStorage.removeItem('daybyday_custom_categories');
+    localStorage.removeItem('daybyday_habits');
+
+    // Wipe cached local account credentials
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith('daybyday_local_acc_') || k.startsWith('duotrack_local_acc_')) {
+        localStorage.removeItem(k);
+      }
+    });
+
+    // Reset preferences to default Sunset theme
+    setThemeColor('sunset');
+    setThemeMode('dark');
+    document.documentElement.setAttribute('data-theme', 'sunset');
+    document.documentElement.setAttribute('data-theme-mode', 'dark');
+    setCustomCategories(['Daily', 'Health', 'Fitness', 'Mind']);
+    setHabits(INITIAL_HABITS);
+
     await clearVaultSession();
     triggerIslandNotification('Signed out', 'user');
   };

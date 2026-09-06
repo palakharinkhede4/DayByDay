@@ -162,12 +162,12 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   };
 
   const themeOptions = [
-    { id: 'sapphire', label: 'Dark Sapphire & Cyan (Default)', c1: '#2563EB', c2: '#00D2FF' },
+    { id: 'sunset', label: 'Sunset & Crimson (Default)', c1: '#F97316', c2: '#FF5252' },
+    { id: 'sapphire', label: 'Dark Sapphire & Cyan', c1: '#2563EB', c2: '#00D2FF' },
     { id: 'fit', label: 'Activity Focus (Mint & Electric Blue)', c1: '#00D284', c2: '#2979FF' },
     { id: 'emerald', label: 'Mint & Coral', c1: '#10B981', c2: '#F43F5E' },
     { id: 'ocean', label: 'Cyan & Amber', c1: '#06B6D4', c2: '#F59E0B' },
     { id: 'violet', label: 'Violet & Mint', c1: '#8B5CF6', c2: '#00D284' },
-    { id: 'sunset', label: 'Sunset & Crimson', c1: '#F97316', c2: '#FF5252' },
   ];
 
   const userInitial = (user?.displayName || user?.username || 'U')[0].toUpperCase();

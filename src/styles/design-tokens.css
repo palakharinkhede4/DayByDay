@@ -5,51 +5,59 @@
    ========================================================================== */
 
 :root {
-  /* Deep Pastel Navy Tokens (Default Palette) */
-  --sapphire-blue: #1A56C4;     /* Deep Pastel Navy Primary */
+  /* Default Palette: Sunset & Crimson */
+  --sunset-orange: #F97316;     /* Sunset Orange Primary */
+  --sunset-orange-glow: rgba(249, 115, 22, 0.40);
+  --sunset-orange-light: #FDBA74;
+
+  --crimson-red: #FF5252;       /* Crimson Red Accent */
+  --crimson-red-glow: rgba(255, 82, 82, 0.40);
+  --crimson-red-light: #FDA4AF;
+
+  --sapphire-blue: #1A56C4;
   --sapphire-blue-glow: rgba(26, 86, 196, 0.40);
   --sapphire-blue-light: #93C5FD;
 
-  --electric-cyan: #7EB8F7;     /* Soft Sky Blue Accent */
+  --electric-cyan: #7EB8F7;
   --electric-cyan-glow: rgba(126, 184, 247, 0.40);
   --electric-cyan-light: #BFDBFE;
 
   --fit-green: #00D284;
-  --fit-blue: #1A56C4;
-  --fit-cyan: #7EB8F7;
+  --fit-blue: #F97316;
+  --fit-cyan: #FF5252;
   --fit-coral: #FF5252;
   --fit-amber: #FBBC04;
   --fit-purple: #8B5CF6;
 
-  /* Default Active User Colors: Deep Navy & Soft Sky Blue */
-  --user1-color: #1A56C4;       /* Primary Habit Completion (Deep Navy) */
-  --user1-glow: rgba(26, 86, 196, 0.40);
-  --user1-light: #93C5FD;
+  /* Default Active User Colors: Sunset Orange & Crimson */
+  --user1-color: #F97316;       /* Primary Habit Completion (Sunset Orange) */
+  --user1-glow: rgba(249, 115, 22, 0.40);
+  --user1-light: #FDBA74;
 
-  --user2-color: #7EB8F7;       /* Co-op / Momentum (Soft Sky Blue) */
-  --user2-glow: rgba(126, 184, 247, 0.40);
-  --user2-light: #BFDBFE;
+  --user2-color: #FF5252;       /* Co-op / Momentum (Crimson Red) */
+  --user2-glow: rgba(255, 82, 82, 0.40);
+  --user2-light: #FDA4AF;
 
-  --primary: #1A56C4;
-  --primary-glow: rgba(26, 86, 196, 0.40);
-  --accent: #7EB8F7;
-  --accent-glow: rgba(126, 184, 247, 0.40);
+  --primary: #F97316;
+  --primary-glow: rgba(249, 115, 22, 0.40);
+  --accent: #FF5252;
+  --accent-glow: rgba(255, 82, 82, 0.40);
 
-  --accent-flame: #FBBC04;
-  --success: #1A56C4;
+  --accent-flame: #F97316;
+  --success: #F97316;
   --warning: #FBBC04;
-  --info: #7EB8F7;
+  --info: #FF5252;
   --danger: #FF5252;
 
   --dial-track-color: rgba(255, 255, 255, 0.08);
   --dial-track-inner: rgba(255, 255, 255, 0.05);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 50%, #7EB8F7 100%);
-  --fit-grad-primary: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 50%, #7EB8F7 100%);
-  --fit-grad-heart: linear-gradient(135deg, #0F3A8C 0%, #1A56C4 100%);
-  --fit-grad-move: linear-gradient(135deg, #1A56C4 0%, #7EB8F7 100%);
-  --fit-grad-flame: linear-gradient(135deg, #FBBC04 0%, #FF6D00 100%);
+  --gradient-primary: linear-gradient(135deg, #F97316 0%, #FF5252 100%);
+  --fit-grad-primary: linear-gradient(135deg, #F97316 0%, #FF5252 100%);
+  --fit-grad-heart: linear-gradient(135deg, #F97316 0%, #FF5252 100%);
+  --fit-grad-move: linear-gradient(135deg, #FF5252 0%, #F97316 100%);
+  --fit-grad-flame: linear-gradient(135deg, #F97316 0%, #FF5252 100%);
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

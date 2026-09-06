@@ -8,6 +8,12 @@ dist/
 dist-ssr/
 build/
 
+# Secrets & Environment
+.env
+.env.*
+*.env
+scripts/*.mjs
+
 # Local Environment & Logs
 *.local
 logs

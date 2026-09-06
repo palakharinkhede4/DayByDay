@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
 import { Flame, Menu, CheckCircle2 } from 'lucide-react';
 
@@ -11,6 +11,43 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
     isSolo,
     pod,
   } = useHabits();
+
+  const [mounted, setMounted] = useState(false);
+  const [displayPercent, setDisplayPercent] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 60);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Smooth numeric counter animation matching the 1.1s circle stroke transition
+  useEffect(() => {
+    if (!mounted) {
+      setDisplayPercent(0);
+      return;
+    }
+    const targetVal = Math.min(100, Math.max(0, currentPercent || 0));
+    if (targetVal === 0) {
+      setDisplayPercent(0);
+      return;
+    }
+    const duration = 1100;
+    let startTime = null;
+    let animId;
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      // Ease out cubic
+      const ease = 1 - Math.pow(1 - progress, 3);
+      setDisplayPercent(Math.round(targetVal * ease));
+      if (progress < 1) {
+        animId = requestAnimationFrame(step);
+      }
+    };
+    animId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animId);
+  }, [mounted, currentPercent]);
 
   const completedCount = useMemo(() => {
     return habits.filter((h) => {
@@ -27,19 +64,21 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
     return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
   }, []);
 
-  // Dual Concentric Rings (Inspired by Google Fit Activity Rings)
-  // Outer Ring: Daily Habit Completion (Heart Points Emerald)
+  // Dual Concentric Rings (Activity Rings with Smooth 1.1s Animation)
+  // Outer Ring: Daily Habit Completion
   const outerRadius = 68;
   const outerCircumference = 2 * Math.PI * outerRadius;
-  const outerOffset = outerCircumference - (Math.min(100, Math.max(0, currentPercent)) / 100) * outerCircumference;
+  const animatedCurrentPercent = mounted ? (currentPercent || 0) : 0;
+  const outerOffset = outerCircumference - (Math.min(100, Math.max(0, animatedCurrentPercent)) / 100) * outerCircumference;
 
-  // Inner Ring: Partner Sync or 7-Day Consistency Momentum (Move Minutes Electric Blue)
+  // Inner Ring: Partner Sync or 7-Day Consistency Momentum
   const innerRadius = 53;
   const innerCircumference = 2 * Math.PI * innerRadius;
   const innerPercent = isSolo
     ? Math.min(100, Math.max(pod.currentStreak > 0 ? 20 : 0, Math.round(((pod.currentStreak || 0) / 7) * 100)))
     : (partnerPercent || 0);
-  const innerOffset = innerCircumference - (Math.min(100, Math.max(0, innerPercent)) / 100) * innerCircumference;
+  const animatedInnerPercent = mounted ? innerPercent : 0;
+  const innerOffset = innerCircumference - (Math.min(100, Math.max(0, animatedInnerPercent)) / 100) * innerCircumference;
 
   return (
     <div className="modern-header-dial">
@@ -67,20 +106,20 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* Crisp Concentric Circular Progress Dial (Google Fit Athletic Style) */}
+      {/* Crisp Concentric Circular Progress Dial */}
       <div className="radial-gauge-container">
         <div className="radial-svg-wrap">
           <svg className="radial-progress-svg" viewBox="0 0 160 160" width="160" height="160">
             <defs>
-              {/* Outer Ring Gradient (Emerald / Heart Points) */}
+              {/* Outer Ring Gradient (Sunset Orange) */}
               <linearGradient id="dialOuterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="var(--user1-color, #1A56C4)" />
-                <stop offset="100%" stopColor="var(--user1-light, #69F0AE)" />
+                <stop offset="0%" stopColor="var(--user1-color, #F97316)" />
+                <stop offset="100%" stopColor="var(--user1-light, #FDBA74)" />
               </linearGradient>
-              {/* Inner Ring Gradient (Electric Blue / Move Momentum) */}
+              {/* Inner Ring Gradient (Crimson / Momentum) */}
               <linearGradient id="dialInnerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="var(--user2-color, #2979FF)" />
-                <stop offset="100%" stopColor="var(--user2-light, #82B1FF)" />
+                <stop offset="0%" stopColor="var(--user2-color, #FF5252)" />
+                <stop offset="100%" stopColor="var(--user2-light, #FDA4AF)" />
               </linearGradient>
             </defs>
 
@@ -139,7 +178,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
 
           {/* Center Readout */}
           <div className="radial-center-stats">
-            <span className="radial-percent-val font-extrabold">{currentPercent}%</span>
+            <span className="radial-percent-val font-extrabold">{displayPercent}%</span>
             <div className="radial-ring-legend">
               <span className="legend-dot green" title="Your daily habits"></span>
               <span className="legend-dot blue" title="Streak & momentum"></span>

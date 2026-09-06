@@ -3,6 +3,28 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 export const DEFAULT_API_URL = 'https://day-by-day-palak-2599.vercel.app';
 
+export function formatErrorMessage(err, fallback = 'An unexpected error occurred') {
+  if (!err) return fallback;
+  if (typeof err === 'string') {
+    return err.trim() === '[object Object]' || !err.trim() ? fallback : err.trim();
+  }
+  if (err.data) {
+    if (typeof err.data === 'string' && err.data !== '[object Object]') return err.data;
+    if (typeof err.data.error === 'string' && err.data.error !== '[object Object]') return err.data.error;
+    if (typeof err.data.message === 'string' && err.data.message !== '[object Object]') return err.data.message;
+  }
+  if (typeof err.error === 'string' && err.error !== '[object Object]') return err.error;
+  if (err.error && typeof err.error.message === 'string' && err.error.message !== '[object Object]') return err.error.message;
+  if (typeof err.message === 'string' && err.message !== '[object Object]' && err.message.trim()) {
+    return err.message;
+  }
+  try {
+    const s = JSON.stringify(err);
+    if (s && s !== '{}' && s !== '[]') return s;
+  } catch {}
+  return fallback;
+}
+
 export const isNativePlatform = () => {
   if (typeof window === 'undefined') return false;
   return Boolean(
@@ -23,11 +45,15 @@ export const getApiBaseUrl = () => {
   if (import.meta?.env?.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
     return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
   }
+  // Native apps (Android/iOS) MUST always use DEFAULT_API_URL unless customUrl is explicitly set
+  if (isNativePlatform()) {
+    return DEFAULT_API_URL;
+  }
   // When running on public web / Vercel with same origin
   if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
     return window.location.origin;
   }
-  // Default cloud API for native apps (Android/iOS) and standalone clients
+  // Default cloud API
   return DEFAULT_API_URL;
 };
 
@@ -79,7 +105,12 @@ export async function apiFetch(url, options = {}) {
       });
 
       const isOk = response.status >= 200 && response.status < 300;
-      const responseData = response.data;
+      let responseData = response.data;
+      if (typeof responseData === 'string') {
+        try {
+          responseData = JSON.parse(responseData);
+        } catch {}
+      }
 
       return {
         ok: isOk,
@@ -97,7 +128,25 @@ export async function apiFetch(url, options = {}) {
         text: async () => (typeof responseData === 'string' ? responseData : JSON.stringify(responseData)),
       };
     } catch (nativeErr) {
-      console.warn('Native CapacitorHttp notice, falling back to fetch:', nativeErr.message);
+      // If CapacitorHttp caught an HTTP error response (e.g. 401 Unauthorized), it contains status & data!
+      if (nativeErr && (nativeErr.status || nativeErr.data)) {
+        const status = Number(nativeErr.status) || 400;
+        let responseData = nativeErr.data || nativeErr;
+        if (typeof responseData === 'string') {
+          try {
+            responseData = JSON.parse(responseData);
+          } catch {}
+        }
+        return {
+          ok: false,
+          status,
+          statusText: String(status),
+          headers: { get: () => null },
+          json: async () => responseData,
+          text: async () => (typeof responseData === 'string' ? responseData : JSON.stringify(responseData)),
+        };
+      }
+      console.warn('Native CapacitorHttp notice, falling back to fetch:', formatErrorMessage(nativeErr));
     }
   }
 
@@ -115,13 +164,14 @@ async function parseJsonSafe(res) {
   }
 
   if (typeof res.text === 'function') {
-    const text = await res.text();
-    if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
-      throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
-    }
     try {
+      const text = await res.text();
+      if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
+        throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
+      }
       return JSON.parse(text);
     } catch (e) {
+      if (e.message && e.message.includes('unreachable')) throw e;
       throw new Error('Invalid response from cloud service');
     }
   }
@@ -234,12 +284,12 @@ export const registerUserRemote = async (username, password, displayName, avatar
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data?.error || 'Failed to register');
+      throw new Error(formatErrorMessage(data?.error || data, 'Failed to register'));
     }
     return data;
   } catch (err) {
-    console.warn('User register network notice:', err.message);
-    throw err;
+    console.warn('User register network notice:', formatErrorMessage(err));
+    throw new Error(formatErrorMessage(err, 'Failed to register'));
   }
 };
 
@@ -260,11 +310,11 @@ export const loginUserRemote = async (username, password) => {
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data?.error || 'Invalid username or password');
+      throw new Error(formatErrorMessage(data?.error || data, 'Invalid username or password'));
     }
     return data;
   } catch (err) {
-    throw err;
+    throw new Error(formatErrorMessage(err, 'Failed to sign in. Please verify your credentials.'));
   }
 };
 
@@ -282,11 +332,11 @@ export const getSecurityQuestionRemote = async (username) => {
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data?.error || 'User not found');
+      throw new Error(formatErrorMessage(data?.error || data, 'User not found'));
     }
     return data;
   } catch (err) {
-    throw err;
+    throw new Error(formatErrorMessage(err, 'User not found'));
   }
 };
 
@@ -306,11 +356,11 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data?.error || 'Failed to reset password');
+      throw new Error(formatErrorMessage(data?.error || data, 'Failed to reset password'));
     }
     return data;
   } catch (err) {
-    throw err;
+    throw new Error(formatErrorMessage(err, 'Failed to reset password'));
   }
 };
 
@@ -451,10 +501,10 @@ export const createGroupPodRemote = async (userId, name, podCode, sharedGoals) =
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) throw new Error(data?.error || 'Failed to create group pod');
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to create group pod'));
     return data?.pod || null;
   } catch (err) {
-    throw err;
+    throw new Error(formatErrorMessage(err, 'Failed to create group pod'));
   }
 };
 
@@ -472,10 +522,10 @@ export const joinGroupPodRemote = async (userId, podCode) => {
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) throw new Error(data?.error || 'Failed to join group pod');
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to join group pod'));
     return data?.pod || null;
   } catch (err) {
-    throw err;
+    throw new Error(formatErrorMessage(err, 'Failed to join group pod'));
   }
 };
 
