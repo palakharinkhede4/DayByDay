@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  actions: write
+  deployments: write
 
 jobs:
   build-apk:
@@ -51,28 +53,48 @@ jobs:
           ./gradlew assembleDebug --no-daemon
           cd ..
 
-      - name: Prepare Versioned APK
+      - name: Prepare Single Unversioned APK
         run: |
-          PKG_VER=$(node -p "require('./package.json').version")
-          RELEASE_TAG="v${PKG_VER}"
-          cp android/app/build/outputs/apk/debug/app-debug.apk "DayByDay-${RELEASE_TAG}.apk"
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          cp android/app/build/outputs/apk/debug/app-debug.apk DayByDay.apk
 
-      - name: Clean Existing Release For Version If Exists
+      - name: Purge All Deployments, Releases, and Past Workflow Runs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete "${RELEASE_TAG}" --yes --cleanup-tag || true
+          echo "=== Purging All Releases and Tags ==="
+          for tag in $(gh release list --json tagName -q '.[].tagName' || true); do
+            echo "Deleting release: $tag"
+            gh release delete "$tag" --yes --cleanup-tag || true
+          done
 
-      - name: Publish Release Matching versionName Tag
+          echo "=== Purging All GitHub Deployments ==="
+          DEPLOYMENT_IDS=$(gh api "repos/${{ github.repository }}/deployments" --paginate --jq '.[].id' || true)
+          for id in $DEPLOYMENT_IDS; do
+            echo "Deactivating deployment: $id"
+            gh api -X POST "repos/${{ github.repository }}/deployments/${id}/statuses" -f state=inactive || true
+            echo "Deleting deployment: $id"
+            gh api -X DELETE "repos/${{ github.repository }}/deployments/${id}" || true
+          done
+
+          echo "=== Purging Previous Workflow Runs ==="
+          CURRENT_RUN_ID="${{ github.run_id }}"
+          RUN_IDS=$(gh run list --json databaseId -q '.[].databaseId' || true)
+          for rid in $RUN_IDS; do
+            if [ "$rid" != "$CURRENT_RUN_ID" ]; then
+              echo "Deleting workflow run: $rid"
+              gh run delete "$rid" || true
+            fi
+          done
+
+      - name: Publish Single Latest Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: "DayByDay ${{ env.RELEASE_TAG }} (Android APK)"
+          tag_name: latest
+          name: "DayByDay (Latest Build)"
           body: |
-            ## DayByDay Release ${{ env.RELEASE_TAG }}
+            ## DayByDay - Latest Android Build
             
-            Open-source habit tracking with real-time accountability synchronization.
+            Continuous build automatically compiled on every commit to `main`.
             
             ### Included in this build:
             * Apple ActivityKit & in-app Dynamic Island HUD.
@@ -87,10 +109,10 @@ jobs:
             * Multi-layer persistent storage vault with offline resilience.
             
             ### Android Installation:
-            1. Download `DayByDay-${{ env.RELEASE_TAG }}.apk` attached below.
+            1. Download `DayByDay.apk` attached below.
             2. Open the APK on your Android device to install.
             3. Launch DayByDay.
-          files: DayByDay-*.apk
+          files: DayByDay.apk
           draft: false
           prerelease: false
           make_latest: true
