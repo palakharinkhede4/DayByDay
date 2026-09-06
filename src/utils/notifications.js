@@ -138,8 +138,9 @@ export async function dispatchHabitNotification(habit) {
             title: content.title,
             body: content.body,
             channelId: 'daybyday_reminders',
-            smallIcon: 'ic_launcher',
-            iconColor: '#1A56C4',
+            smallIcon: 'ic_stat_flame',
+            largeIcon: 'ic_launcher',
+            iconColor: '#F97316',
             autoCancel: true,
             schedule: { at: new Date(Date.now() + 200) },
           },
@@ -160,8 +161,8 @@ export async function dispatchHabitNotification(habit) {
         if (registration && registration.showNotification) {
           await registration.showNotification(content.title, {
             body: content.body,
-            icon: './icon.png',
-            badge: './icon.png',
+            icon: '/icon-192.png',
+            badge: '/icon.svg',
             tag: `daybyday-${habit.id}`,
             renotify: true,
           });
@@ -172,7 +173,8 @@ export async function dispatchHabitNotification(habit) {
       // Standard browser notification fallback
       new Notification(content.title, {
         body: content.body,
-        icon: './icon.png',
+        icon: '/icon-192.png',
+        badge: '/icon.svg',
         tag: `daybyday-${habit.id}`,
       });
       return true;

@@ -24,6 +24,7 @@ import {
   Camera,
   FileText,
   Flame,
+  Activity,
 } from 'lucide-react';
 import {
   checkForAppUpdate,
@@ -58,6 +59,12 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     logoutUser,
     profilePicture,
     setProfilePicture,
+    healthSyncEnabled,
+    healthStats,
+    enableHealthSync,
+    disableHealthSync,
+    syncDeviceHealth,
+    setCustomHealthSteps,
   } = useHabits();
 
   const fileInputRef = useRef(null);
@@ -73,6 +80,26 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [changelogModalOpen, setChangelogModalOpen] = useState(false);
   const [changelogData, setChangelogData] = useState(null);
   const [loadingChangelog, setLoadingChangelog] = useState(false);
+  const [syncingHealth, setSyncingHealth] = useState(false);
+  const [showHealthCalibrate, setShowHealthCalibrate] = useState(false);
+  const [calibrateSteps, setCalibrateSteps] = useState('');
+
+  const handleManualHealthSync = async () => {
+    setSyncingHealth(true);
+    try {
+      await syncDeviceHealth({ silent: false, force: true });
+    } finally {
+      setSyncingHealth(false);
+    }
+  };
+
+  const handleSaveCalibrate = async (e) => {
+    e.preventDefault();
+    if (!calibrateSteps) return;
+    await setCustomHealthSteps(calibrateSteps);
+    setShowHealthCalibrate(false);
+    setCalibrateSteps('');
+  };
 
 
   const handleViewChangelog = async () => {
@@ -390,6 +417,112 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
+      {/* SECTION: HEALTH & FITNESS SYNC */}
+      <div className="settings-group">
+        <span className="group-label">SYSTEM HEALTH & FITNESS SYNC</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item">
+            <div className="row-left">
+              <Activity size={18} className="text-emerald-400" />
+              <div>
+                <span className="row-title">Sync with Health App</span>
+                <span className="row-hint">
+                  {healthSyncEnabled
+                    ? 'Active · Automatically updates steps & activity day by day in Habits & Together Pod'
+                    : 'One-time permission to auto-import daily steps from Android Sensor / Apple Health'}
+                </span>
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={Boolean(healthSyncEnabled)}
+                onChange={async (e) => {
+                  if (e.target.checked) {
+                    await enableHealthSync();
+                  } else {
+                    disableHealthSync();
+                  }
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          {healthSyncEnabled && (
+            <>
+              {/* Daily Stats Summary */}
+              <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.75rem', padding: '0.85rem 1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="live-indicator-dot"></span>
+                    <span className="row-title font-bold" style={{ fontSize: '0.85rem' }}>
+                      Today's Activity
+                    </span>
+                  </div>
+                  <span className="row-hint" style={{ fontSize: '0.75rem' }}>
+                    {healthStats?.syncedAt ? `Updated ${new Date(healthStats.syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Live'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-emerald-400" style={{ fontSize: '1.15rem' }}>
+                      {(healthStats?.steps || 0).toLocaleString()}
+                    </div>
+                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Steps</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-amber-400" style={{ fontSize: '1.15rem' }}>
+                      {healthStats?.calories || Math.round((healthStats?.steps || 0) * 0.04)}
+                    </div>
+                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Calories</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-blue-400" style={{ fontSize: '1.15rem' }}>
+                      {healthStats?.distanceKm || (Math.round((healthStats?.steps || 0) * 0.000762 * 10) / 10)} km
+                    </div>
+                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Distance</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sync Now Action */}
+              <div className="settings-row-item clickable" onClick={handleManualHealthSync}>
+                <div className="row-left">
+                  <RefreshCw size={18} className={`text-emerald-400 ${syncingHealth ? 'animate-spin' : ''}`} />
+                  <div>
+                    <span className="row-title font-semibold">Sync Health Stats Now</span>
+                    <span className="row-hint">Instantly fetch fresh OS stats & push to Together pod</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="check-update-trigger-btn font-semibold"
+                  style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                  disabled={syncingHealth}
+                >
+                  {syncingHealth ? 'Syncing...' : 'Sync Now'}
+                </button>
+              </div>
+
+              {/* Apple Health / Custom Steps Calibrate Option */}
+              <div className="settings-row-item clickable" onClick={() => setShowHealthCalibrate(true)}>
+                <div className="row-left">
+                  <Sparkles size={18} className="text-teal-400" />
+                  <div>
+                    <span className="row-title">Apple Health / Custom Calibrate</span>
+                    <span className="row-hint">Manually set or calibrate steps on iOS Safari or browser</span>
+                  </div>
+                </div>
+                <ChevronRight size={18} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* SECTION: DATA BACKUP & RESTORE */}
       <div className="settings-group">
@@ -624,6 +757,59 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* HEALTH SYNC CALIBRATION MODAL (iOS Web App & Manual Sync) */}
+      {showHealthCalibrate && (
+        <div className="modal-backdrop" onClick={() => setShowHealthCalibrate(false)}>
+          <div className="pairing-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%' }}>
+            <div className="pairing-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Activity size={22} className="text-emerald-400" />
+                <h3 className="pairing-title font-bold">Health & Activity Sync</h3>
+              </div>
+            </div>
+
+            <p className="pairing-desc" style={{ marginTop: '0.5rem', fontSize: '0.88rem' }}>
+              On iOS Safari or desktop web, enter your Apple Health steps count below to sync habits and Together pod goals.
+            </p>
+
+            <form onSubmit={handleSaveCalibrate} style={{ marginTop: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label className="font-semibold text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Today's Steps
+                </label>
+                <input
+                  type="number"
+                  placeholder="e.g. 8500"
+                  value={calibrateSteps}
+                  onChange={(e) => setCalibrateSteps(e.target.value)}
+                  className="pairing-input font-mono font-bold"
+                  style={{ fontSize: '1.2rem', padding: '0.75rem 1rem' }}
+                  autoFocus
+                />
+              </div>
+
+              <div className="pairing-actions-row" style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="confirm-btn cancel"
+                  onClick={() => setShowHealthCalibrate(false)}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="confirm-btn font-bold"
+                  style={{ flex: 1, background: 'linear-gradient(135deg, #10B981, #059669)', color: '#fff' }}
+                >
+                  Save & Sync
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

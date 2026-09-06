@@ -49,6 +49,10 @@ import {
   requestHealthPermission,
   importDeviceHealthStats,
   syncHealthDataToHabitsAndPod,
+  isHealthSyncEnabled,
+  setHealthSyncEnabled,
+  getStoredHealthData,
+  updateCustomHealthStats,
 } from '../utils/fitnessSync';
 
 const HabitContext = createContext(null);
@@ -384,6 +388,10 @@ export const HabitProvider = ({ children }) => {
 
   // Dynamic Island status
   const [islandMessage, setIslandMessage] = useState(null);
+
+  // Native Health & Fitness Sync state (persisted across restarts)
+  const [healthSyncEnabled, setHealthSyncEnabledState] = useState(() => isHealthSyncEnabled());
+  const [healthStats, setHealthStats] = useState(() => getStoredHealthData());
 
   // Custom Categories state (persisted)
   const [customCategories, setCustomCategories] = useState(() => {
@@ -1586,6 +1594,10 @@ export const HabitProvider = ({ children }) => {
                     id: Math.floor(Math.random() * 100000),
                     title: notifTitle,
                     body: notifBody,
+                    smallIcon: 'ic_stat_flame',
+                    largeIcon: 'ic_launcher',
+                    iconColor: '#F97316',
+                    channelId: 'daybyday_reminders',
                     schedule: { at: new Date(Date.now() + 500) },
                     sound: 'beep.wav',
                   },
@@ -1595,7 +1607,8 @@ export const HabitProvider = ({ children }) => {
               try {
                 new Notification(notifTitle, {
                   body: notifBody,
-                  icon: '/icon.svg',
+                  icon: '/icon-192.png',
+                  badge: '/icon.svg',
                 });
               } catch {}
             }
@@ -1868,8 +1881,8 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Import Native OS Fitness & Step Stats and Auto-Sync to Habits and Pod
-  const syncDeviceHealth = async () => {
+  // Enable Native OS / Health App Sync (Asks permission one-time and retains it)
+  const enableHealthSync = async () => {
     sound.press();
     const hasPerm = await checkHealthPermission();
     if (!hasPerm) {
@@ -1879,24 +1892,90 @@ export const HabitProvider = ({ children }) => {
         return { success: false, reason: 'permission_denied' };
       }
     }
+    setHealthSyncEnabled(true);
+    setHealthSyncEnabledState(true);
+    const data = await syncDeviceHealth({ silent: false, force: true });
+    return { success: true, data };
+  };
+
+  // Disable Native OS Health Sync
+  const disableHealthSync = () => {
+    sound.press();
+    setHealthSyncEnabled(false);
+    setHealthSyncEnabledState(false);
+    triggerIslandNotification('Health sync paused', 'info');
+  };
+
+  // Import Native OS Fitness & Step Stats and Auto-Sync to Habits and Together Pod
+  const syncDeviceHealth = async ({ silent = false, force = false } = {}) => {
+    if (!force && !isHealthSyncEnabled()) return null;
+    if (!silent) sound.press();
 
     const healthData = await importDeviceHealthStats();
     if (healthData && healthData.success) {
+      setHealthStats(healthData);
       await syncHealthDataToHabitsAndPod({
         healthData,
         habits,
         sharedGoals: groupPod?.sharedGoals || [],
-        activeUserId: user?.id,
+        activeUserId: 'user1',
         onUpdateHabit: updateHabit,
         onUpdateSharedGoal: updateSharedGoalProgress,
-        triggerIslandNotification,
+        triggerIslandNotification: silent ? null : triggerIslandNotification,
       });
       return healthData;
     } else {
-      triggerIslandNotification(healthData?.error || 'Could not import health stats', 'untrack');
+      if (!silent) {
+        triggerIslandNotification(healthData?.error || 'Could not import health stats', 'untrack');
+      }
       return healthData;
     }
   };
+
+  // Update custom health stats directly (helpful for iOS Web App & manual calibration)
+  const setCustomHealthSteps = async (customSteps) => {
+    const updated = updateCustomHealthStats(customSteps);
+    setHealthStats(updated);
+    await syncHealthDataToHabitsAndPod({
+      healthData: updated,
+      habits,
+      sharedGoals: groupPod?.sharedGoals || [],
+      activeUserId: 'user1',
+      onUpdateHabit: updateHabit,
+      onUpdateSharedGoal: updateSharedGoalProgress,
+      triggerIslandNotification,
+    });
+    return updated;
+  };
+
+  // Automatic Daily Health & Fitness Background Fetcher (Retains permission & updates day by day)
+  useEffect(() => {
+    if (!healthSyncEnabled) return;
+
+    // 1. Fetch on app launch
+    syncDeviceHealth({ silent: true, force: true });
+
+    // 2. Fetch whenever app resumes / user brings window to front
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        syncDeviceHealth({ silent: true, force: true });
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    // 3. Periodic fetch every 5 minutes while active
+    const interval = setInterval(() => {
+      syncDeviceHealth({ silent: true, force: true });
+    }, 5 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      clearInterval(interval);
+    };
+  }, [healthSyncEnabled]);
 
   const editSharedGoal = async (goalId, updates) => {
     sound.press();
@@ -2506,6 +2585,11 @@ export const HabitProvider = ({ children }) => {
         lastSyncedAt,
         syncWithCloud,
         syncDeviceHealth,
+        healthSyncEnabled,
+        healthStats,
+        enableHealthSync,
+        disableHealthSync,
+        setCustomHealthSteps,
       }}
     >
       {children}

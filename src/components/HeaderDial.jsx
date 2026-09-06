@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
-import { Flame, Menu, CheckCircle2 } from 'lucide-react';
+import { Flame, CheckCircle2 } from 'lucide-react';
 
 export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
   const {
@@ -94,15 +94,6 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
             <Flame size={16} className="streak-flame-icon text-amber-500" />
             <span className="streak-num font-bold">{pod.currentStreak}</span>
           </div>
-
-          <button
-            className="menu-icon-btn"
-            onClick={onOpenSettings}
-            aria-label="Settings and Profile"
-            title="Open Settings"
-          >
-            <Menu size={18} />
-          </button>
         </div>
       </div>
 

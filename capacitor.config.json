@@ -13,6 +13,11 @@
     },
     "CapacitorHttp": {
       "enabled": true
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_flame",
+      "iconColor": "#F97316",
+      "sound": "beep.wav"
     }
   }
 }

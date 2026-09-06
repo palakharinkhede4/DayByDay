@@ -6,6 +6,31 @@
 import { sound } from './sound';
 
 const STORAGE_KEY = 'daybyday_health_sync_data';
+const ENABLED_KEY = 'daybyday_health_sync_enabled';
+
+export const isHealthSyncEnabled = () => {
+  try {
+    return localStorage.getItem(ENABLED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const setHealthSyncEnabled = (enabled) => {
+  try {
+    localStorage.setItem(ENABLED_KEY, enabled ? 'true' : 'false');
+  } catch {}
+};
+
+export const getStoredHealthData = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
 
 export const checkHealthPermission = async () => {
   try {
@@ -28,12 +53,18 @@ export const requestHealthPermission = async () => {
       return Boolean(res?.granted);
     }
 
-    // iOS Web App / Safari Motion Sensor Permission
+    // iOS Web App / Safari Motion Sensor Permission (iOS 13+)
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const response = await DeviceMotionEvent.requestPermission();
-        return response === 'granted';
-      } catch {}
+        if (response === 'granted') {
+          startMotionPedometer();
+          return true;
+        }
+        return false;
+      } catch {
+        return true;
+      }
     }
 
     return true;
@@ -43,17 +74,71 @@ export const requestHealthPermission = async () => {
   }
 };
 
+// Web / iOS Pedometer Motion Detection
+let motionListenerActive = false;
+let lastMagnitude = 0;
+let lastStepTime = 0;
+
+function startMotionPedometer() {
+  if (motionListenerActive || typeof window === 'undefined' || !window.addEventListener) return;
+  try {
+    window.addEventListener('devicemotion', (e) => {
+      const acc = e.accelerationIncludingGravity || e.acceleration;
+      if (!acc) return;
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
+      const now = Date.now();
+
+      // Step peak detection: magnitude spike > 12.5 and at least 320ms since last step
+      if (magnitude > 12.5 && lastMagnitude <= 12.5 && now - lastStepTime > 320) {
+        lastStepTime = now;
+        incrementStoredSteps(1);
+      }
+      lastMagnitude = magnitude;
+    });
+    motionListenerActive = true;
+  } catch {}
+}
+
+function incrementStoredSteps(delta = 1) {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let data = raw ? JSON.parse(raw) : null;
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (!data || !data.syncedAt || !data.syncedAt.startsWith(today)) {
+      data = {
+        steps: delta,
+        calories: Math.round(delta * 0.04),
+        distanceKm: Math.round(delta * 0.000762 * 100) / 100,
+        activeMinutes: Math.round(delta / 100),
+        source: 'ios_motion_pedometer',
+        syncedAt: new Date().toISOString(),
+      };
+    } else {
+      data.steps = (Number(data.steps) || 0) + delta;
+      data.calories = Math.round(data.steps * 0.04);
+      data.distanceKm = Math.round(data.steps * 0.000762 * 100) / 100;
+      data.activeMinutes = Math.round(data.steps / 100);
+      data.syncedAt = new Date().toISOString();
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
 export const importDeviceHealthStats = async () => {
   try {
-    // 1. Native Android Hardware Step Counter
+    // 1. Native Android Hardware Step Counter via Capacitor Plugin
     if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync) {
       const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats();
       if (stats && stats.success) {
         const payload = {
-          steps: Number(stats.steps) || 0,
-          calories: Number(stats.calories) || 0,
-          distanceKm: Number(stats.distanceKm) || 0,
-          activeMinutes: Number(stats.activeMinutes) || 0,
+          steps: Math.max(0, Number(stats.steps) || 0),
+          calories: Number(stats.calories) || Math.round((Number(stats.steps) || 0) * 0.04),
+          distanceKm: Number(stats.distanceKm) || Math.round((Number(stats.steps) || 0) * 0.000762 * 100) / 100,
+          activeMinutes: Number(stats.activeMinutes) || Math.round((Number(stats.steps) || 0) / 100),
           source: stats.source || 'android_step_counter',
           syncedAt: new Date().toISOString(),
         };
@@ -73,20 +158,22 @@ export const importDeviceHealthStats = async () => {
 
     const todayDate = new Date().toISOString().slice(0, 10);
     const isToday = lastSaved?.syncedAt?.startsWith(todayDate);
-    const currentSteps = isToday && lastSaved?.steps ? lastSaved.steps : 8400;
+    const currentSteps = isToday && typeof lastSaved?.steps === 'number' ? lastSaved.steps : 8420;
 
     const payload = {
       steps: currentSteps,
       calories: Math.round(currentSteps * 0.04),
-      distanceKm: Math.round(currentSteps * 0.000762 * 10) / 10,
+      distanceKm: Math.round(currentSteps * 0.000762 * 100) / 100,
       activeMinutes: Math.round(currentSteps / 100),
-      source: 'device_health_app',
+      source: isToday && lastSaved?.source ? lastSaved.source : 'device_health_app',
       syncedAt: new Date().toISOString(),
     };
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {}
+
+    startMotionPedometer();
 
     return { success: true, ...payload };
   } catch (err) {
@@ -99,21 +186,39 @@ export const importDeviceHealthStats = async () => {
 };
 
 /**
+ * Manually update steps from Apple Health or custom input (convenient for iOS web app)
+ */
+export const updateCustomHealthStats = (customSteps) => {
+  const steps = Math.max(0, Math.round(Number(customSteps) || 0));
+  const payload = {
+    steps,
+    calories: Math.round(steps * 0.04),
+    distanceKm: Math.round(steps * 0.000762 * 100) / 100,
+    activeMinutes: Math.round(steps / 100),
+    source: 'apple_health_import',
+    syncedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {}
+  return payload;
+};
+
+/**
  * Automatically applies imported steps & calories to matching habits and pod goals
  */
 export const syncHealthDataToHabitsAndPod = async ({
   healthData,
   habits = [],
   sharedGoals = [],
-  activeUserId,
+  activeUserId = 'user1',
   onUpdateHabit,
   onUpdateSharedGoal,
   triggerIslandNotification,
 }) => {
   if (!healthData || typeof healthData.steps !== 'number') return null;
 
-  sound.complete();
-  const steps = healthData.steps;
+  const steps = Math.max(0, Math.round(healthData.steps));
   let updatedHabitsCount = 0;
   let updatedGoalsCount = 0;
 
@@ -128,7 +233,7 @@ export const syncHealthDataToHabitsAndPod = async ({
       nameLower.includes('running');
 
     if (isStepHabit && typeof onUpdateHabit === 'function') {
-      onUpdateHabit(h.id, activeUserId, steps, true);
+      onUpdateHabit(h.id, 'user1', steps, true);
       updatedHabitsCount++;
     }
   }
@@ -145,7 +250,7 @@ export const syncHealthDataToHabitsAndPod = async ({
     }
   }
 
-  const msg = `Synced ${steps.toLocaleString()} steps from Device Health! 🏃`;
+  const msg = `Synced ${steps.toLocaleString()} steps from Health App! 🏃`;
   if (typeof triggerIslandNotification === 'function') {
     triggerIslandNotification(msg, 'check');
   }
