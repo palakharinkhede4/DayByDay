@@ -20,6 +20,7 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
     themeMode,
     setThemeMode,
     osMode,
+    profilePicture,
   } = useHabits();
 
   const [isMobile, setIsMobile] = useState(() => {
@@ -116,7 +117,11 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
                 title="Open Profile Settings"
               >
                 <div className="profile-pill-avatar font-bold">
-                  {userInitial}
+                  {profilePicture ? (
+                    <img src={profilePicture} alt="Avatar" className="profile-pill-img" />
+                  ) : (
+                    userInitial
+                  )}
                 </div>
                 <span className="profile-pill-name font-medium">@{user?.username || 'user'}</span>
               </div>

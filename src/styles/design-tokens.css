@@ -247,6 +247,11 @@
 
 /* Palette Themes */
 [data-theme="fit"] {
+  --primary: #00D284;
+  --primary-glow: rgba(0, 210, 132, 0.45);
+  --accent: #2979FF;
+  --accent-glow: rgba(41, 121, 255, 0.45);
+  --gradient-primary: linear-gradient(135deg, #00D284 0%, #2979FF 100%);
   --user1-color: #00D284;
   --user1-glow: rgba(0, 210, 132, 0.45);
   --user2-color: #2979FF;
@@ -254,6 +259,11 @@
 }
 
 [data-theme="emerald"] {
+  --primary: #10B981;
+  --primary-glow: rgba(16, 185, 129, 0.45);
+  --accent: #F43F5E;
+  --accent-glow: rgba(244, 63, 94, 0.45);
+  --gradient-primary: linear-gradient(135deg, #10B981 0%, #F43F5E 100%);
   --user1-color: #10B981;
   --user1-glow: rgba(16, 185, 129, 0.45);
   --user2-color: #F43F5E;
@@ -261,6 +271,11 @@
 }
 
 [data-theme="ocean"] {
+  --primary: #06B6D4;
+  --primary-glow: rgba(6, 182, 212, 0.45);
+  --accent: #F59E0B;
+  --accent-glow: rgba(245, 158, 11, 0.45);
+  --gradient-primary: linear-gradient(135deg, #06B6D4 0%, #F59E0B 100%);
   --user1-color: #06B6D4;
   --user1-glow: rgba(6, 182, 212, 0.45);
   --user2-color: #F59E0B;
@@ -268,6 +283,11 @@
 }
 
 [data-theme="violet"] {
+  --primary: #8B5CF6;
+  --primary-glow: rgba(139, 92, 246, 0.45);
+  --accent: #00D284;
+  --accent-glow: rgba(0, 210, 132, 0.45);
+  --gradient-primary: linear-gradient(135deg, #8B5CF6 0%, #00D284 100%);
   --user1-color: #8B5CF6;
   --user1-glow: rgba(139, 92, 246, 0.45);
   --user2-color: #00D284;
@@ -275,6 +295,11 @@
 }
 
 [data-theme="sunset"] {
+  --primary: #F97316;
+  --primary-glow: rgba(249, 115, 22, 0.45);
+  --accent: #FF5252;
+  --accent-glow: rgba(255, 82, 82, 0.45);
+  --gradient-primary: linear-gradient(135deg, #F97316 0%, #FF5252 100%);
   --user1-color: #F97316;
   --user1-glow: rgba(249, 115, 22, 0.45);
   --user2-color: #FF5252;

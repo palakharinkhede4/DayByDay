@@ -30,10 +30,11 @@ public class LiveActivityPlugin extends Plugin {
             Context context = getContext();
             CharSequence name = "DayByDay Habit Focus";
             String description = "Ongoing live habit tracking progress and partner sync";
-            int importance = NotificationManager.IMPORTANCE_LOW; // Low importance for silent ongoing live updates
+            int importance = NotificationManager.IMPORTANCE_HIGH; // High importance for ongoing focus and HyperOS dynamic island
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
             channel.setDescription(description);
-            channel.setShowBadge(false);
+            channel.setShowBadge(true);
+            channel.enableVibration(false);
 
             notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (notificationManager != null) {
@@ -62,7 +63,7 @@ public class LiveActivityPlugin extends Plugin {
             }
 
             String habitName = call.getString("habitName", "Daily Habit");
-            String icon = call.getString("icon", "🎯");
+            String icon = call.getString("icon", "");
             double currentValue = call.getDouble("currentValue", 0.0);
             double targetValue = call.getDouble("targetValue", 1.0);
             String unit = call.getString("unit", "units");
@@ -87,7 +88,15 @@ public class LiveActivityPlugin extends Plugin {
             String partnerInfo = (partnerUsername != null && !partnerUsername.isEmpty() && partnerPercent >= 0)
                 ? " | @" + partnerUsername + ": " + partnerPercent + "%"
                 : "";
-            String contentText = (isCompleted ? "Goal completed! " : "Streak: " + streak + "d 🔥") + partnerInfo;
+            String contentText = (isCompleted ? "Goal completed" : streak + " day streak") + partnerInfo;
+
+            // HyperOS Super Island / Focus Notification payload
+            String hyperOsPayload = String.format(
+                "{\"param_v2\":{\"business\":\"sport\",\"updatable\":true,\"param_island\":{\"title\":\"%s\",\"content\":\"%d%% completed\",\"progress\":%d}}}",
+                habitName.replace("\"", "\\\""),
+                progressPercent,
+                progressPercent
+            );
 
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_agenda)
@@ -96,9 +105,15 @@ public class LiveActivityPlugin extends Plugin {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setProgress(100, progressPercent, false)
-                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(pendingIntent);
+
+            // Attach HyperOS & MIUI Super Island focus extras
+            builder.getExtras().putString("miui.focus.param", hyperOsPayload);
+            builder.getExtras().putBoolean("miui.enableFloat", true);
+            builder.getExtras().putBoolean("miui.showFloat", true);
 
             if (notificationManager != null) {
                 notificationManager.notify(NOTIFICATION_ID, builder.build());

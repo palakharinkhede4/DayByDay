@@ -88,32 +88,36 @@ jobs:
             fi
           done
 
+      - name: Generate Release Changelog
+        run: |
+          echo "## DayByDay v1.1.0 - Latest Build" > release_body.md
+          echo "" >> release_body.md
+          echo "### What's New & Recent Commits:" >> release_body.md
+          git log -n 12 --pretty=format:"* %s (%h)" >> release_body.md
+          echo "" >> release_body.md
+          echo "" >> release_body.md
+          echo "### Highlights in this Build:" >> release_body.md
+          echo "* Android runtime notification permissions (API 33+)." >> release_body.md
+          echo "* Safe area margin fixes: zero overlap with Android status bar or iOS notch." >> release_body.md
+          echo "* High-contrast bottom tab bar navigation in both Dark and Light modes." >> release_body.md
+          echo "* Xiaomi / Poco HyperOS Super Island dynamic notification integration." >> release_body.md
+          echo "* Habit reordering controls with up/down shifting." >> release_body.md
+          echo "* Custom habit categories creation and filtering." >> release_body.md
+          echo "* Custom user profile picture upload, crop, and display." >> release_body.md
+          echo "* Version-based update checker with in-app changelog viewer." >> release_body.md
+          echo "* Independent Sign Out vs Reset & Wipe Vault." >> release_body.md
+          echo "" >> release_body.md
+          echo "### Android Installation:" >> release_body.md
+          echo "1. Download \`DayByDay.apk\` attached below." >> release_body.md
+          echo "2. Open and install over your existing app (signing certificate preserved)." >> release_body.md
+          echo "3. Launch DayByDay." >> release_body.md
+
       - name: Publish Single Latest Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "DayByDay (Latest Build)"
-          body: |
-            ## DayByDay - Latest Android Build
-            
-            Continuous build automatically compiled on every commit to `main`.
-            
-            ### Included in this build:
-            * Apple ActivityKit & in-app Dynamic Island HUD.
-            * Android Live Updates API and ongoing focus progress notification.
-            * Real user identity, salted PBKDF2 authentication, and security questions.
-            * Secret code accountability pairing.
-            * Scheduled habit notifications and active day selection.
-            * Consecutive streak tracking and single-row JSONB history.
-            * Responsive desktop web layout and native edge-to-edge mobile app.
-            * Neon PostgreSQL cloud storage optimization.
-            * Light, Dark, and Auto system appearance modes.
-            * Multi-layer persistent storage vault with offline resilience.
-            
-            ### Android Installation:
-            1. Download `DayByDay.apk` attached below.
-            2. Open the APK on your Android device to install.
-            3. Launch DayByDay.
+          name: "DayByDay v1.1.0 (Latest Build)"
+          body_path: release_body.md
           files: DayByDay.apk
           draft: false
           prerelease: false

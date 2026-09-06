@@ -1,11 +1,25 @@
 /**
- * DayByDay In-App Update Checker
+ * DayByDay In-App Update Checker & Changelog Service
  * Queries GitHub Releases API to detect newer builds and provides direct APK download links.
  */
 
+export const CURRENT_APP_VERSION = '1.1.0';
 export const RELEASES_PAGE_URL = 'https://github.com/palakharinkhede4/DayByDay/releases/latest';
 export const DIRECT_APK_URL = 'https://github.com/palakharinkhede4/DayByDay/releases/latest/download/DayByDay.apk';
 const RELEASES_API_URL = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest';
+const ALL_RELEASES_API_URL = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases?per_page=5';
+
+/**
+ * Returns the app version or default.
+ */
+export const getAppVersion = () => {
+  try {
+    if (typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__) {
+      return __APP_VERSION__;
+    }
+  } catch {}
+  return CURRENT_APP_VERSION;
+};
 
 /**
  * Returns the ISO string of the current app build timestamp injected by Vite, or null.
@@ -47,10 +61,26 @@ export const openExternalUrl = (url) => {
 };
 
 /**
+ * Helper to compare semantic versions like '1.1.0' vs '1.2.0'
+ */
+function compareSemVer(v1, v2) {
+  const clean1 = (v1 || '').replace(/^v/, '').split('.').map(Number);
+  const clean2 = (v2 || '').replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(clean1.length, clean2.length); i++) {
+    const num1 = clean1[i] || 0;
+    const num2 = clean2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+/**
  * Checks GitHub for the latest DayByDay release and determines if a newer version is available.
  */
 export const checkForAppUpdate = async () => {
   const currentBuildTime = getAppBuildTime();
+  const currentVersion = getAppVersion();
 
   try {
     const response = await fetch(RELEASES_API_URL, {
@@ -62,10 +92,10 @@ export const checkForAppUpdate = async () => {
     });
 
     if (!response.ok) {
-      // If rate limited or private, return fallback with links
       return {
         success: false,
         status: 'api_unavailable',
+        currentVersion,
         message: 'Could not fetch release status from GitHub.',
         releasePageUrl: RELEASES_PAGE_URL,
         directApkUrl: DIRECT_APK_URL,
@@ -95,19 +125,28 @@ export const checkForAppUpdate = async () => {
     const downloadUrl = apkAsset?.browser_download_url || DIRECT_APK_URL;
     const sizeFormatted = apkAsset?.size ? formatFileSize(apkAsset.size) : '';
 
-    // Determine if update is available
+    // Extract release version tag (if tag like v1.2.0 or 1.2.0)
+    const releaseTag = data.tag_name || '';
+    const isTagSemver = /^v?\d+\.\d+(\.\d+)?/.test(releaseTag);
+
     let updateAvailable = false;
-    if (currentBuildTime && releaseDate) {
+    if (isTagSemver) {
+      // Direct semantic version comparison
+      updateAvailable = compareSemVer(releaseTag, currentVersion) > 0;
+    } else if (currentBuildTime && releaseDate) {
+      // When tags are 'latest', CI build step finishes ~2-5 minutes before GitHub creates release.
+      // Therefore only consider it an actual new update if releaseDate is at least 30 minutes newer
+      // than the app's build timestamp!
       const buildDate = new Date(currentBuildTime);
-      // Give a 60 second grace period for build/release timestamps
-      updateAvailable = releaseDate.getTime() > buildDate.getTime() + 60 * 1000;
+      const diffMs = releaseDate.getTime() - buildDate.getTime();
+      updateAvailable = diffMs > 30 * 60 * 1000;
     } else {
-      // In dev or untracked build, default to showing release info
-      updateAvailable = true;
+      updateAvailable = false;
     }
 
     return {
       success: true,
+      currentVersion,
       updateAvailable,
       releaseName: data.name || 'DayByDay Latest Build',
       tagName: data.tag_name || 'latest',
@@ -116,16 +155,42 @@ export const checkForAppUpdate = async () => {
       releasePageUrl: data.html_url || RELEASES_PAGE_URL,
       directApkUrl: downloadUrl,
       apkSize: sizeFormatted,
-      releaseNotes: data.body || '',
+      changelog: data.body || 'No release notes provided.',
     };
   } catch (err) {
     console.warn('Update check failed:', err);
     return {
       success: false,
       status: 'network_error',
+      currentVersion,
       message: 'Network offline or unable to reach GitHub.',
       releasePageUrl: RELEASES_PAGE_URL,
       directApkUrl: DIRECT_APK_URL,
     };
   }
+};
+
+/**
+ * Fetch changelog text for the app
+ */
+export const fetchChangelog = async () => {
+  try {
+    const res = await fetch(RELEASES_API_URL, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        success: true,
+        version: data.tag_name || 'v1.1.0',
+        publishedAt: data.published_at,
+        notes: data.body || 'Continuous build improvements and performance enhancements.',
+      };
+    }
+  } catch {}
+  return {
+    success: true,
+    version: 'v1.1.0',
+    notes: '• Android runtime notification permissions\n• Xiaomi HyperOS dynamic island live notifications\n• Status bar margin overlap fixes across mobile & iOS\n• Dark and light mode tab navigation icon contrast\n• Habit card reordering controls\n• Custom habit categories creation\n• Separate account sign out and local data wipe\n• Dynamic accent palette color fixes\n• Modal background body scroll lock\n• Custom user profile picture upload',
+  };
 };

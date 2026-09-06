@@ -491,6 +491,43 @@ export default async function handler(req, res) {
       }
       return res.status(200).json({ success: true });
     }
+
+    // ACTION: DELETE ACCOUNT PERMANENTLY (Full cloud purge)
+    if (action === 'delete_account') {
+      const { userId, username } = req.body;
+      if (!userId && !username) {
+        return res.status(400).json({ error: 'User ID or username required' });
+      }
+
+      try {
+        if (sql) {
+          let targetId = userId;
+          if (!targetId && username) {
+            const uRows = await sql`SELECT id FROM daybyday_users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
+            if (uRows.length > 0) targetId = uRows[0].id;
+          }
+
+          if (targetId) {
+            // 1. Delete habits
+            await sql`DELETE FROM daybyday_habits WHERE user_id = ${targetId}`;
+            // 2. Delete pairings
+            await sql`DELETE FROM daybyday_pairings WHERE user1_id = ${targetId} OR user2_id = ${targetId}`;
+            // 3. Delete user account
+            await sql`DELETE FROM daybyday_users WHERE id = ${targetId}`;
+          }
+        }
+
+        // Memory store fallback
+        if (username) {
+          memoryDb.users?.delete(username.toLowerCase());
+        }
+
+        return res.status(200).json({ success: true, message: 'Account and associated habits permanently deleted' });
+      } catch (err) {
+        console.error('Account deletion error:', err);
+        return res.status(500).json({ error: 'Failed to delete account: ' + err.message });
+      }
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

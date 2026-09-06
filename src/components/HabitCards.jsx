@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { HabitDetailModal } from './HabitDetailModal';
 import {
   Footprints,
   Moon,
@@ -15,6 +16,11 @@ import {
   Clock,
   Trash2,
   CheckCircle2,
+  ChevronUp,
+  ChevronDown,
+  FolderPlus,
+  Pin,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 function formatDays(days) {
@@ -58,11 +64,29 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     activeUserId,
     updateHabit,
     removeGoal,
+    reorderHabit,
+    customCategories = ['Daily', 'Health', 'Fitness', 'Mind', 'Work'],
+    addCustomCategory,
+    pinnedHabitId,
   } = useHabits();
 
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [showAddCatInput, setShowAddCatInput] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [selectedHabitForEdit, setSelectedHabitForEdit] = useState(null);
 
-  const categories = ['All', 'Daily', 'Health', 'Fitness', 'Mind', 'Work'];
+  const categories = useMemo(() => {
+    return ['All', ...customCategories];
+  }, [customCategories]);
+
+  const handleCreateCategory = (e) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    addCustomCategory(newCatName.trim());
+    setSelectedCategory(newCatName.trim());
+    setNewCatName('');
+    setShowAddCatInput(false);
+  };
 
   const filteredHabits = useMemo(() => {
     return habits.filter((h) => {
@@ -105,6 +129,37 @@ export const HabitCards = ({ onOpenAddGoal }) => {
               {cat}
             </button>
           ))}
+
+          {showAddCatInput ? (
+            <form onSubmit={handleCreateCategory} className="inline-add-cat-form">
+              <input
+                type="text"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                placeholder="Category name"
+                className="inline-cat-input"
+                autoFocus
+              />
+              <button type="submit" className="inline-cat-submit-btn">Add</button>
+              <button
+                type="button"
+                className="inline-cat-cancel-btn"
+                onClick={() => setShowAddCatInput(false)}
+              >
+                ✕
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="category-chip add-category-chip font-medium"
+              onClick={() => setShowAddCatInput(true)}
+              title="Add custom category"
+            >
+              <FolderPlus size={13} />
+              <span>+ Category</span>
+            </button>
+          )}
         </div>
         <div className="today-progress-chip">
           <span className="progress-dot"></span>
@@ -114,13 +169,19 @@ export const HabitCards = ({ onOpenAddGoal }) => {
 
       {/* Habit Cards Grid */}
       <div className="habits-list-grid">
-        {filteredHabits.map((habit) => (
+        {filteredHabits.map((habit, index) => (
           <ModernHabitCard
             key={habit.id}
             habit={habit}
+            index={index}
+            totalCount={filteredHabits.length}
             activeUserId={activeUserId}
             onUpdate={updateHabit}
             onRemove={removeGoal}
+            onMoveUp={() => reorderHabit(habit.id, 'up')}
+            onMoveDown={() => reorderHabit(habit.id, 'down')}
+            isPinned={pinnedHabitId === habit.id}
+            onOpenEdit={() => setSelectedHabitForEdit(habit)}
           />
         ))}
 
@@ -133,19 +194,39 @@ export const HabitCards = ({ onOpenAddGoal }) => {
           </div>
         )}
       </div>
+
+      {/* Habit Detail & Options Modal */}
+      {selectedHabitForEdit && (
+        <HabitDetailModal
+          habit={selectedHabitForEdit}
+          onClose={() => setSelectedHabitForEdit(null)}
+        />
+      )}
     </div>
   );
 };
 
-const ModernHabitCard = ({ habit, activeUserId, onUpdate, onRemove }) => {
+const ModernHabitCard = ({
+  habit,
+  index,
+  totalCount,
+  activeUserId,
+  onUpdate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  isPinned,
+  onOpenEdit,
+}) => {
   const isBool = typeof habit.user1 === 'boolean' || habit.unit === 'check';
   const val = Number(habit.user1) || 0;
   const target = Number(habit.target) || 1;
   const isDone = isBool ? Boolean(habit.user1) : val >= target;
   const percent = isBool ? (isDone ? 100 : 0) : Math.min(100, Math.round((val / target) * 100));
 
-  const standardIds = ['sleep', 'steps', 'meditation', 'water', 'reading', 'workouts', 'vitamins'];
-  const isCustom = !standardIds.includes(habit.id);
+  // Calculate percentage delta
+  const pct = Number(habit.stepPercent) || 10;
+  const delta = isBool ? 1 : Math.max(1, Math.round((target * pct) / 100));
 
   const handleToggleBool = () => {
     onUpdate(habit.id, activeUserId, !isDone, true);
@@ -156,7 +237,8 @@ const ModernHabitCard = ({ habit, activeUserId, onUpdate, onRemove }) => {
     onUpdate(habit.id, activeUserId, next, true);
   };
 
-  const handleCompleteFull = () => {
+  const handleCompleteFull = (e) => {
+    e?.stopPropagation();
     if (isBool) {
       handleToggleBool();
     } else {
@@ -168,13 +250,24 @@ const ModernHabitCard = ({ habit, activeUserId, onUpdate, onRemove }) => {
   return (
     <div className={`modern-habit-card ${isDone ? 'completed-card' : ''}`}>
       <div className="habit-card-top">
-        <div className="habit-card-info">
+        {/* Tappable Habit Info Area */}
+        <div
+          className="habit-card-info clickable-card-info"
+          onClick={onOpenEdit}
+          title="Tap to edit habit, delta %, reminders, pin, or delete"
+        >
           <div className="habit-icon-box">
             {getHabitIcon(habit.id, habit.category)}
           </div>
           <div className="habit-details">
             <div className="habit-name-row">
               <span className="habit-title font-bold">{habit.name}</span>
+              {isPinned && (
+                <span className="habit-pinned-pill font-bold" title="Pinned to notification bar">
+                  <Pin size={10} />
+                  <span>Pinned</span>
+                </span>
+              )}
               {habit.streak > 0 && (
                 <span className="habit-streak-pill" title={`${habit.streak} day streak`}>
                   <Flame size={12} className="text-amber-500" />
@@ -198,18 +291,37 @@ const ModernHabitCard = ({ habit, activeUserId, onUpdate, onRemove }) => {
           </div>
         </div>
 
-        {/* Quick Complete / Delete */}
+        {/* Action controls */}
         <div className="habit-actions-right">
-          {isCustom && (
+          <button
+            className="habit-options-btn"
+            onClick={onOpenEdit}
+            title="Edit habit settings"
+            aria-label="Edit habit settings"
+          >
+            <SlidersHorizontal size={14} />
+          </button>
+
+          <div className="habit-reorder-stack">
             <button
-              className="habit-delete-btn"
-              onClick={() => onRemove(habit.id)}
-              title="Delete habit"
-              aria-label="Delete habit"
+              className="habit-reorder-btn"
+              onClick={onMoveUp}
+              disabled={index === 0}
+              title="Move up"
+              aria-label="Move habit up"
             >
-              <Trash2 size={15} />
+              <ChevronUp size={13} strokeWidth={2.4} />
             </button>
-          )}
+            <button
+              className="habit-reorder-btn"
+              onClick={onMoveDown}
+              disabled={index === totalCount - 1}
+              title="Move down"
+              aria-label="Move habit down"
+            >
+              <ChevronDown size={13} strokeWidth={2.4} />
+            </button>
+          </div>
 
           <button
             className={`habit-check-btn ${isDone ? 'checked' : ''}`}
@@ -236,16 +348,18 @@ const ModernHabitCard = ({ habit, activeUserId, onUpdate, onRemove }) => {
             <div className="stepper-controls">
               <button
                 className="step-btn minus"
-                onClick={() => handleStep(habit.unit === 'steps' ? -1000 : -1)}
+                onClick={() => handleStep(-delta)}
                 disabled={val <= 0}
-                aria-label="Decrease habit value"
+                aria-label={`Decrease by ${delta} ${habit.unit || ''}`}
+                title={`-${delta} ${habit.unit || ''} (${pct}%)`}
               >
                 <Minus size={14} />
               </button>
               <button
                 className="step-btn plus"
-                onClick={() => handleStep(habit.unit === 'steps' ? 1000 : 1)}
-                aria-label="Increase habit value"
+                onClick={() => handleStep(delta)}
+                aria-label={`Increase by ${delta} ${habit.unit || ''}`}
+                title={`+${delta} ${habit.unit || ''} (${pct}%)`}
               >
                 <Plus size={14} />
               </button>

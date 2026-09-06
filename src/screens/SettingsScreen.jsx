@@ -13,7 +13,6 @@ import {
   Zap,
   Target,
   Sparkles,
-  ListChecks,
   Download,
   Upload,
   RefreshCw,
@@ -24,10 +23,13 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  Camera,
+  FileText,
 } from 'lucide-react';
 import {
   checkForAppUpdate,
   openExternalUrl,
+  fetchChangelog,
   RELEASES_PAGE_URL,
   DIRECT_APK_URL,
 } from '../utils/updateChecker';
@@ -51,6 +53,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     exportData,
     importData,
     resetAllData,
+    deleteAccountPermanently,
     logoutUser,
     activeFocusHabit,
     activeFocusHabitId,
@@ -58,17 +61,59 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     liveActivityEnabled,
     setLiveActivityEnabled,
     triggerIslandNotification,
+    profilePicture,
+    setProfilePicture,
   } = useHabits();
 
   const fileInputRef = useRef(null);
+  const avatarInputRef = useRef(null);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [editingGoals, setEditingGoals] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [importStatus, setImportStatus] = useState(null);
+  const [changelogModalOpen, setChangelogModalOpen] = useState(false);
+  const [changelogData, setChangelogData] = useState(null);
+  const [loadingChangelog, setLoadingChangelog] = useState(false);
+
+  const handleViewChangelog = async () => {
+    setLoadingChangelog(true);
+    setChangelogModalOpen(true);
+    try {
+      const data = await fetchChangelog();
+      setChangelogData(data);
+    } finally {
+      setLoadingChangelog(false);
+    }
+  };
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 180;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setProfilePicture(resizedDataUrl);
+        triggerIslandNotification('Profile picture updated', 'check');
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
@@ -140,9 +185,28 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
       {/* USER PROFILE CARD */}
       <div className="profile-card">
-        <div className="profile-avatar-circle font-extrabold">
-          <span>{userInitial}</span>
+        <div
+          className="profile-avatar-circle clickable font-extrabold"
+          onClick={() => avatarInputRef.current?.click()}
+          title="Change profile picture"
+        >
+          {profilePicture ? (
+            <img src={profilePicture} alt="Avatar" className="profile-avatar-image" />
+          ) : (
+            <span>{userInitial}</span>
+          )}
+          <div className="avatar-camera-badge">
+            <Camera size={12} />
+          </div>
         </div>
+        <input
+          type="file"
+          ref={avatarInputRef}
+          onChange={handleAvatarUpload}
+          accept="image/*"
+          style={{ display: 'none' }}
+        />
+
         <div className="profile-info">
           <h2 className="profile-name font-bold">
             {user ? (user.displayName || `@${user.username}`) : 'Anonymous User'}
@@ -151,17 +215,27 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             {user ? `@${user.username}` : 'No username set'}
           </span>
         </div>
-        {user && (
-          <div className="profile-actions-row">
+
+        <div className="profile-actions-row">
+          {user && (
             <button
               className="signout-profile-btn font-medium"
               onClick={logoutUser}
-              title="Sign Out / Switch Account"
+              title="Sign out of account (habits stay preserved)"
             >
               Sign Out
             </button>
-          </div>
-        )}
+          )}
+          {profilePicture && (
+            <button
+              className="remove-avatar-btn font-medium"
+              onClick={() => setProfilePicture(null)}
+              title="Remove profile photo"
+            >
+              Remove Photo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* PROMINENT SECRET CODE CARD */}
@@ -372,62 +446,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               </select>
             </div>
           )}
-
-          {/* Test Island Pulse */}
-          <div
-            className="settings-row-item clickable"
-            onClick={() => triggerIslandNotification('Dynamic HUD Test: Active consistency streak', 'sparkles')}
-          >
-            <div className="row-left">
-              <Sparkles size={18} className="text-emerald-400" />
-              <div>
-                <span className="row-title">Preview Notification Animation</span>
-                <span className="row-hint">Tap to preview dynamic celebration banner</span>
-              </div>
-            </div>
-            <ChevronRight size={18} />
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION: GOALS */}
-      <div className="settings-group">
-        <span className="group-label">HABIT CONFIGURATION</span>
-        <div className="settings-group-content">
-          <div
-            className="settings-row-item clickable"
-            onClick={() => setEditingGoals((prev) => !prev)}
-          >
-            <div className="row-left">
-              <ListChecks size={18} className="text-cyan-400" />
-              <span className="row-title">Manage Tracked Habits</span>
-            </div>
-            {editingGoals ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-          </div>
-
-          {editingGoals && (
-            <div className="goals-editor-list">
-              {habits.map((h) => (
-                <div key={h.id} className="goal-editor-row">
-                  <span className="goal-row-name">
-                    {h.name} ({h.target} {h.unit})
-                  </span>
-                  <button
-                    className="goal-delete-btn"
-                    onClick={() => removeGoal(h.id)}
-                    title="Remove goal"
-                  >
-                    <Trash2 size={14} />
-                    <span>Remove</span>
-                  </button>
-                </div>
-              ))}
-              <button className="add-goal-mini-btn font-bold" onClick={onOpenAddGoal}>
-                <Plus size={14} />
-                <span>Add New Habit</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -481,8 +499,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             <div className="row-left">
               <Trash2 size={18} className="danger-text" />
               <div>
-                <span className="row-title danger-text">Wipe Data & Sign Out</span>
-                <span className="row-hint">Permanently delete stored habits and local vault credentials</span>
+                <span className="row-title danger-text">Wipe Data & Delete Account Permanently</span>
+                <span className="row-hint">Permanently deletes cloud account, paired pods, and local habits</span>
               </div>
             </div>
             <ChevronRight size={18} className="danger-text" />
@@ -510,6 +528,17 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             </button>
           </div>
 
+          <div className="settings-row-item clickable" onClick={handleViewChangelog}>
+            <div className="row-left">
+              <FileText size={18} className="text-purple-400" />
+              <div>
+                <span className="row-title">View Changelog</span>
+                <span className="row-hint">What's new in recent builds and features</span>
+              </div>
+            </div>
+            <ChevronRight size={18} />
+          </div>
+
           <div
             className="settings-row-item clickable"
             onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
@@ -528,9 +557,9 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
       {showResetConfirm && (
         <div className="inline-confirm-card">
-          <p className="confirm-title">Permanently Erase All Data?</p>
+          <p className="confirm-title">Permanently Delete Account & Wipe Data?</p>
           <p className="confirm-desc">
-            This will wipe your local habits, secret codes, and sign you out.
+            This will permanently delete your account, paired pod relationships, habits, and all history from both the cloud database and your local device. This action cannot be undone.
           </p>
           <div className="confirm-btn-row">
             <button className="confirm-btn cancel" onClick={() => setShowResetConfirm(false)}>
@@ -538,13 +567,65 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             </button>
             <button
               className="confirm-btn danger"
-              onClick={() => {
-                resetAllData();
+              onClick={async () => {
                 setShowResetConfirm(false);
+                await deleteAccountPermanently();
               }}
             >
-              Confirm Wipe
+              Confirm Delete & Wipe
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* CHANGELOG MODAL */}
+      {changelogModalOpen && (
+        <div className="update-modal-backdrop" onClick={() => setChangelogModalOpen(false)}>
+          <div className="update-modal-card changelog-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="update-modal-header">
+              <div className="update-icon-circle">
+                <FileText size={24} className="text-purple-400" />
+              </div>
+              <h3 className="update-modal-title font-extrabold">Release Changelog</h3>
+              <p className="update-modal-subtitle">
+                Latest updates, improvements, and fixes in DayByDay
+              </p>
+            </div>
+
+            <div className="changelog-content-box font-mono">
+              {loadingChangelog ? (
+                <div className="changelog-loading">
+                  <RefreshCw size={18} className="animate-spin text-purple-400" />
+                  <span>Loading recent release history...</span>
+                </div>
+              ) : (
+                <div className="changelog-text">
+                  <div className="changelog-version-badge font-bold">
+                    Version {changelogData?.version || 'v1.1.0'}
+                  </div>
+                  <pre className="changelog-pre">{changelogData?.notes}</pre>
+                </div>
+              )}
+            </div>
+
+            <div className="update-modal-actions">
+              <button
+                className="update-action-btn secondary font-medium"
+                onClick={() => {
+                  openExternalUrl(RELEASES_PAGE_URL);
+                  setChangelogModalOpen(false);
+                }}
+              >
+                <ExternalLink size={16} />
+                <span>Open Full GitHub Releases</span>
+              </button>
+              <button
+                className="update-action-btn close font-medium"
+                onClick={() => setChangelogModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -575,7 +656,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                   ? 'Connecting to GitHub to find the latest DayByDay build...'
                   : updateInfo?.updateAvailable
                   ? 'A newer build of DayByDay is available for download.'
-                  : 'You have the latest version installed.'}
+                  : `You're on the latest build (${updateInfo?.currentVersion || 'v1.1.0'}).`}
               </p>
             </div>
 
@@ -643,6 +724,31 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           </div>
         </div>
       )}
+      {/* DEVELOPER ATTRIBUTION & ABOUT CARD */}
+      <div className="developer-attribution-card">
+        <div className="dev-badge-flame">
+          <Flame size={22} className="text-amber-400" />
+        </div>
+        <div className="dev-info-col">
+          <div className="dev-title-row">
+            <span className="dev-app-title font-extrabold">DayByDay</span>
+            <span className="dev-version-badge font-mono font-bold">v1.1.0</span>
+          </div>
+          <span className="dev-author-tag font-bold">
+            Developed by Palak Harinkhede
+          </span>
+          <p className="dev-bio-text">
+            Crafted for relentless daily momentum, collaborative accountability pods, and personal consistency.
+          </p>
+          <div className="dev-meta-row font-mono">
+            <span>Client-Encrypted</span>
+            <span>•</span>
+            <span>Zero Emojis Policy</span>
+            <span>•</span>
+            <span>All Rights Reserved</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

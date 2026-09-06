@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
 import {
   Sparkles,
@@ -46,15 +46,34 @@ function getPresetIcon(icon) {
 }
 
 export const AddGoalModal = ({ isOpen, onClose }) => {
-  const { addGoal, habits, requestNotificationPermission } = useHabits();
+  const {
+    addGoal,
+    habits,
+    requestNotificationPermission,
+    customCategories = ['Daily', 'Health', 'Fitness', 'Mind', 'Work'],
+    addCustomCategory,
+  } = useHabits();
   const [tab, setTab] = useState('preset'); // 'preset' or 'custom'
 
   // Custom habit fields
   const [customName, setCustomName] = useState('');
-  const [customCategory, setCustomCategory] = useState('Health');
+  const [customCategory, setCustomCategory] = useState('Daily');
+  const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [customTarget, setCustomTarget] = useState(1);
   const [customUnit, setCustomUnit] = useState('times');
   const [customIcon, setCustomIcon] = useState('target');
+
+  // Lock background scrolling when modal is active
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isOpen]);
 
   // Reminder settings
   const [enableReminder, setEnableReminder] = useState(false);
@@ -104,10 +123,16 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
       await requestNotificationPermission();
     }
 
+    let finalCategory = customCategory;
+    if (isAddingNewCategory && newCategoryName.trim()) {
+      finalCategory = newCategoryName.trim();
+      addCustomCategory(finalCategory);
+    }
+
     addGoal({
       id: `custom_${Date.now().toString(36)}`,
       name: customName.trim(),
-      category: customCategory,
+      category: finalCategory,
       description: 'Custom habit',
       target: Number(customTarget) || 1,
       unit: customUnit.trim() || 'times',
@@ -207,17 +232,36 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
               <div className="form-group half">
                 <label className="form-label">Category</label>
                 <select
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
+                  value={isAddingNewCategory ? '__new__' : customCategory}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') {
+                      setIsAddingNewCategory(true);
+                    } else {
+                      setIsAddingNewCategory(false);
+                      setCustomCategory(e.target.value);
+                    }
+                  }}
                   className="form-input"
                 >
-                  <option value="Health">Health</option>
-                  <option value="Mind">Mind</option>
-                  <option value="Fitness">Fitness</option>
-                  <option value="Work">Work</option>
-                  <option value="Study">Study</option>
-                  <option value="Lifestyle">Lifestyle</option>
+                  {customCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="__new__">+ New Category...</option>
                 </select>
+                {isAddingNewCategory && (
+                  <input
+                    type="text"
+                    placeholder="Enter category name"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    className="form-input"
+                    style={{ marginTop: '6px' }}
+                    autoFocus
+                    required
+                  />
+                )}
               </div>
 
               <div className="form-group half">

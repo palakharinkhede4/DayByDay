@@ -220,6 +220,49 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
+  // Profile Picture (base64 data URL or null)
+  const [profilePicture, setProfilePictureState] = useState(() => {
+    try {
+      return localStorage.getItem('daybyday_profile_pic') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setProfilePicture = (picUrl) => {
+    setProfilePictureState(picUrl);
+    try {
+      if (picUrl) {
+        localStorage.setItem('daybyday_profile_pic', picUrl);
+      } else {
+        localStorage.removeItem('daybyday_profile_pic');
+      }
+    } catch {}
+  };
+
+  // Custom Categories list
+  const [customCategories, setCustomCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('daybyday_custom_categories');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return ['Daily', 'Health', 'Fitness', 'Mind', 'Work'];
+  });
+
+  const addCustomCategory = (newCat) => {
+    if (!newCat || !newCat.trim()) return;
+    const clean = newCat.trim();
+    setCustomCategories((prev) => {
+      const exists = prev.some((c) => c.toLowerCase() === clean.toLowerCase());
+      if (exists) return prev;
+      const next = [...prev, clean];
+      try {
+        localStorage.setItem('daybyday_custom_categories', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   // Active User role in current view ('user1' = You, 'user2' = Partner)
   const [activeUserId, setActiveUserId] = useState('user1');
 
@@ -299,6 +342,32 @@ export const HabitProvider = ({ children }) => {
   // Dynamic Island status
   const [islandMessage, setIslandMessage] = useState(null);
 
+  // Pinned Habit for Live Notification / Dynamic Island
+  const [pinnedHabitId, setPinnedHabitIdState] = useState(() => {
+    return localStorage.getItem('daybyday_pinned_habit_id') || null;
+  });
+
+  const pinHabitForLiveTracking = (id) => {
+    sound.tap();
+    setPinnedHabitIdState(id);
+    if (id) {
+      localStorage.setItem('daybyday_pinned_habit_id', id);
+      triggerIslandNotification('Habit pinned to notification bar', 'check');
+    } else {
+      localStorage.removeItem('daybyday_pinned_habit_id');
+      stopLiveActivity();
+      triggerIslandNotification('Habit unpinned', 'x');
+    }
+  };
+
+  const unpinHabitForLiveTracking = () => {
+    sound.tap();
+    setPinnedHabitIdState(null);
+    localStorage.removeItem('daybyday_pinned_habit_id');
+    stopLiveActivity();
+    triggerIslandNotification('Habit unpinned from notification', 'x');
+  };
+
   // Live Activity & Focus Habit State
   const [activeFocusHabitId, setActiveFocusHabitIdState] = useState(() => {
     return localStorage.getItem('daybyday_focus_habit_id') || '';
@@ -326,20 +395,11 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Memoized Active Focus Habit (Uses selected ID or picks the next unfinished habit)
+  // Memoized Active Focus Habit (ONLY returned if explicitly pinned by user!)
   const activeFocusHabit = useMemo(() => {
-    if (!habits || habits.length === 0) return null;
-    if (activeFocusHabitId) {
-      const selected = habits.find((h) => h.id === activeFocusHabitId);
-      if (selected) return selected;
-    }
-    // Default to the first incomplete habit for the day
-    const nextIncomplete = habits.find((h) => {
-      const val = h.user1;
-      return typeof val === 'boolean' ? !val : (val || 0) < h.target;
-    });
-    return nextIncomplete || habits[0];
-  }, [habits, activeFocusHabitId]);
+    if (!habits || habits.length === 0 || !pinnedHabitId) return null;
+    return habits.find((h) => h.id === pinnedHabitId) || null;
+  }, [habits, pinnedHabitId]);
 
   // Partner completion percentage memo
   const partnerPercent = useMemo(() => {
@@ -713,31 +773,34 @@ export const HabitProvider = ({ children }) => {
     return { ok: true };
   };
 
-  // Logout / Switch Account
+  // Logout / Switch Account (Keeps habits safely preserved on device!)
   const logoutUser = async () => {
     sound.tap();
     setUser(null);
     setPartner(null);
     setTrackedPartner(null);
     setGroupPod(null);
-    setHabits(INITIAL_HABITS);
-    setBeyondGoals(INITIAL_BEYOND);
-    setPod({
-      isPaired: false,
-      code: 'DAY-1000',
-      user1: { name: 'You', email: '', initial: 'Y' },
-      user2: null,
-      daysTogether: 0,
-      currentStreak: 0,
-      bestStreak: 0,
-      podHealth: 100,
-      healthStatus: 'ACTIVE',
-      yesterdayPercent: 0
-    });
     localStorage.removeItem('daybyday_tracked_partner');
     localStorage.removeItem('daybyday_group_pod');
     await clearVaultSession();
     triggerIslandNotification('Signed out', 'user');
+  };
+
+  // Reorder habit up or down
+  const reorderHabit = (habitId, direction) => {
+    sound.tap();
+    setHabits((prev) => {
+      const idx = prev.findIndex((h) => h.id === habitId);
+      if (idx === -1) return prev;
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[idx];
+      copy[idx] = copy[targetIdx];
+      copy[targetIdx] = temp;
+      localStorage.setItem('daybyday_habits', JSON.stringify(copy));
+      return copy;
+    });
   };
 
   // 1-on-1 Track Partner by Secret Code
@@ -1141,11 +1204,36 @@ export const HabitProvider = ({ children }) => {
   // Remove Goal
   const removeGoal = (goalId) => {
     sound.tap();
+    if (pinnedHabitId === goalId) {
+      unpinHabitForLiveTracking();
+    }
     setHabits((prev) => prev.filter((h) => h.id !== goalId));
     if (user?.id) {
       deleteHabitRemote(user.id, goalId).catch(() => {});
     }
     triggerIslandNotification('Habit removed', 'trash');
+  };
+
+  // Edit Goal (Name, Target, Step Delta %, Reminders)
+  const editHabit = (goalId, updates) => {
+    sound.tap();
+    setHabits((prev) => {
+      const next = prev.map((h) => {
+        if (h.id === goalId) {
+          const updated = { ...h, ...updates };
+          if (updates.target !== undefined && typeof updated.user1 === 'number') {
+            updated.completed = updated.user1 >= updated.target;
+          }
+          return updated;
+        }
+        return h;
+      });
+      if (user?.id) {
+        syncUserHabitsRemote(user.id, next).catch(() => {});
+      }
+      return next;
+    });
+    triggerIslandNotification('Habit updated', 'check');
   };
 
   // Request Notifications
@@ -1198,12 +1286,56 @@ export const HabitProvider = ({ children }) => {
   // Wipe data and reset to fresh state
   const resetAllData = async () => {
     sound.tap();
+    unpinHabitForLiveTracking();
     wipeLocalData();
     setUser(null);
     setPartner(null);
     setHabits(INITIAL_HABITS);
     setBeyondGoals(INITIAL_BEYOND);
     await clearVaultSession();
+  };
+
+  // Wipe data AND delete account permanently from Neon DB & Cloud
+  const deleteAccountPermanently = async () => {
+    sound.tap();
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      if (user?.id || user?.username) {
+        await fetch(`${API_URL}/api/user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete_account',
+            userId: user?.id,
+            username: user?.username,
+          }),
+        }).catch((e) => console.warn('Remote account deletion fallback:', e));
+      }
+    } catch (e) {
+      console.error('Delete account error:', e);
+    }
+
+    unpinHabitForLiveTracking();
+    wipeLocalData();
+    try {
+      localStorage.removeItem('daybyday_pinned_habit_id');
+      localStorage.removeItem('daybyday_profile_pic');
+      localStorage.removeItem('daybyday_custom_categories');
+      localStorage.removeItem('daybyday_active_focus_habit');
+      localStorage.removeItem('daybyday_focus_habit_id');
+      localStorage.removeItem('daybyday_user');
+      localStorage.removeItem('daybyday_habits');
+      localStorage.removeItem('daybyday_pod');
+    } catch {}
+
+    setUser(null);
+    setPartner(null);
+    setHabits(INITIAL_HABITS);
+    setBeyondGoals(INITIAL_BEYOND);
+    setProfilePicture(null);
+    setCustomCategories(['Daily', 'Health', 'Fitness', 'Mind', 'Work']);
+    await clearVaultSession();
+    triggerIslandNotification('Account and all data wiped permanently', 'trash');
   };
 
   // Celebrate with confetti
@@ -1276,9 +1408,12 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Live Activity & Dynamic Island auto-synchronization
+  // Live Activity & Ongoing Notification ONLY when a habit is explicitly pinned
   useEffect(() => {
-    if (!liveActivityEnabled || !activeFocusHabit) return;
+    if (!liveActivityEnabled || !pinnedHabitId || !activeFocusHabit) {
+      stopLiveActivity();
+      return;
+    }
 
     const val = activeFocusHabit.user1;
     const isDone = typeof val === 'boolean' ? val : (val || 0) >= activeFocusHabit.target;
@@ -1294,7 +1429,7 @@ export const HabitProvider = ({ children }) => {
       podSyncPercent: currentPercent,
       isCompleted: isDone,
     });
-  }, [activeFocusHabit, liveActivityEnabled, partner, partnerPercent, currentPercent]);
+  }, [activeFocusHabit, pinnedHabitId, liveActivityEnabled, partner, partnerPercent, currentPercent]);
 
   return (
     <HabitContext.Provider
@@ -1338,14 +1473,24 @@ export const HabitProvider = ({ children }) => {
         isLiveActivitySupported,
         requestLiveActivityPermission,
         updateHabit,
+        editHabit,
         updateBeyondGoal,
         addGoal,
         removeGoal,
+        pinnedHabitId,
+        pinHabitForLiveTracking,
+        unpinHabitForLiveTracking,
+        deleteAccountPermanently,
         triggerCelebration,
         requestNotificationPermission,
         exportData,
         importData,
         resetAllData,
+        reorderHabit,
+        customCategories,
+        addCustomCategory,
+        profilePicture,
+        setProfilePicture,
         trackedPartner,
         trackPartnerByCode,
         untrackPartner,
