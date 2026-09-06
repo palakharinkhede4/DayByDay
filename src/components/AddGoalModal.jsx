@@ -25,12 +25,12 @@ const DAYS_OF_WEEK = [
 ];
 
 const PRESETS = [
-  { id: 'journaling', name: 'Journaling', category: 'Mind', desc: 'Daily reflections & thoughts', target: 1, unit: 'entry', icon: 'mind', time: '21:30' },
-  { id: 'running', name: 'Morning Run', category: 'Fitness', desc: 'Cardio distance', target: 3, unit: 'km', icon: 'fitness', time: '07:00' },
-  { id: 'coding', name: 'Code Practice', category: 'Work', desc: 'Deep work & building', target: 60, unit: 'min', icon: 'work', time: '10:00' },
-  { id: 'reading', name: 'Reading', category: 'Mind', desc: 'Books or articles', target: 15, unit: 'pages', icon: 'reading', time: '20:00' },
-  { id: 'stretching', name: 'Stretching & Mobility', category: 'Health', desc: 'Post-workout recovery', target: 10, unit: 'min', icon: 'health', time: '08:00' },
-  { id: 'screen_limit', name: 'Screen Limit', category: 'Lifestyle', desc: 'Digital detox check', target: 2, unit: 'hours', icon: 'lifestyle', time: '22:00' },
+  { id: 'journaling', name: 'Journaling', category: 'Mind', desc: 'Daily reflections & thoughts', target: 1, delta: 1, unit: 'entry', icon: 'mind', time: '21:30' },
+  { id: 'running', name: 'Morning Run', category: 'Fitness', desc: 'Cardio distance', target: 3, delta: 1, unit: 'km', icon: 'fitness', time: '07:00' },
+  { id: 'coding', name: 'Code Practice', category: 'Work', desc: 'Deep work & building', target: 60, delta: 15, unit: 'min', icon: 'work', time: '10:00' },
+  { id: 'reading', name: 'Reading', category: 'Mind', desc: 'Books or articles', target: 15, delta: 5, unit: 'pages', icon: 'reading', time: '20:00' },
+  { id: 'stretching', name: 'Stretching & Mobility', category: 'Health', desc: 'Post-workout recovery', target: 10, delta: 5, unit: 'min', icon: 'health', time: '08:00' },
+  { id: 'screen_limit', name: 'Screen Limit', category: 'Lifestyle', desc: 'Digital detox check', target: 2, delta: 1, unit: 'hours', icon: 'lifestyle', time: '22:00' },
 ];
 
 function getPresetIcon(icon) {
@@ -61,6 +61,7 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
   const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [customTarget, setCustomTarget] = useState(1);
+  const [customDelta, setCustomDelta] = useState(1);
   const [customUnit, setCustomUnit] = useState('times');
   const [customIcon, setCustomIcon] = useState('target');
 
@@ -105,6 +106,7 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
       category: preset.category || 'Daily',
       description: preset.desc,
       target: preset.target,
+      delta: preset.delta || 1,
       unit: preset.unit,
       icon: preset.icon,
       user1: 0,
@@ -135,6 +137,7 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
       category: finalCategory,
       description: 'Custom habit',
       target: Number(customTarget) || 1,
+      delta: Math.max(1, Number(customDelta) || 1),
       unit: customUnit.trim() || 'times',
       icon: customIcon,
       user1: 0,
@@ -290,6 +293,21 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="form-group half">
+                <label className="form-label">Step Increment (+/-)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50000"
+                  placeholder="e.g. 1, 5, 250, 1000"
+                  value={customDelta}
+                  onChange={(e) => setCustomDelta(e.target.value)}
+                  className="form-input"
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group full">
                 <label className="form-label">Icon Style</label>
                 <select
                   value={customIcon}

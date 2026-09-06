@@ -136,6 +136,40 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     }).length;
   }, [habits]);
 
+  const [longPressCat, setLongPressCat] = useState(null);
+  const catLongPressTimerRef = useRef(null);
+
+  // Auto-scroll when dragging near top or bottom edges of viewport
+  useEffect(() => {
+    if (!draggedHabitId) return;
+
+    const handleWindowDragOver = (e) => {
+      const scrollThreshold = 120;
+      const scrollSpeed = 18;
+      if (e.clientY < scrollThreshold) {
+        window.scrollBy({ top: -scrollSpeed, behavior: 'auto' });
+      } else if (e.clientY > window.innerHeight - scrollThreshold) {
+        window.scrollBy({ top: scrollSpeed, behavior: 'auto' });
+      }
+    };
+
+    window.addEventListener('dragover', handleWindowDragOver);
+    return () => window.removeEventListener('dragover', handleWindowDragOver);
+  }, [draggedHabitId]);
+
+  const handleCatTouchStart = (cat) => {
+    catLongPressTimerRef.current = setTimeout(() => {
+      setLongPressCat(cat);
+      sound.vibrate(35);
+    }, 450);
+  };
+
+  const handleCatTouchEnd = () => {
+    if (catLongPressTimerRef.current) {
+      clearTimeout(catLongPressTimerRef.current);
+    }
+  };
+
   // Drag-and-drop reorder handlers
   const handleDragStart = (habitId) => {
     setDraggedHabitId(habitId);
@@ -174,23 +208,40 @@ export const HabitCards = ({ onOpenAddGoal }) => {
         <div className="category-scroll-chips">
           {categories.map((cat) => {
             const isDeletable = cat !== 'All' && cat !== 'Daily';
+            const showDelete = isDeletable && longPressCat === cat;
+
             return (
               <div
                 key={cat}
                 className={`category-chip-wrapper ${selectedCategory === cat ? 'active' : ''}`}
+                onTouchStart={() => handleCatTouchStart(cat)}
+                onTouchEnd={handleCatTouchEnd}
+                onTouchCancel={handleCatTouchEnd}
+                onContextMenu={(e) => {
+                  if (isDeletable) {
+                    e.preventDefault();
+                    setLongPressCat(cat);
+                  }
+                }}
               >
                 <button
                   type="button"
                   className={`category-chip ${selectedCategory === cat ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    setLongPressCat(null);
+                  }}
                 >
                   <span>{cat}</span>
                 </button>
-                {isDeletable && (
+                {showDelete && (
                   <button
                     type="button"
                     className="cat-delete-btn"
-                    onClick={(e) => handleDeleteCategory(e, cat)}
+                    onClick={(e) => {
+                      handleDeleteCategory(e, cat);
+                      setLongPressCat(null);
+                    }}
                     title={`Delete ${cat} category`}
                   >
                     <X size={11} />
@@ -320,8 +371,8 @@ const ModernHabitCard = ({
   const percent = isBool ? (isDone ? 100 : 0) : Math.min(100, Math.round((val / target) * 100));
   const animatedPercent = pageMounted ? percent : 0;
 
-  const trackRef = useRef(null);
-  const [isScrubbing, setIsScrubbing] = useState(false);
+  const stepDelta = Number(habit.delta) || (habit.unit === 'steps' ? 1000 : (habit.id === 'workouts' ? 5 : 1));
+
   const [isLongPressing, setIsLongPressing] = useState(false);
   const longPressTimerRef = useRef(null);
 
@@ -344,56 +395,6 @@ const ModernHabitCard = ({
       sound.complete();
       const next = isDone ? 0 : target;
       onUpdate(habit.id, activeUserId, next, true);
-    }
-  };
-
-  // Touch control & scrubbing on the progress bar track
-  const handlePointerScrub = (clientX) => {
-    if (!trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const rawNext = ratio * target;
-    let nextVal;
-
-    if (habit.unit === 'steps') {
-      nextVal = Math.round(rawNext / 250) * 250;
-    } else if (habit.unit === 'min' || habit.unit === 'minutes' || habit.id === 'workouts') {
-      // Workouts slider: smooth 5-min intervals or 1-min for short goals
-      const step = target >= 20 ? 5 : 1;
-      nextVal = Math.round(rawNext / step) * step;
-    } else if (habit.unit === 'hrs' || habit.unit === 'hours' || habit.id === 'sleep') {
-      nextVal = Math.round(rawNext * 2) / 2;
-    } else {
-      nextVal = target <= 10 ? Math.round(rawNext) : Math.round(rawNext / 5) * 5;
-    }
-
-    nextVal = Math.max(0, Math.min(target, nextVal));
-    if (nextVal !== val) {
-      sound.scrub();
-      onUpdate(habit.id, activeUserId, nextVal, true);
-    }
-  };
-
-  const onTrackPointerDown = (e) => {
-    e.stopPropagation();
-    setIsScrubbing(true);
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
-    handlePointerScrub(e.clientX);
-  };
-
-  const onTrackPointerMove = (e) => {
-    if (!isScrubbing) return;
-    handlePointerScrub(e.clientX);
-  };
-
-  const onTrackPointerUp = (e) => {
-    if (isScrubbing) {
-      setIsScrubbing(false);
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {}
     }
   };
 
@@ -490,44 +491,35 @@ const ModernHabitCard = ({
         </div>
       </div>
 
-      {/* Touch-scrubbable Progress Bar */}
+      {/* Visual Progress Bar (accidental touch scrubbing disabled) */}
       {!isBool && (
         <div className="habit-progress-section">
           <div
-            ref={trackRef}
-            className={`progress-bar-track interactive-track ${isScrubbing ? 'scrubbing' : ''}`}
-            onPointerDown={onTrackPointerDown}
-            onPointerMove={onTrackPointerMove}
-            onPointerUp={onTrackPointerUp}
-            onPointerCancel={onTrackPointerUp}
-            title="Tap or drag along bar to adjust progress"
+            className="progress-bar-track visual-only-track"
+            title={`${percent}% completed`}
           >
             <div
               className="progress-bar-fill"
               style={{ width: `${animatedPercent}%` }}
             />
-            {isScrubbing && (
-              <div
-                className="progress-scrub-thumb"
-                style={{ left: `${animatedPercent}%` }}
-              />
-            )}
           </div>
 
           <div className="habit-stepper-row">
             <div className="stepper-controls">
               <button
                 className="step-btn minus"
-                onClick={() => handleStep(habit.unit === 'steps' ? -1000 : (habit.id === 'workouts' ? -5 : -1))}
+                onClick={() => handleStep(-stepDelta)}
                 disabled={val <= 0}
-                aria-label="Decrease habit value"
+                aria-label={`Decrease by ${stepDelta} ${habit.unit || ''}`}
+                title={`-${stepDelta} ${habit.unit || ''}`}
               >
                 <Minus size={14} />
               </button>
               <button
                 className="step-btn plus"
-                onClick={() => handleStep(habit.unit === 'steps' ? 1000 : (habit.id === 'workouts' ? 5 : 1))}
-                aria-label="Increase habit value"
+                onClick={() => handleStep(stepDelta)}
+                aria-label={`Increase by ${stepDelta} ${habit.unit || ''}`}
+                title={`+${stepDelta} ${habit.unit || ''}`}
               >
                 <Plus size={14} />
               </button>

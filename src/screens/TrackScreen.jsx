@@ -11,6 +11,11 @@ import {
   X,
   Target,
   CheckCircle2,
+  Users,
+  Plus,
+  Rocket,
+  Heart,
+  Zap,
 } from 'lucide-react';
 
 export const TrackScreen = () => {
@@ -18,8 +23,12 @@ export const TrackScreen = () => {
     user,
     pod,
     trackedPartner,
+    trackedPartners = [],
+    activeTrackedCode,
+    selectTrackedPartner,
     trackPartnerByCode,
     untrackPartner,
+    sendCheer,
     triggerIslandNotification,
     triggerCelebration,
   } = useHabits();
@@ -28,6 +37,8 @@ export const TrackScreen = () => {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [cheerSent, setCheerSent] = useState(false);
 
   const myCode = user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000';
 
@@ -69,6 +80,9 @@ export const TrackScreen = () => {
     try {
       await trackPartnerByCode(inputCode.trim());
       setInputCode('');
+      setShowAddForm(false);
+      triggerCelebration();
+      triggerIslandNotification('Friend added to your tracking list!', 'check');
     } catch (err) {
       setError(err.message || 'Could not find user with this code');
     } finally {
@@ -76,9 +90,15 @@ export const TrackScreen = () => {
     }
   };
 
-  const handleSendNudge = () => {
+  const handleSendCheer = (customMessage) => {
+    if (!trackedPartner) return;
+    const partnerCode = trackedPartner.secretCode || trackedPartner.secret_code || trackedPartner.username;
+    const msg = customMessage || 'Keep crushing your goals! 🔥';
+    sendCheer(partnerCode, msg);
+    setCheerSent(true);
     triggerCelebration();
-    triggerIslandNotification(`High-five sent to @${trackedPartner.username}!`, 'check');
+    triggerIslandNotification(`Cheer sent to @${trackedPartner.username}! 🚀`, 'check');
+    setTimeout(() => setCheerSent(false), 3000);
   };
 
   return (
@@ -87,7 +107,7 @@ export const TrackScreen = () => {
       <div className="track-header-section">
         <h1 className="screen-main-title font-extrabold">Accountability Track</h1>
         <p className="screen-subtitle">
-          Follow a friend's daily habits, celebrate their consistency, and keep each other accountable.
+          Follow your friends' daily habits, celebrate their consistency, and keep each other accountable.
         </p>
       </div>
 
@@ -95,7 +115,7 @@ export const TrackScreen = () => {
       <div className="track-code-card">
         <div className="code-card-header">
           <span className="code-badge-label font-bold">YOUR SECRET CODE</span>
-          <span className="code-hint">Share this with anyone tracking you</span>
+          <span className="code-hint">Share this with friends tracking you</span>
         </div>
 
         <div className="code-main-row">
@@ -113,8 +133,121 @@ export const TrackScreen = () => {
         </div>
       </div>
 
-      {/* Tracked Partner Card (if connected) */}
-      {trackedPartner ? (
+      {/* Tracked Partners Tabs Selector (up to 5 friends) */}
+      <div className="track-partners-selector-section">
+        <div className="partners-selector-header">
+          <div className="partners-count-badge">
+            <Users size={16} className="text-primary" />
+            <span className="font-bold">Tracked Partners ({trackedPartners.length}/5)</span>
+          </div>
+          {trackedPartners.length < 5 && !showAddForm && (
+            <button
+              className="add-partner-toggle-btn"
+              onClick={() => setShowAddForm(true)}
+              title="Track another friend"
+            >
+              <Plus size={14} />
+              <span>Add Friend</span>
+            </button>
+          )}
+        </div>
+
+        {trackedPartners.length > 0 && (
+          <div className="partners-chips-scroll">
+            {trackedPartners.map((partner) => {
+              const code = partner.secretCode || partner.secret_code;
+              const isActive = (activeTrackedCode && activeTrackedCode === code) ||
+                (trackedPartner && (trackedPartner.secretCode === code || trackedPartner.secret_code === code));
+              const displayName = partner.displayName || partner.username || 'Friend';
+
+              return (
+                <button
+                  key={code}
+                  className={`partner-chip-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => selectTrackedPartner(code)}
+                >
+                  <div className="chip-avatar">
+                    {partner.profilePicture ? (
+                      <img
+                        src={partner.profilePicture}
+                        alt={displayName}
+                        className="chip-avatar-img"
+                      />
+                    ) : (
+                      partner.avatar || displayName[0].toUpperCase()
+                    )}
+                  </div>
+                  <div className="chip-info">
+                    <span className="chip-name font-bold">{displayName}</span>
+                    <span className="chip-progress-pill font-semibold">
+                      {partner.todayPercent || 0}%
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+
+            {trackedPartners.length < 5 && (
+              <button
+                className={`partner-chip-add-btn ${showAddForm ? 'active' : ''}`}
+                onClick={() => setShowAddForm(!showAddForm)}
+              >
+                <Plus size={16} />
+                <span>+ Add</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Add Partner Form (when toggled or when 0 partners tracked) */}
+      {(showAddForm || trackedPartners.length === 0) && (
+        <div className="enter-partner-box">
+          <div className="enter-icon-circle">
+            <UserCheck size={28} className="text-emerald-500" />
+          </div>
+          <h3 className="enter-title font-bold">
+            {trackedPartners.length === 0 ? 'Track a Friend' : 'Track Another Friend'}
+          </h3>
+          <p className="enter-desc">
+            Enter someone's secret code to follow their live daily progress (track up to 5 friends).
+          </p>
+
+          {error && <div className="partner-error-banner">{error}</div>}
+
+          <form onSubmit={handleTrack} className="track-input-form">
+            <input
+              type="text"
+              placeholder="e.g. PAL-4788"
+              value={inputCode}
+              onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+              maxLength={14}
+              className="track-text-input font-bold font-mono"
+            />
+            <button
+              type="submit"
+              disabled={loading || inputCode.trim().length < 4}
+              className="track-submit-btn font-bold"
+            >
+              {loading ? 'Connecting...' : 'Track User'}
+              <ArrowRight size={16} />
+            </button>
+          </form>
+
+          {showAddForm && trackedPartners.length > 0 && (
+            <button
+              type="button"
+              className="cancel-add-partner-btn"
+              onClick={() => setShowAddForm(false)}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Active Tracked Partner Details Card */}
+      {trackedPartner && (
         <div className="tracked-partner-card">
           <div className="partner-card-header">
             <div className="partner-identity">
@@ -145,7 +278,7 @@ export const TrackScreen = () => {
 
             <button
               className="partner-untrack-btn"
-              onClick={untrackPartner}
+              onClick={() => untrackPartner(trackedPartner.secretCode || trackedPartner.secret_code)}
               title="Stop tracking this user"
             >
               <X size={16} />
@@ -185,7 +318,7 @@ export const TrackScreen = () => {
                     <div className="habit-row-info">
                       <span className="habit-row-name font-semibold">{h.name}</span>
                       <span className="habit-row-meta">
-                        {isBool ? (isDone ? 'Done' : 'Not yet') : `${val} / ${target} ${h.unit || ''}`}
+                        {isBool ? (isDone ? 'Completed' : 'Not yet') : `${val} / ${target} ${h.unit || ''}`}
                       </span>
                     </div>
 
@@ -194,50 +327,65 @@ export const TrackScreen = () => {
                         <div className="partner-row-fill" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="partner-pct font-bold">{pct}%</span>
+                      {isDone && <CheckCircle2 size={16} className="text-emerald-500 ml-1" />}
                     </div>
                   </div>
                 );
               })}
+              {(!trackedPartner.habits || trackedPartner.habits.length === 0) && (
+                <div className="no-partner-habits font-medium text-slate-400 py-3 text-center">
+                  This user hasn't created any daily habits yet.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Cheer / Nudge Action */}
-          <button className="partner-nudge-btn" onClick={handleSendNudge}>
-            <Sparkles size={18} />
-            <span className="font-bold">Send High-Five & Encouragement</span>
-          </button>
-        </div>
-      ) : (
-        /* Empty / Enter Code Form */
-        <div className="enter-partner-box">
-          <div className="enter-icon-circle">
-            <UserCheck size={28} className="text-emerald-500" />
-          </div>
-          <h3 className="enter-title font-bold">Track a Friend</h3>
-          <p className="enter-desc">
-            Enter someone's secret code to follow their live habit completion and keep them on track.
-          </p>
+          {/* Encouragement / Cheer Feature */}
+          <div className="partner-cheer-section">
+            <div className="cheer-title-row">
+              <Rocket size={16} className="text-amber-400" />
+              <span className="cheer-title font-bold">Send Daily Encouragement</span>
+            </div>
 
-          {error && <div className="partner-error-banner">{error}</div>}
+            <div className="cheer-presets-row">
+              <button
+                className="cheer-preset-chip"
+                onClick={() => handleSendCheer('Keep crushing your streak! 🔥')}
+              >
+                🔥 Keep Crushing It
+              </button>
+              <button
+                className="cheer-preset-chip"
+                onClick={() => handleSendCheer('Proud of your consistency! 💪')}
+              >
+                💪 Proud of You
+              </button>
+              <button
+                className="cheer-preset-chip"
+                onClick={() => handleSendCheer('Almost there, finish strong! ⚡')}
+              >
+                ⚡ Finish Strong
+              </button>
+            </div>
 
-          <form onSubmit={handleTrack} className="track-input-form">
-            <input
-              type="text"
-              placeholder="e.g. PAL-4788"
-              value={inputCode}
-              onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-              maxLength={12}
-              className="track-text-input font-bold"
-            />
             <button
-              type="submit"
-              disabled={loading || inputCode.trim().length < 4}
-              className="track-submit-btn font-bold"
+              className={`partner-nudge-btn cheer-btn ${cheerSent ? 'sent' : ''}`}
+              onClick={() => handleSendCheer()}
             >
-              {loading ? 'Finding...' : 'Track User'}
-              <ArrowRight size={16} />
+              {cheerSent ? (
+                <>
+                  <Check size={18} />
+                  <span className="font-bold">Cheer Sent! 🎉</span>
+                </>
+              ) : (
+                <>
+                  <Flame size={18} className="text-amber-300" />
+                  <span className="font-bold">Cheer On @{trackedPartner.displayName || trackedPartner.username}</span>
+                  <Rocket size={16} />
+                </>
+              )}
             </button>
-          </form>
+          </div>
         </div>
       )}
     </div>

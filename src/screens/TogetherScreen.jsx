@@ -12,6 +12,11 @@ import {
   Trophy,
   LogOut,
   Target,
+  Trash2,
+  Rocket,
+  Minus,
+  X,
+  Sparkles,
 } from 'lucide-react';
 
 export const TogetherScreen = () => {
@@ -23,6 +28,10 @@ export const TogetherScreen = () => {
     leaveGroupPod,
     addSharedGoal,
     updateSharedGoalProgress,
+    deleteSharedGoal,
+    sendCheer,
+    triggerIslandNotification,
+    triggerCelebration,
   } = useHabits();
 
   const [createName, setCreateName] = useState('');
@@ -30,11 +39,17 @@ export const TogetherScreen = () => {
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingGoal, setIsAddingGoal] = useState(false);
+  
+  // Shared Goal Modal Form State
   const [goalName, setGoalName] = useState('');
-  const [goalTarget, setGoalTarget] = useState(10);
-  const [goalUnit, setGoalUnit] = useState('reps');
+  const [goalTarget, setGoalTarget] = useState(10000);
+  const [goalUnit, setGoalUnit] = useState('steps');
+  const [goalDelta, setGoalDelta] = useState(1000);
+  const [goalCategory, setGoalCategory] = useState('Fitness');
+
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const [cheeredMemberId, setCheeredMemberId] = useState(null);
 
   const handleCopyCode = async (code) => {
     try {
@@ -88,12 +103,33 @@ export const TogetherScreen = () => {
     }
   };
 
-  const handleAddGoalSubmit = (e) => {
+  const handleAddGoalSubmit = async (e) => {
     e.preventDefault();
     if (!goalName.trim()) return;
-    addSharedGoal(goalName.trim(), goalTarget, goalUnit);
+    
+    await addSharedGoal({
+      name: goalName.trim(),
+      target: Number(goalTarget) || 1,
+      unit: goalUnit.trim() || 'reps',
+      delta: Number(goalDelta) || 1,
+      category: goalCategory || 'Fitness',
+    });
+
     setGoalName('');
+    setGoalTarget(10000);
+    setGoalUnit('steps');
+    setGoalDelta(1000);
     setIsAddingGoal(false);
+    triggerIslandNotification('Shared goal added to pod! 🎯', 'check');
+  };
+
+  const handleCheerMember = (member) => {
+    const code = member.secretCode || member.secret_code || member.username;
+    sendCheer(code, 'Crushing it in the pod! 🔥');
+    setCheeredMemberId(member.id || member.username);
+    triggerCelebration();
+    triggerIslandNotification(`Cheer sent to @${member.username}! 🚀`, 'check');
+    setTimeout(() => setCheeredMemberId(null), 2500);
   };
 
   return (
@@ -102,7 +138,7 @@ export const TogetherScreen = () => {
       <div className="together-header-section">
         <h1 className="screen-main-title font-extrabold">Group Pods & Shared Goals</h1>
         <p className="screen-subtitle">
-          Track shared habits with friends, family, or teammates. Groups support up to 10 members.
+          Track shared habits with friends, family, or teammates. See individual progress and who crushed their goals.
         </p>
       </div>
 
@@ -158,139 +194,350 @@ export const TogetherScreen = () => {
           <div className="group-section-box">
             <div className="group-section-header">
               <h3 className="group-section-title font-bold">
-                Members Roster ({groupPod.members?.length || 1} / 10)
+                Pod Members ({groupPod.members?.length || 1} / 10)
               </h3>
-              <span className="group-section-hint">Live daily completion</span>
+              <span className="group-section-hint">Tap flame to cheer teammate</span>
             </div>
 
             <div className="group-members-grid">
-              {(groupPod.members || []).map((m, idx) => (
-                <div key={m.id || idx} className="group-member-card">
-                  <div className="member-avatar font-bold" style={{ overflow: 'hidden' }}>
-                    {m.profilePicture ? (
-                      <img
-                        src={m.profilePicture}
-                        alt={m.displayName || m.username}
-                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()
+              {(groupPod.members || []).map((m, idx) => {
+                const isMe = user?.id && String(user.id) === String(m.id);
+                const isCheered = (cheeredMemberId === (m.id || m.username));
+
+                return (
+                  <div key={m.id || idx} className={`group-member-card ${isMe ? 'is-me' : ''}`}>
+                    <div className="member-avatar font-bold" style={{ overflow: 'hidden' }}>
+                      {m.profilePicture ? (
+                        <img
+                          src={m.profilePicture}
+                          alt={m.displayName || m.username}
+                          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()
+                      )}
+                    </div>
+                    <div className="member-info">
+                      <div className="member-name font-bold">
+                        {m.displayName || m.username}
+                        {isMe && <span className="you-badge">You</span>}
+                        {m.role === 'Owner' && <span className="owner-badge">Leader</span>}
+                      </div>
+                      <span className="member-handle">@{m.username}</span>
+                    </div>
+                    <div className="member-stats">
+                      <span className="member-pct font-extrabold">{m.todayPercent || 0}%</span>
+                      <div className="member-streak">
+                        <Flame size={12} className="text-amber-500" />
+                        <span>{m.streak || 0}d</span>
+                      </div>
+                    </div>
+                    {!isMe && (
+                      <button
+                        className={`group-cheer-btn ${isCheered ? 'cheered' : ''}`}
+                        onClick={() => handleCheerMember(m)}
+                        title={`Cheer on @${m.username}`}
+                      >
+                        {isCheered ? <Check size={14} /> : <Flame size={14} />}
+                      </button>
                     )}
                   </div>
-                  <div className="member-info">
-                    <div className="member-name font-bold">
-                      {m.displayName || m.username}
-                      {m.role === 'Owner' && <span className="owner-badge">Leader</span>}
-                    </div>
-                    <span className="member-handle">@{m.username}</span>
-                  </div>
-                  <div className="member-stats">
-                    <span className="member-pct font-extrabold">{m.todayPercent || 0}%</span>
-                    <div className="member-streak">
-                      <Flame size={12} className="text-amber-500" />
-                      <span>{m.streak || 0}d</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* Shared Goals */}
+          {/* Shared Goals Section */}
           <div className="group-section-box">
             <div className="group-section-header">
               <div className="shared-goal-title-wrap">
                 <Target size={18} className="text-emerald-500" />
-                <h3 className="group-section-title font-bold">Shared Group Goals</h3>
+                <div>
+                  <h3 className="group-section-title font-bold">Shared Pod Goals</h3>
+                  <span className="group-section-hint">Goals tracked collectively with individual breakdowns</span>
+                </div>
               </div>
               <button
                 className="add-shared-goal-btn"
                 onClick={() => setIsAddingGoal(!isAddingGoal)}
               >
                 <Plus size={15} />
-                <span>Add Shared Goal</span>
+                <span>Add Goal</span>
               </button>
             </div>
 
+            {/* Modal / Inline form for Add Shared Goal */}
             {isAddingGoal && (
               <form onSubmit={handleAddGoalSubmit} className="add-shared-goal-form">
-                <div className="form-row">
-                  <input
-                    type="text"
-                    placeholder="Goal name (e.g. 10k Steps, Hydration)"
-                    value={goalName}
-                    onChange={(e) => setGoalName(e.target.value)}
-                    required
-                    className="shared-goal-input name"
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    value={goalTarget}
-                    onChange={(e) => setGoalTarget(Number(e.target.value))}
-                    className="shared-goal-input target"
-                    placeholder="Target"
-                  />
-                  <input
-                    type="text"
-                    value={goalUnit}
-                    onChange={(e) => setGoalUnit(e.target.value)}
-                    className="shared-goal-input unit"
-                    placeholder="Unit"
-                  />
+                <div className="add-goal-form-title-row">
+                  <span className="font-bold text-slate-200">New Shared Pod Goal</span>
+                  <button
+                    type="button"
+                    className="form-close-x"
+                    onClick={() => setIsAddingGoal(false)}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="shared-goal-fields-grid">
+                  <div className="shared-field">
+                    <label className="field-lbl">Goal Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 10,000 Daily Steps, 3L Water"
+                      value={goalName}
+                      onChange={(e) => setGoalName(e.target.value)}
+                      required
+                      className="shared-goal-input name"
+                    />
+                  </div>
+
+                  <div className="shared-field">
+                    <label className="field-lbl">Category</label>
+                    <select
+                      value={goalCategory}
+                      onChange={(e) => setGoalCategory(e.target.value)}
+                      className="shared-goal-input select"
+                    >
+                      <option value="Fitness">Fitness</option>
+                      <option value="Health">Health</option>
+                      <option value="Mind">Mind</option>
+                      <option value="Productivity">Productivity</option>
+                      <option value="Daily">Daily</option>
+                    </select>
+                  </div>
+
+                  <div className="shared-field">
+                    <label className="field-lbl">Daily Target</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={goalTarget}
+                      onChange={(e) => setGoalTarget(Number(e.target.value))}
+                      className="shared-goal-input target"
+                      required
+                    />
+                  </div>
+
+                  <div className="shared-field">
+                    <label className="field-lbl">Unit</label>
+                    <input
+                      type="text"
+                      value={goalUnit}
+                      onChange={(e) => setGoalUnit(e.target.value)}
+                      className="shared-goal-input unit"
+                      placeholder="steps, min, reps"
+                      required
+                    />
+                  </div>
+
+                  <div className="shared-field">
+                    <label className="field-lbl">Step Increment (+/-)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={goalDelta}
+                      onChange={(e) => setGoalDelta(Number(e.target.value))}
+                      className="shared-goal-input delta"
+                      placeholder="e.g. 1000, 5, 1"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="shared-goal-form-actions">
+                  <button
+                    type="button"
+                    className="cancel-form-btn"
+                    onClick={() => setIsAddingGoal(false)}
+                  >
+                    Cancel
+                  </button>
                   <button type="submit" className="shared-goal-save-btn">
-                    Save
+                    Save Pod Goal
                   </button>
                 </div>
               </form>
             )}
 
+            {/* Shared Goals List */}
             <div className="shared-goals-list">
               {(groupPod.sharedGoals || []).map((sg) => {
-                const current = sg.current || 0;
-                const target = sg.target || 1;
-                const pct = Math.min(100, Math.round((current / target) * 100));
+                const target = Number(sg.target) || 1;
+                const members = groupPod.members || [];
+                const memberProgressMap = sg.memberProgress || {};
+                const deltaAmount = Number(sg.delta) || (sg.unit === 'steps' ? 1000 : 1);
+
+                // Calculate completed count
+                let completedCount = 0;
+                members.forEach((m) => {
+                  const mVal = Number(memberProgressMap[m.id]) || 0;
+                  if (mVal >= target) {
+                    completedCount += 1;
+                  }
+                });
+
+                const isAllCompleted = members.length > 0 && completedCount === members.length;
 
                 return (
-                  <div key={sg.id} className="shared-goal-card">
-                    <div className="shared-goal-header">
-                      <div className="shared-goal-name font-bold">{sg.name}</div>
-                      <div className="shared-goal-meta font-semibold">
-                        {current} / {target} {sg.unit} ({pct}%)
+                  <div key={sg.id} className="shared-goal-card modern-group-goal">
+                    {/* Goal Header */}
+                    <div className="shared-goal-header-row">
+                      <div className="shared-goal-name-wrap">
+                        <span className="goal-category-tag font-bold">{sg.category || 'Shared'}</span>
+                        <h4 className="shared-goal-title font-black">{sg.name}</h4>
+                        <span className="shared-goal-target-sub">
+                          Target: <strong className="text-slate-200">{target} {sg.unit}</strong> per person
+                        </span>
+                      </div>
+
+                      <div className="goal-header-right">
+                        <div className={`goal-completion-badge ${isAllCompleted ? 'all-done' : ''}`}>
+                          {completedCount === members.length ? (
+                            <>
+                              <CheckCircle2 size={15} className="text-emerald-400" />
+                              <span className="font-bold">All {members.length} Completed! 🎉</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-bold text-amber-400">{completedCount} of {members.length} Completed</span>
+                            </>
+                          )}
+                        </div>
+
+                        <button
+                          className="delete-shared-goal-btn"
+                          onClick={() => deleteSharedGoal(sg.id)}
+                          title="Delete this shared goal"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </div>
                     </div>
 
-                    <div className="shared-goal-bar">
-                      <div className="shared-goal-fill" style={{ width: `${pct}%` }} />
-                    </div>
-
-                    <div className="shared-goal-actions">
-                      <span className="goal-action-hint">Log your contribution:</span>
-                      <div className="goal-steppers">
-                        <button
-                          className="mini-step-btn"
-                          onClick={() => updateSharedGoalProgress(sg.id, -1)}
-                          disabled={current <= 0}
-                        >
-                          -1
-                        </button>
-                        <button
-                          className="mini-step-btn plus"
-                          onClick={() => updateSharedGoalProgress(sg.id, 1)}
-                        >
-                          +1 {sg.unit}
-                        </button>
-                        <button
-                          className="mini-step-btn bulk"
-                          onClick={() => updateSharedGoalProgress(sg.id, sg.unit === 'steps' ? 1000 : 5)}
-                        >
-                          +{sg.unit === 'steps' ? '1k' : '5'}
-                        </button>
+                    {/* Individual Members Progress Breakdown (Stacked one below other) */}
+                    <div className="members-goal-breakdown">
+                      <div className="breakdown-header-label font-bold text-xs uppercase tracking-wider text-slate-400 mb-1">
+                        Individual Member Progress:
                       </div>
+
+                      {members.map((m) => {
+                        const mId = m.id;
+                        const isMe = user?.id && String(user.id) === String(mId);
+                        const mVal = Number(memberProgressMap[mId]) || 0;
+                        const isDone = mVal >= target;
+                        const pct = Math.min(100, Math.round((mVal / target) * 100));
+
+                        return (
+                          <div
+                            key={mId || m.username}
+                            className={`member-progress-row ${isDone ? 'member-completed' : ''} ${isMe ? 'current-user-row' : ''}`}
+                          >
+                            {/* Member Identity & Profile Picture */}
+                            <div className="member-avatar-box">
+                              {m.profilePicture ? (
+                                <img
+                                  src={m.profilePicture}
+                                  alt={m.displayName || m.username}
+                                  className="member-mini-avatar-img"
+                                />
+                              ) : (
+                                <div className="member-avatar-initials font-bold">
+                                  {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="member-progress-details">
+                              <div className="member-progress-label-row">
+                                <span className="member-row-name font-bold">
+                                  {m.displayName || m.username}
+                                  {isMe && <span className="you-mini-tag">You</span>}
+                                </span>
+                                <div className="member-row-values font-semibold">
+                                  <span>{mVal} / {target} {sg.unit}</span>
+                                  <span className="member-pct-tag font-bold">({pct}%)</span>
+                                </div>
+                              </div>
+
+                              {/* Progress bar */}
+                              <div className="member-progress-track">
+                                <div
+                                  className={`member-progress-fill ${isDone ? 'done' : ''}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Status badge & Stepper if it's the current user */}
+                            <div className="member-row-status-actions">
+                              {isDone ? (
+                                <div className="completed-pill font-bold">
+                                  <Check size={13} />
+                                  <span>Done</span>
+                                </div>
+                              ) : (
+                                <div className="in-progress-pill font-bold">
+                                  <span>{pct}%</span>
+                                </div>
+                              )}
+
+                              {isMe && (
+                                <div className="member-steppers-group">
+                                  <button
+                                    className="member-step-btn minus"
+                                    onClick={() => updateSharedGoalProgress(sg.id, -deltaAmount)}
+                                    disabled={mVal <= 0}
+                                    title={`Subtract ${deltaAmount} ${sg.unit}`}
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+                                  <button
+                                    className="member-step-btn plus font-bold"
+                                    onClick={() => updateSharedGoalProgress(sg.id, deltaAmount)}
+                                    title={`Add ${deltaAmount} ${sg.unit}`}
+                                  >
+                                    <Plus size={12} />
+                                    <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {!isMe && (
+                                <button
+                                  className="cheer-member-mini-btn"
+                                  onClick={() => handleCheerMember(m)}
+                                  title={`Cheer @${m.username}`}
+                                >
+                                  <Flame size={14} className="text-amber-400" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
+
+              {(!groupPod.sharedGoals || groupPod.sharedGoals.length === 0) && (
+                <div className="empty-shared-goals text-center py-6">
+                  <Target size={32} className="text-slate-500 mx-auto mb-2" />
+                  <p className="font-bold text-slate-300">No shared goals created yet</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    Create a group goal (e.g. 10,000 steps, daily meditation) so all pod members can track it simultaneously!
+                  </p>
+                  <button
+                    className="add-shared-goal-btn mx-auto mt-3"
+                    onClick={() => setIsAddingGoal(true)}
+                  >
+                    <Plus size={14} />
+                    <span>Create First Goal</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

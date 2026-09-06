@@ -298,16 +298,13 @@ export const pushFullSync = async (podCode, userId, podInfo, habits) => {
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch (err) {
+    console.warn('Push full sync notice:', err.message);
     return null;
   }
 };
 
-// USER ACCOUNTS & AUTHENTICATION
-export const registerUserRemote = async (username, password, displayName, avatar, securityQuestion, securityAnswer) => {
-  if (!hasRemoteBackend()) {
-    // Offline local first
-    return null;
-  }
+export const registerUserRemote = async (username, password, securityQuestion, securityAnswer, displayName) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -317,27 +314,21 @@ export const registerUserRemote = async (username, password, displayName, avatar
         action: 'register',
         username,
         password,
-        displayName,
-        avatar,
         securityQuestion,
         securityAnswer,
+        displayName: displayName || username,
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) {
-      throw new Error(formatErrorMessage(data?.error || data, 'Failed to register'));
-    }
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to create account'));
     return data;
   } catch (err) {
-    console.warn('User register network notice:', formatErrorMessage(err));
-    throw new Error(formatErrorMessage(err, 'Failed to register'));
+    throw new Error(formatErrorMessage(err, 'Failed to create account'));
   }
 };
 
 export const loginUserRemote = async (username, password) => {
-  if (!hasRemoteBackend()) {
-    return null;
-  }
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -350,12 +341,10 @@ export const loginUserRemote = async (username, password) => {
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) {
-      throw new Error(formatErrorMessage(data?.error || data, 'Invalid username or password'));
-    }
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Invalid username or password'));
     return data;
   } catch (err) {
-    throw new Error(formatErrorMessage(err, 'Failed to sign in. Please verify your credentials.'));
+    throw new Error(formatErrorMessage(err, 'Sign in failed. Check username and password.'));
   }
 };
 
@@ -372,12 +361,10 @@ export const getSecurityQuestionRemote = async (username) => {
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) {
-      throw new Error(formatErrorMessage(data?.error || data, 'User not found'));
-    }
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'No security question found for this account'));
     return data;
   } catch (err) {
-    throw new Error(formatErrorMessage(err, 'User not found'));
+    throw new Error(formatErrorMessage(err, 'Account not found'));
   }
 };
 
@@ -396,59 +383,50 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) {
-      throw new Error(formatErrorMessage(data?.error || data, 'Failed to reset password'));
-    }
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to reset password'));
     return data;
   } catch (err) {
-    throw new Error(formatErrorMessage(err, 'Failed to reset password'));
+    throw new Error(formatErrorMessage(err, 'Failed to reset password. Check your security answer.'));
   }
 };
 
-export const fetchUserRemote = async (usernameOrCode) => {
-  if (!hasRemoteBackend()) return null;
+export const syncHabitsRemote = async (userId, habits, preferences) => {
+  if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const isCode = usernameOrCode.includes('-');
-    const param = isCode ? `code=${encodeURIComponent(usernameOrCode)}` : `username=${encodeURIComponent(usernameOrCode)}`;
-    const res = await apiFetch(`${baseUrl}/api/user?${param}`);
-    if (res.status === 404) {
-      // Throw so callers like trackPartnerByCode get a meaningful error
-      throw new Error('User not found');
-    }
-    if (!res.ok) return null;
-    return await parseJsonSafe(res);
-  } catch (err) {
-    throw err;
-  }
-};
-
-export const syncUserHabitsRemote = async (userId, habits, preferences = null) => {
-  if (!hasRemoteBackend()) return null;
-  const baseUrl = getApiBaseUrl();
-  try {
-    const payload = {
-      action: 'sync_habits',
-      userId,
-      habits,
-    };
-    if (preferences && typeof preferences === 'object') {
-      payload.preferences = preferences;
-    }
     const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        action: 'sync_habits',
+        userId,
+        habits,
+        preferences,
+      }),
     });
     if (!res.ok) return null;
     return await parseJsonSafe(res);
-  } catch (err) {
+  } catch {
+    return null;
+  }
+};
+
+export const syncUserHabitsRemote = syncHabitsRemote;
+
+export const fetchUserRemote = async (username) => {
+  if (!hasRemoteBackend() || !username) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(username)}`);
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch {
     return null;
   }
 };
 
 export const syncPreferencesRemote = async (userId, preferences) => {
-  if (!hasRemoteBackend()) return null;
+  if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -462,13 +440,13 @@ export const syncPreferencesRemote = async (userId, preferences) => {
     });
     if (!res.ok) return null;
     return await parseJsonSafe(res);
-  } catch (err) {
+  } catch {
     return null;
   }
 };
 
 export const pairPartnerRemote = async (userId, partnerCode) => {
-  if (!hasRemoteBackend()) return null;
+  if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -481,17 +459,15 @@ export const pairPartnerRemote = async (userId, partnerCode) => {
       }),
     });
     const data = await parseJsonSafe(res);
-    if (!res.ok) {
-      throw new Error(data?.error || 'Partner not found');
-    }
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to connect with partner'));
     return data;
   } catch (err) {
-    throw err;
+    throw new Error(formatErrorMessage(err, 'Failed to connect with partner'));
   }
 };
 
 export const unpairPartnerRemote = async (userId) => {
-  if (!hasRemoteBackend()) return null;
+  if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -502,15 +478,14 @@ export const unpairPartnerRemote = async (userId) => {
         userId,
       }),
     });
-    if (!res.ok) return null;
-    return await parseJsonSafe(res);
-  } catch (err) {
-    return null;
+    return res.ok;
+  } catch {
+    return false;
   }
 };
 
 export const deleteHabitRemote = async (userId, habitId) => {
-  if (!hasRemoteBackend()) return null;
+  if (!hasRemoteBackend() || !userId || !habitId) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -522,14 +497,37 @@ export const deleteHabitRemote = async (userId, habitId) => {
         habitId,
       }),
     });
-    if (!res.ok) return null;
-    return await parseJsonSafe(res);
-  } catch (err) {
-    return null;
+    return res.ok;
+  } catch {
+    return false;
   }
 };
 
-// GROUP POD ("TOGETHER") APIS
+export const deleteAccountRemote = async (userId, username) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete_account',
+        userId,
+        username,
+      }),
+    });
+    const data = await parseJsonSafe(res);
+    if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to permanently delete account'));
+    return data;
+  } catch (err) {
+    throw new Error(formatErrorMessage(err, 'Failed to permanently delete account'));
+  }
+};
+
+// ==========================================
+// GROUP PODS (Up to 10 members)
+// ==========================================
+
 export const createGroupPodRemote = async (userId, name, podCode, sharedGoals) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
@@ -594,7 +592,28 @@ export const getGroupPodRemote = async (podCode) => {
   }
 };
 
-export const updateGroupGoalRemote = async (podCode, goalId, delta) => {
+export const addGroupGoalRemote = async (podCode, goal) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add_group_goal',
+        podCode,
+        goal,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe(res);
+    return data?.pod || null;
+  } catch {
+    return null;
+  }
+};
+
+export const updateGroupGoalRemote = async (podCode, goalId, delta, userId, value, completed) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
@@ -606,6 +625,30 @@ export const updateGroupGoalRemote = async (podCode, goalId, delta) => {
         podCode,
         goalId,
         delta,
+        userId,
+        value,
+        completed,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe(res);
+    return data?.pod || null;
+  } catch {
+    return null;
+  }
+};
+
+export const deleteGroupGoalRemote = async (podCode, goalId) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete_group_goal',
+        podCode,
+        goalId,
       }),
     });
     if (!res.ok) return null;
@@ -617,7 +660,7 @@ export const updateGroupGoalRemote = async (podCode, goalId, delta) => {
 };
 
 export const leaveGroupPodRemote = async (podCode, userId) => {
-  if (!hasRemoteBackend()) return null;
+  if (!hasRemoteBackend()) return false;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -632,5 +675,54 @@ export const leaveGroupPodRemote = async (podCode, userId) => {
     return res.ok;
   } catch {
     return false;
+  }
+};
+
+// ==========================================
+// CHEERS & ENCOURAGEMENT SERVICES
+// ==========================================
+
+export const sendCheerRemote = async ({ toUserId, fromUserId, fromUsername, fromName, fromAvatar, podCode, message }) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'send_cheer',
+        toUserId,
+        fromUserId,
+        fromUsername,
+        fromName,
+        fromAvatar,
+        podCode,
+        message,
+      }),
+    });
+    const data = await parseJsonSafe(res);
+    return data;
+  } catch {
+    return null;
+  }
+};
+
+export const fetchCheersRemote = async (userId, podCode) => {
+  if (!hasRemoteBackend()) return [];
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_cheers',
+        userId,
+        podCode,
+      }),
+    });
+    const data = await parseJsonSafe(res);
+    return data?.cheers || [];
+  } catch {
+    return [];
   }
 };

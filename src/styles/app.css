@@ -5974,22 +5974,234 @@ button:active {
   text-align: right;
 }
 
-.partner-nudge-btn {
-  background: linear-gradient(135deg, var(--primary, #1A56C4), #06B6D4);
+/* Track Partners Selector Section (Up to 5 friends) */
+.track-partners-selector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.partners-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.partners-count-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.add-partner-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--primary, #2563EB);
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-partner-toggle-btn:hover {
+  background: rgba(37, 99, 235, 0.2);
+}
+
+.partners-chips-scroll {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  scrollbar-width: thin;
+}
+
+.partner-chip-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  background: var(--bg-surface, rgba(15, 23, 42, 0.65));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.partner-chip-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary, #f8fafc);
+}
+
+.partner-chip-btn.active {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: var(--primary, #2563EB);
+  color: var(--text-primary, #ffffff);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.25);
+}
+
+.chip-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary, #2563EB), #06B6D4);
   color: #ffffff;
-  border: none;
-  border-radius: 10px;
-  padding: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.chip-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chip-info {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.chip-name {
+  font-size: 0.84rem;
+}
+
+.chip-progress-pill {
+  font-size: 0.72rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  color: var(--text-primary, #f8fafc);
+}
+
+.partner-chip-btn.active .chip-progress-pill {
+  background: rgba(37, 99, 235, 0.35);
+  color: #93C5FD;
+}
+
+.partner-chip-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1px dashed var(--border-medium, rgba(255, 255, 255, 0.2));
+  color: var(--text-tertiary, #64748b);
   cursor: pointer;
-  transition: opacity 0.2s;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.partner-chip-add-btn:hover,
+.partner-chip-add-btn.active {
+  border-color: var(--primary, #2563EB);
+  color: var(--primary, #2563EB);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.cancel-add-partner-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary, #64748b);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.4rem;
+  text-decoration: underline;
+}
+
+/* Encouragement & Cheer Section */
+.partner-cheer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.cheer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.cheer-title {
+  font-size: 0.88rem;
+  color: var(--text-primary, #f8fafc);
+}
+
+.cheer-presets-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.cheer-preset-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary, #f8fafc);
+  border-radius: 9999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cheer-preset-chip:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #FCD34D;
+  transform: translateY(-1px);
+}
+
+.partner-nudge-btn {
+  background: linear-gradient(135deg, #F59E0B, #EA580C, #2563EB);
+  background-size: 200% 200%;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 }
 
 .partner-nudge-btn:hover {
-  opacity: 0.95;
+  opacity: 0.96;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
+}
+
+.partner-nudge-btn.sent {
+  background: linear-gradient(135deg, #10B981, #059669);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
 }
 
 /* Enter Partner Box */
@@ -6387,75 +6599,396 @@ button:active {
   gap: 0.6rem;
 }
 
-.shared-goal-header {
+/* Group Member Card Additions */
+.group-member-card.is-me {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.you-badge {
+  font-size: 0.65rem;
+  background: rgba(37, 99, 235, 0.2);
+  color: #93C5FD;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.group-cheer-btn {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #F59E0B;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.group-cheer-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+  transform: scale(1.08);
+}
+
+.group-cheer-btn.cheered {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10B981;
+}
+
+/* Shared Goal Form Overlay / Inline */
+.add-goal-form-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.shared-goal-name {
-  font-size: 0.98rem;
+.form-close-x {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary, #64748b);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 4px;
+}
+
+.form-close-x:hover {
+  color: var(--text-primary, #ffffff);
+}
+
+.shared-goal-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.shared-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.field-lbl {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-secondary, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shared-goal-input.select {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-medium, rgba(255, 255, 255, 0.15));
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  color: var(--text-primary, #f8fafc);
+  font-size: 0.85rem;
+}
+
+.shared-goal-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.cancel-form-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-secondary, #94a3b8);
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Modern Group Shared Goal Card */
+.shared-goal-card.modern-group-goal {
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+  border-radius: 14px;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shared-goal-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.shared-goal-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.goal-category-tag {
+  font-size: 0.68rem;
+  color: var(--primary, #2563EB);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shared-goal-title {
+  font-size: 1.15rem;
+  color: var(--text-primary, #f8fafc);
+  margin: 0;
+}
+
+.shared-goal-target-sub {
+  font-size: 0.78rem;
+  color: var(--text-tertiary, #64748b);
+}
+
+.goal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.goal-completion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.goal-completion-badge.all-done {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #10B981;
+}
+
+.delete-shared-goal-btn {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #FDA4AF;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.delete-shared-goal-btn:hover {
+  background: rgba(244, 63, 94, 0.22);
+}
+
+/* Individual Member Progress Breakdown */
+.members-goal-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+
+.member-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.2s ease;
+}
+
+.member-progress-row.member-completed {
+  background: rgba(16, 185, 129, 0.04);
+  border-color: rgba(16, 185, 129, 0.15);
+}
+
+.member-progress-row.current-user-row {
+  border-color: rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.member-avatar-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary, #2563EB), #06B6D4);
+  color: #ffffff;
+}
+
+.member-mini-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-avatar-initials {
+  font-size: 0.82rem;
+}
+
+.member-progress-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.member-progress-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.member-row-name {
+  font-size: 0.84rem;
+  color: var(--text-primary, #f8fafc);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.you-mini-tag {
+  font-size: 0.65rem;
+  background: rgba(37, 99, 235, 0.25);
+  color: #93C5FD;
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+
+.member-row-values {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #94a3b8);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.member-pct-tag {
   color: var(--text-primary, #f8fafc);
 }
 
-.shared-goal-meta {
-  font-size: 0.82rem;
-  color: var(--text-secondary, #94a3b8);
-}
-
-.shared-goal-bar {
+.member-progress-track {
   width: 100%;
-  height: 8px;
+  height: 6px;
   background: rgba(148, 163, 184, 0.12);
   border-radius: 9999px;
   overflow: hidden;
 }
 
-.shared-goal-fill {
+.member-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary, #1A56C4), #06B6D4);
+  background: linear-gradient(90deg, var(--primary, #2563EB), #06B6D4);
   border-radius: 9999px;
-  transition: width 0.3s;
+  transition: width 0.3s ease;
 }
 
-.shared-goal-actions {
+.member-progress-fill.done {
+  background: linear-gradient(90deg, #10B981, #34D399);
+}
+
+.member-row-status-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.45rem;
+  flex-shrink: 0;
 }
 
-.goal-action-hint {
-  font-size: 0.74rem;
-  color: var(--text-tertiary, #64748b);
-}
-
-.goal-steppers {
+.completed-pill {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.2rem;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10B981;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
 }
 
-.mini-step-btn {
+.in-progress-pill {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-tertiary, #94a3b8);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 9999px;
+}
+
+.member-steppers-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.member-step-btn {
   background: var(--bg-surface-high, rgba(255, 255, 255, 0.08));
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
   border-radius: 6px;
-  padding: 0.25rem 0.55rem;
-  font-size: 0.76rem;
-  font-weight: 700;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.72rem;
   color: var(--text-primary, #f8fafc);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  transition: all 0.15s ease;
 }
 
-.mini-step-btn.plus {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--primary, #1A56C4);
-  border-color: rgba(16, 185, 129, 0.3);
+.member-step-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
-.mini-step-btn.bulk {
-  background: rgba(6, 182, 212, 0.15);
-  color: #06B6D4;
-  border-color: rgba(6, 182, 212, 0.3);
+.member-step-btn.plus {
+  background: rgba(16, 185, 129, 0.18);
+  color: #10B981;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.member-step-btn.plus:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.cheer-member-mini-btn {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 6px;
+  padding: 0.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.cheer-member-mini-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+  transform: scale(1.1);
 }
 
 /* No Group Pod Onboarding */

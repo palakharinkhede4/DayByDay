@@ -32,6 +32,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
   const [name, setName] = useState(habit.name || '');
   const [target, setTarget] = useState(habit.target || 1);
   const [unit, setUnit] = useState(habit.unit || 'times');
+  const [delta, setDelta] = useState(habit.delta || (habit.unit === 'steps' ? 1000 : 1));
 
   // Reminder state
   const [reminderEnabled, setReminderEnabled] = useState(
@@ -71,6 +72,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
       name: name.trim() || habit.name,
       target: numericTarget,
       unit: unit.trim() || habit.unit,
+      delta: Math.max(1, Number(delta) || 1),
       reminderEnabled,
       reminderTime: reminderEnabled ? reminderTime : null,
       reminderDays: reminderEnabled ? reminderDays : null,
@@ -123,7 +125,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
             />
           </div>
 
-          {/* Section 2: Target & Unit (For numerical habits) */}
+          {/* Section 2: Target, Unit & Increment (For numerical habits) */}
           {!isBool && (
             <div className="habit-modal-row-split">
               <div className="habit-modal-field">
@@ -146,6 +148,18 @@ export const HabitDetailModal = ({ habit, onClose }) => {
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
                   placeholder="e.g. steps, min, cups"
+                />
+              </div>
+              <div className="habit-modal-field">
+                <label className="habit-modal-label font-bold">Step Increment (+/-)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100000"
+                  className="habit-modal-input font-medium"
+                  value={delta}
+                  onChange={(e) => setDelta(e.target.value)}
+                  placeholder="e.g. 1, 5, 250, 1000"
                 />
               </div>
             </div>
