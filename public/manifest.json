@@ -1,0 +1,17 @@
+{
+  "short_name": "DuoTrack",
+  "name": "DuoTrack - Co-op Habit Tracker",
+  "description": "Shared accountability habit tracking for you and your partner",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0d1b1e",
+  "theme_color": "#17B890",
+  "display": "standalone",
+  "orientation": "portrait"
+}

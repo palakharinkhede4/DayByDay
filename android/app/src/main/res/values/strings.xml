@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DuoTrack</string>
+    <string name="title_activity_main">DuoTrack</string>
+    <string name="package_name">com.duotrack.habittracker</string>
+    <string name="custom_url_scheme">com.duotrack.habittracker</string>
+</resources>

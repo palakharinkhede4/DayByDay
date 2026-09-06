@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#022c22" />
+    </linearGradient>
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="coralGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f472b6" />
+      <stop offset="100%" stop-color="#e11d48" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Background with smooth iOS squircle / M3 round rect -->
+  <rect width="512" height="512" rx="115" fill="url(#bgGrad)" />
+  
+  <!-- Subtle inner border -->
+  <rect x="8" y="8" width="496" height="496" rx="108" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3" />
+  
+  <!-- Co-op dual arcs -->
+  <g transform="translate(256, 260)">
+    <!-- User 1 teal arc -->
+    <path d="M -150,40 A 160,160 0 0,1 -20,-155" fill="none" stroke="url(#tealGrad)" stroke-width="34" stroke-linecap="round" filter="url(#glow)" />
+    
+    <!-- User 2 coral arc -->
+    <path d="M 20,-155 A 160,160 0 0,1 150,40" fill="none" stroke="url(#coralGrad)" stroke-width="34" stroke-linecap="round" filter="url(#glow)" />
+    
+    <!-- Center synchronization icon -->
+    <circle cx="0" cy="-20" r="48" fill="#1e293b" stroke="rgba(255,255,255,0.2)" stroke-width="4" />
+    <path d="M -16,-20 L -4,-8 L 16,-28" fill="none" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <!-- Small partner dots -->
+    <circle cx="-65" cy="85" r="14" fill="#34d399" />
+    <circle cx="65" cy="85" r="14" fill="#f472b6" />
+    <path d="M -40,85 L 40,85" stroke="rgba(255,255,255,0.25)" stroke-width="4" stroke-dasharray="6,6" />
+  </g>
+</svg>
