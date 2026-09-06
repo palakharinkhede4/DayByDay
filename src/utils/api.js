@@ -193,3 +193,23 @@ export const unpairPartnerRemote = async (userId) => {
     return null;
   }
 };
+
+export const deleteHabitRemote = async (userId, habitId) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete_habit',
+        userId,
+        habitId,
+      }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+};
+

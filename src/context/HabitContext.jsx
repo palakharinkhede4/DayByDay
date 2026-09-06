@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { sound } from '../utils/sound';
 import { sanitizeInput, exportLocalBackup, wipeLocalData } from '../utils/security';
@@ -11,6 +11,7 @@ import {
   syncUserHabitsRemote,
   pairPartnerRemote,
   unpairPartnerRemote,
+  deleteHabitRemote,
 } from '../utils/api';
 
 const HabitContext = createContext(null);
@@ -130,7 +131,31 @@ function detectInitialOS() {
   return 'ios';
 }
 
+function calculateConsecutiveStreak(history, target, isBoolean) {
+  if (!history || typeof history !== 'object') return 0;
+  let streak = 0;
+  const now = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateKey = d.toISOString().slice(0, 10);
+    const val = history[dateKey];
+    const isDone = isBoolean ? Boolean(val) : (Number(val) || 0) >= (Number(target) || 1);
+    if (isDone) {
+      streak++;
+    } else if (i === 0) {
+      // If today is not yet marked done, check if yesterday was done to preserve active streak
+      continue;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 export const HabitProvider = ({ children }) => {
+  const firedRemindersRef = useRef(new Set());
+
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('duotrack_user');
@@ -308,6 +333,57 @@ export const HabitProvider = ({ children }) => {
     }, 4500);
   };
 
+  // SCHEDULED HABIT NOTIFICATIONS CHECKER (Checks every 25s against habit schedules)
+  useEffect(() => {
+    const checkScheduledReminders = () => {
+      if (!habits || !habits.length) return;
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`;
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const currentDay = dayNames[now.getDay()];
+      const todayDate = now.toISOString().slice(0, 10);
+
+      habits.forEach((h) => {
+        if (!h.reminderTime) return;
+        if (h.reminderTime !== currentTime) return;
+
+        // Check if day of week matches (default to every day if not specified)
+        const days = h.reminderDays;
+        const isDayActive = !days || !days.length || days.includes(currentDay);
+        if (!isDayActive) return;
+
+        const fireKey = `${todayDate}_${h.id}_${h.reminderTime}`;
+        if (firedRemindersRef.current.has(fireKey)) return;
+        firedRemindersRef.current.add(fireKey);
+
+        // 1. Browser/OS Web Notification
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(`DuoTrack Reminder: ${h.name}`, {
+              body: `Time to track: ${h.name} (${h.target || 1} ${h.unit || ''})`,
+              icon: '/favicon.ico',
+              tag: `duotrack-reminder-${h.id}`,
+            });
+          } catch (e) {
+            console.warn('Native notification issue:', e);
+          }
+        }
+
+        // 2. Dynamic Island banner
+        triggerIslandNotification(`Reminder: ${h.name} (${h.target || 1} ${h.unit || ''})`, '⏰');
+
+        // 3. Audio cue
+        sound.complete();
+      });
+    };
+
+    const reminderTimer = setInterval(checkScheduledReminders, 25000);
+    checkScheduledReminders();
+    return () => clearInterval(reminderTimer);
+  }, [habits]);
+
   // Register New User (Calls Neon DB backend or falls back to local)
   const registerUser = async (username, displayName = '', avatar = '🌱') => {
     sound.complete();
@@ -469,9 +545,11 @@ export const HabitProvider = ({ children }) => {
   const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false) => {
     sound.tap();
     let computedNextValue = null;
+    let nextHabitsList = [];
+    const todayKey = new Date().toISOString().slice(0, 10);
 
-    setHabits((prev) =>
-      prev.map((h) => {
+    setHabits((prev) => {
+      const updatedList = prev.map((h) => {
         if (h.id !== habitId) return h;
 
         let current = h[userId];
@@ -480,7 +558,7 @@ export const HabitProvider = ({ children }) => {
         if (typeof current === 'boolean') {
           nextValue = isAbsolute ? amountOrValue : !current;
         } else {
-          nextValue = isAbsolute ? amountOrValue : Math.max(0, current + amountOrValue);
+          nextValue = isAbsolute ? amountOrValue : Math.max(0, (current || 0) + amountOrValue);
         }
 
         computedNextValue = nextValue;
@@ -492,18 +570,35 @@ export const HabitProvider = ({ children }) => {
           extra[`${userId}Display`] = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
         }
 
-        const updated = { ...h, [userId]: nextValue, ...extra };
+        // Maintain single-row history map: { "YYYY-MM-DD": value }
+        const currentHistory = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+        currentHistory[todayKey] = nextValue;
 
-        const wasDone = typeof current === 'boolean' ? current : current >= h.target;
-        const nowDone = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
+        const isCompleted = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
+        const newStreak = calculateConsecutiveStreak(currentHistory, h.target, typeof nextValue === 'boolean');
+
+        const updated = {
+          ...h,
+          [userId]: nextValue,
+          history: currentHistory,
+          streak: newStreak,
+          completed: isCompleted,
+          ...extra,
+        };
+
+        const wasDone = typeof current === 'boolean' ? current : (current || 0) >= h.target;
+        const nowDone = isCompleted;
         if (!wasDone && nowDone) {
           sound.complete();
           triggerIslandNotification(`${h.name} completed!`, '🎉');
         }
 
         return updated;
-      })
-    );
+      });
+
+      nextHabitsList = updatedList;
+      return updatedList;
+    });
 
     // Asynchronously push update to Vercel Serverless Sync API & Neon DB
     if (pod.isPaired && pod.code && computedNextValue !== null) {
@@ -518,8 +613,8 @@ export const HabitProvider = ({ children }) => {
     }
 
     // Sync to user's habits in Neon DB if logged in
-    if (user?.id) {
-      syncUserHabitsRemote(user.id, habits).catch(() => {});
+    if (user?.id && nextHabitsList.length > 0) {
+      syncUserHabitsRemote(user.id, nextHabitsList).catch(() => {});
     }
   };
 
@@ -545,7 +640,13 @@ export const HabitProvider = ({ children }) => {
       name: sanitizeInput(newGoal.name),
       unit: sanitizeInput(newGoal.unit || 'times'),
     };
-    setHabits((prev) => [...prev, safeGoal]);
+    setHabits((prev) => {
+      const next = [...prev, safeGoal];
+      if (user?.id) {
+        syncUserHabitsRemote(user.id, next).catch(() => {});
+      }
+      return next;
+    });
     triggerIslandNotification(`Added goal: ${safeGoal.name}`, '✨');
   };
 
@@ -553,6 +654,10 @@ export const HabitProvider = ({ children }) => {
   const removeGoal = (goalId) => {
     sound.tap();
     setHabits((prev) => prev.filter((h) => h.id !== goalId));
+    if (user?.id) {
+      deleteHabitRemote(user.id, goalId).catch(() => {});
+    }
+    triggerIslandNotification('Habit removed', '🗑️');
   };
 
   // Request Notifications

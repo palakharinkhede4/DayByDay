@@ -1,5 +1,16 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
+
+function formatDays(days) {
+  if (!days || !days.length) return 'Daily';
+  if (Array.isArray(days)) {
+    if (days.length === 7) return 'Daily';
+    if (days.length === 5 && !days.includes('Sat') && !days.includes('Sun')) return 'Mon-Fri';
+    if (days.length === 2 && days.includes('Sat') && days.includes('Sun')) return 'Weekends';
+    return days.join(', ');
+  }
+  return String(days);
+}
 
 export const HabitCards = ({ onOpenAddGoal }) => {
   const {
@@ -12,16 +23,68 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     activeUserId,
     updateHabit,
     updateBeyondGoal,
+    removeGoal,
   } = useHabits();
+
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   const partnerId = activeUserId === 'user1' ? 'user2' : 'user1';
   const partnerName = partner ? (partner.displayName || partner.username) : pod.user2.name;
   const currentUserName = user ? (user.displayName || user.username) : pod.user1.name;
 
+  const completedCount = useMemo(() => {
+    return habits.filter((h) => {
+      if (typeof h.user1 === 'boolean') return h.user1;
+      return (h.user1 || 0) >= h.target;
+    }).length;
+  }, [habits]);
+
+  const categories = ['All', 'Daily', 'Health', 'Fitness', 'Mind', 'Work'];
+
+  const matchesCat = (h) => {
+    if (!h) return false;
+    if (selectedCategory === 'All') return true;
+    const cat = (h.category || 'Daily').toLowerCase();
+    const sel = selectedCategory.toLowerCase();
+    if (sel === 'health') {
+      return cat === 'health' || ['water', 'sleep', 'vitamins'].includes(h.id);
+    }
+    if (sel === 'fitness') {
+      return cat === 'fitness' || ['steps', 'workouts', 'running'].includes(h.id);
+    }
+    if (sel === 'mind') {
+      return cat === 'mind' || ['meditation', 'reading', 'journaling'].includes(h.id);
+    }
+    return cat === sel;
+  };
+
+  const standardIds = ['sleep', 'steps', 'meditation', 'water', 'reading', 'workouts', 'vitamins'];
+  const customHabits = habits.filter((h) => !standardIds.includes(h.id));
+
   return (
     <div className="habit-cards-section">
+      {/* Category Pills & Progress Bar */}
+      <div className="habits-filter-bar">
+        <div className="category-scroll-chips">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={`category-chip ${selectedCategory === cat ? 'active' : ''}`}
+              onClick={() => setSelectedCategory(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+        <div className="today-progress-chip">
+          <span className="progress-dot"></span>
+          <span>{completedCount}/{habits.length} Done</span>
+        </div>
+      </div>
+
       {/* 1. SLEEP CARD (WIDE CARD) */}
-      {habits.find((h) => h.id === 'sleep') && (
+      {habits.find((h) => h.id === 'sleep') && matchesCat(habits.find((h) => h.id === 'sleep')) && (
         <SleepCard
           habit={habits.find((h) => h.id === 'sleep')}
           activeUserId={activeUserId}
@@ -34,162 +97,170 @@ export const HabitCards = ({ onOpenAddGoal }) => {
       )}
 
       {/* 2. STEPS & MEDITATION (TWO-COLUMN GRID) */}
-      <div className="habit-grid-two">
-        {habits.find((h) => h.id === 'steps') && (
-          <StepsCard
-            habit={habits.find((h) => h.id === 'steps')}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        )}
+      {((habits.find((h) => h.id === 'steps') && matchesCat(habits.find((h) => h.id === 'steps'))) ||
+        (habits.find((h) => h.id === 'meditation') && matchesCat(habits.find((h) => h.id === 'meditation')))) && (
+        <div className="habit-grid-two">
+          {habits.find((h) => h.id === 'steps') && matchesCat(habits.find((h) => h.id === 'steps')) && (
+            <StepsCard
+              habit={habits.find((h) => h.id === 'steps')}
+              activeUserId={activeUserId}
+              partnerId={partnerId}
+              partnerName={partnerName}
+              currentUserName={currentUserName}
+              isSolo={isSolo}
+              onUpdate={updateHabit}
+            />
+          )}
 
-        {habits.find((h) => h.id === 'meditation') && (
-          <MeditationCard
-            habit={habits.find((h) => h.id === 'meditation')}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        )}
-      </div>
+          {habits.find((h) => h.id === 'meditation') && matchesCat(habits.find((h) => h.id === 'meditation')) && (
+            <MeditationCard
+              habit={habits.find((h) => h.id === 'meditation')}
+              activeUserId={activeUserId}
+              partnerId={partnerId}
+              partnerName={partnerName}
+              currentUserName={currentUserName}
+              isSolo={isSolo}
+              onUpdate={updateHabit}
+            />
+          )}
+        </div>
+      )}
 
       {/* 3. WATER & READING (TWO-COLUMN GRID) */}
-      <div className="habit-grid-two">
-        {habits.find((h) => h.id === 'water') && (
-          <WaterCard
-            habit={habits.find((h) => h.id === 'water')}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        )}
+      {((habits.find((h) => h.id === 'water') && matchesCat(habits.find((h) => h.id === 'water'))) ||
+        (habits.find((h) => h.id === 'reading') && matchesCat(habits.find((h) => h.id === 'reading')))) && (
+        <div className="habit-grid-two">
+          {habits.find((h) => h.id === 'water') && matchesCat(habits.find((h) => h.id === 'water')) && (
+            <WaterCard
+              habit={habits.find((h) => h.id === 'water')}
+              activeUserId={activeUserId}
+              partnerId={partnerId}
+              partnerName={partnerName}
+              currentUserName={currentUserName}
+              isSolo={isSolo}
+              onUpdate={updateHabit}
+            />
+          )}
 
-        {habits.find((h) => h.id === 'reading') && (
-          <ReadingCard
-            habit={habits.find((h) => h.id === 'reading')}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        )}
-      </div>
+          {habits.find((h) => h.id === 'reading') && matchesCat(habits.find((h) => h.id === 'reading')) && (
+            <ReadingCard
+              habit={habits.find((h) => h.id === 'reading')}
+              activeUserId={activeUserId}
+              partnerId={partnerId}
+              partnerName={partnerName}
+              currentUserName={currentUserName}
+              isSolo={isSolo}
+              onUpdate={updateHabit}
+            />
+          )}
+        </div>
+      )}
 
       {/* 4. WORKOUTS & VITAMINS (TWO-COLUMN GRID) */}
-      <div className="habit-grid-two">
-        {habits.find((h) => h.id === 'workouts') && (
-          <WorkoutCard
-            habit={habits.find((h) => h.id === 'workouts')}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        )}
+      {((habits.find((h) => h.id === 'workouts') && matchesCat(habits.find((h) => h.id === 'workouts'))) ||
+        (habits.find((h) => h.id === 'vitamins') && matchesCat(habits.find((h) => h.id === 'vitamins')))) && (
+        <div className="habit-grid-two">
+          {habits.find((h) => h.id === 'workouts') && matchesCat(habits.find((h) => h.id === 'workouts')) && (
+            <WorkoutCard
+              habit={habits.find((h) => h.id === 'workouts')}
+              activeUserId={activeUserId}
+              partnerId={partnerId}
+              partnerName={partnerName}
+              currentUserName={currentUserName}
+              isSolo={isSolo}
+              onUpdate={updateHabit}
+            />
+          )}
 
-        {habits.find((h) => h.id === 'vitamins') && (
-          <VitaminsCard
-            habit={habits.find((h) => h.id === 'vitamins')}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        )}
-      </div>
+          {habits.find((h) => h.id === 'vitamins') && matchesCat(habits.find((h) => h.id === 'vitamins')) && (
+            <VitaminsCard
+              habit={habits.find((h) => h.id === 'vitamins')}
+              activeUserId={activeUserId}
+              partnerId={partnerId}
+              partnerName={partnerName}
+              currentUserName={currentUserName}
+              isSolo={isSolo}
+              onUpdate={updateHabit}
+            />
+          )}
+        </div>
+      )}
 
       {/* 5. CUSTOM GOALS */}
-      {habits
-        .filter(
-          (h) =>
-            !['sleep', 'steps', 'meditation', 'water', 'reading', 'workouts', 'vitamins'].includes(
-              h.id
-            )
-        )
-        .map((custom) => (
-          <GenericHabitCard
-            key={custom.id}
-            habit={custom}
-            activeUserId={activeUserId}
-            partnerId={partnerId}
-            partnerName={partnerName}
-            currentUserName={currentUserName}
-            isSolo={isSolo}
-            onUpdate={updateHabit}
-          />
-        ))}
+      {customHabits.filter(matchesCat).map((custom) => (
+        <GenericHabitCard
+          key={custom.id}
+          habit={custom}
+          activeUserId={activeUserId}
+          partnerId={partnerId}
+          partnerName={partnerName}
+          currentUserName={currentUserName}
+          isSolo={isSolo}
+          onUpdate={updateHabit}
+          onRemove={removeGoal}
+        />
+      ))}
 
       {/* 6. BEYOND TODAY SECTION */}
-      <div className="beyond-today-header">
-        <h3 className="beyond-title font-bold">Beyond Today</h3>
-        <span className="beyond-sub">Periodic & lifestyle goals</span>
-      </div>
-
-      <div className="beyond-cards-grid">
-        {beyondGoals.map((g) => (
-          <div key={g.id} className="beyond-card">
-            <div className="beyond-card-header">
-              <div className="beyond-title-group">
-                <span className="beyond-icon">
-                  {g.id === 'savings' ? '💰' : '⚖️'}
-                </span>
-                <span className="beyond-name">{g.name}</span>
-              </div>
-              <span className="beyond-tag">{isSolo ? 'Personal' : 'Sync'}</span>
-            </div>
-
-            <div className="beyond-values">
-              <div className="beyond-user-val">
-                <span className="user-dot user1-dot"></span>
-                <span className="val-text">
-                  {g.unit === '$' ? `$${g.user1}` : `${g.user1} ${g.unit}`}
-                </span>
-                <span className="val-sub">{isSolo ? 'Your balance' : currentUserName}</span>
-              </div>
-              {!isSolo && (
-                <div className="beyond-user-val">
-                  <span className="user-dot user2-dot"></span>
-                  <span className="val-text">
-                    {g.unit === '$' ? `$${g.user2}` : `${g.user2} ${g.unit}`}
-                  </span>
-                  <span className="val-sub">{partnerName}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="beyond-quick-actions">
-              <button
-                className="mini-stepper-btn"
-                onClick={() => updateBeyondGoal(g.id, 'user1', g.id === 'savings' ? 25 : -1)}
-              >
-                {g.id === 'savings' ? '+$25' : '-1 lb'}
-              </button>
-              <button
-                className="mini-stepper-btn"
-                onClick={() => updateBeyondGoal(g.id, 'user1', g.id === 'savings' ? 50 : 1)}
-              >
-                {g.id === 'savings' ? '+$50' : '+1 lb'}
-              </button>
-            </div>
+      {(selectedCategory === 'All' || selectedCategory === 'Daily') && (
+        <>
+          <div className="beyond-today-header">
+            <h3 className="beyond-title font-bold">Beyond Today</h3>
+            <span className="beyond-sub">Periodic & lifestyle goals</span>
           </div>
-        ))}
-      </div>
+
+          <div className="beyond-cards-grid">
+            {beyondGoals.map((g) => (
+              <div key={g.id} className="beyond-card">
+                <div className="beyond-card-header">
+                  <div className="beyond-title-group">
+                    <span className="beyond-icon">
+                      {g.id === 'savings' ? '💰' : '⚖️'}
+                    </span>
+                    <span className="beyond-name">{g.name}</span>
+                  </div>
+                  <span className="beyond-tag">{isSolo ? 'Personal' : 'Sync'}</span>
+                </div>
+
+                <div className="beyond-values">
+                  <div className="beyond-user-val">
+                    <span className="user-dot user1-dot"></span>
+                    <span className="val-text">
+                      {g.id === 'savings' ? `$${g.user1 || 0}` : `${g.user1 || 0} ${g.unit}`}
+                    </span>
+                    <span className="val-sub">{isSolo ? 'Current' : currentUserName}</span>
+                  </div>
+
+                  {!isSolo && (
+                    <div className="beyond-user-val right">
+                      <span className="user-dot user2-dot"></span>
+                      <span className="val-text">
+                        {g.id === 'savings' ? `$${g.user2 || 0}` : `${g.user2 || 0} ${g.unit}`}
+                      </span>
+                      <span className="val-sub">{partnerName}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="beyond-quick-actions">
+                  <button
+                    className="mini-stepper-btn"
+                    onClick={() => updateBeyondGoal(g.id, 'user1', g.id === 'savings' ? 25 : -1)}
+                  >
+                    {g.id === 'savings' ? '+$25' : '-1 lb'}
+                  </button>
+                  <button
+                    className="mini-stepper-btn"
+                    onClick={() => updateBeyondGoal(g.id, 'user1', g.id === 'savings' ? 50 : 1)}
+                  >
+                    {g.id === 'savings' ? '+$50' : '+1 lb'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -208,9 +279,19 @@ const SleepCard = ({ habit, activeUserId, partnerId, partnerName, currentUserNam
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon sleep-icon">🌙</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime} · {formatDays(habit.reminderDays)}
+              </span>
+            )}
+          </div>
         </div>
-        <span className="habit-meta-tag">Target: {habit.target}h</span>
+        <div className="habit-header-meta">
+          {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
+          <span className="habit-meta-tag">Target: {habit.target}h</span>
+        </div>
       </div>
 
       <div className="sleep-duration-row">
@@ -282,8 +363,16 @@ const StepsCard = ({ habit, activeUserId, partnerId, partnerName, currentUserNam
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon steps-icon">👟</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime}
+              </span>
+            )}
+          </div>
         </div>
+        {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
       </div>
 
       <div className="steps-rings-container">
@@ -361,8 +450,16 @@ const MeditationCard = ({ habit, activeUserId, partnerId, partnerName, currentUs
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon meditation-icon">🧘</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime}
+              </span>
+            )}
+          </div>
         </div>
+        {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
       </div>
 
       <div className="meditation-visual">
@@ -402,9 +499,19 @@ const WaterCard = ({ habit, activeUserId, partnerId, partnerName, currentUserNam
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon water-icon">💧</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime}
+              </span>
+            )}
+          </div>
         </div>
-        <span className="habit-target-tag">{currentVal}/{habit.target} {habit.unit}</span>
+        <div className="habit-header-meta">
+          {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
+          <span className="habit-target-tag">{currentVal}/{habit.target} {habit.unit}</span>
+        </div>
       </div>
 
       <div className="water-glasses-row">
@@ -436,9 +543,19 @@ const ReadingCard = ({ habit, activeUserId, partnerId, partnerName, currentUserN
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon reading-icon">📖</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime}
+              </span>
+            )}
+          </div>
         </div>
-        <span className="habit-target-tag">{habit.user1 || 0}/{habit.target} {habit.unit}</span>
+        <div className="habit-header-meta">
+          {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
+          <span className="habit-target-tag">{habit.user1 || 0}/{habit.target} {habit.unit}</span>
+        </div>
       </div>
 
       <div className="reading-progress-bar-wrap">
@@ -463,9 +580,19 @@ const WorkoutCard = ({ habit, activeUserId, partnerId, partnerName, currentUserN
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon workout-icon">🏋️</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime}
+              </span>
+            )}
+          </div>
         </div>
-        <span className="habit-target-tag">{habit.user1 || 0}/{habit.target} min</span>
+        <div className="habit-header-meta">
+          {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
+          <span className="habit-target-tag">{habit.user1 || 0}/{habit.target} min</span>
+        </div>
       </div>
 
       <div className="card-stepper-row">
@@ -484,8 +611,16 @@ const VitaminsCard = ({ habit, activeUserId, partnerId, partnerName, currentUser
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
           <span className="habit-badge-icon vitamins-icon">💊</span>
-          <span className="habit-name">{habit.name}</span>
+          <div>
+            <span className="habit-name">{habit.name}</span>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime}
+              </span>
+            )}
+          </div>
         </div>
+        {habit.streak > 0 && <span className="habit-streak-badge">🔥 {habit.streak}d</span>}
       </div>
 
       <div className="vitamins-action-center">
@@ -502,17 +637,52 @@ const VitaminsCard = ({ habit, activeUserId, partnerId, partnerName, currentUser
 };
 
 /* --- GENERIC CUSTOM HABIT CARD --- */
-const GenericHabitCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
+const GenericHabitCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate, onRemove }) => {
   const isBool = typeof habit.user1 === 'boolean';
+  const u1Val = habit.user1 || 0;
+  const percent = isBool ? (habit.user1 ? 100 : 0) : Math.min(100, Math.round((u1Val / (habit.target || 1)) * 100));
+
   return (
-    <div className="habit-card generic-card">
+    <div className={`habit-card generic-card ${habit.completed || (isBool && habit.user1) ? 'is-completed' : ''}`}>
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
-          <span className="habit-badge-icon">🎯</span>
-          <span className="habit-name">{habit.name}</span>
+          <span className="habit-badge-icon">{habit.icon || '🎯'}</span>
+          <div>
+            <div className="generic-name-row">
+              <span className="habit-name font-bold">{habit.name}</span>
+              {habit.streak > 0 && (
+                <span className="habit-streak-badge">🔥 {habit.streak}d</span>
+              )}
+            </div>
+            {habit.reminderTime && (
+              <span className="habit-reminder-pill">
+                ⏰ {habit.reminderTime} · {formatDays(habit.reminderDays)}
+              </span>
+            )}
+          </div>
         </div>
-        <span className="habit-target-tag">{isBool ? (habit.user1 ? 'Done' : 'Pending') : `${habit.user1 || 0}/${habit.target} ${habit.unit}`}</span>
+
+        <div className="generic-header-actions">
+          <span className="habit-target-tag">
+            {isBool ? (habit.user1 ? 'Done' : 'Pending') : `${u1Val}/${habit.target} ${habit.unit}`}
+          </span>
+          <button
+            type="button"
+            className="habit-remove-action-btn"
+            onClick={() => onRemove(habit.id)}
+            title="Delete habit"
+            aria-label={`Delete ${habit.name}`}
+          >
+            ✕
+          </button>
+        </div>
       </div>
+
+      {!isBool && (
+        <div className="generic-progress-track">
+          <div className="generic-progress-fill" style={{ width: `${percent}%` }} />
+        </div>
+      )}
 
       <div className="card-stepper-row">
         {isBool ? (
@@ -524,8 +694,19 @@ const GenericHabitCard = ({ habit, activeUserId, partnerId, partnerName, current
           </button>
         ) : (
           <>
-            <button className="card-quick-btn" onClick={() => onUpdate(habit.id, 'user1', 1)}>+1</button>
-            <button className="card-quick-btn highlight" onClick={() => onUpdate(habit.id, 'user1', 5)}>+5</button>
+            <button
+              className="card-quick-btn subtle"
+              onClick={() => onUpdate(habit.id, 'user1', -1)}
+              disabled={!u1Val}
+            >
+              -1
+            </button>
+            <button className="card-quick-btn" onClick={() => onUpdate(habit.id, 'user1', 1)}>
+              +1 {habit.unit}
+            </button>
+            <button className="card-quick-btn highlight" onClick={() => onUpdate(habit.id, 'user1', 5)}>
+              +5
+            </button>
           </>
         )}
       </div>

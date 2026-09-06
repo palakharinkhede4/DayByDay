@@ -1,135 +1,195 @@
-<div align="center">
+# DuoTrack
 
-# 🔥 DuoTrack
-### Production Co-Op Habit Tracking for Individuals, Best Friends & Couples
+Production-grade, cross-platform habit tracking application designed for individuals, pairs, and accountability pods.
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Neon Database](https://img.shields.io/badge/Neon-PostgreSQL-00E599?style=for-the-badge&logo=postgresql&logoColor=black)](https://neon.tech/)
-[![Capacitor](https://img.shields.io/badge/Capacitor-Android-119EFF?style=for-the-badge&logo=capacitor&logoColor=white)](https://capacitorjs.com/)
-[![Vercel](https://img.shields.io/badge/Vercel-Serverless%20Sync-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
-[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/palakharinkhede4/DuoTrack/actions)
-[![License](https://img.shields.io/badge/License-MIT-10B981?style=for-the-badge)](LICENSE)
-
-*Inspired by Cedlom's viral journey (**"I Built an App with 0 Experience"**), re-engineered as a production application with **Real User Accounts**, **Solo & Together Modes**, **Neon PostgreSQL**, **Light/Dark/Auto Themes**, and **Cross-Platform Responsive Layouts**.*
-
-[📥 Download Android APK (v1.0)](./DuoTrack.apk) • [🚀 Deploy to Vercel](#-deploy-to-vercel--neon-db) • [✨ Key Features](#-key-features) • [🍎 iOS Setup](#-ios-installation-safari-pwa) • [🤖 Automated APK Releases](#-automated-apk-releases-via-github-actions)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Neon Database](https://img.shields.io/badge/Neon-PostgreSQL-00E599?style=flat-square&logo=postgresql&logoColor=black)](https://neon.tech/)
+[![Capacitor](https://img.shields.io/badge/Capacitor-Android-119EFF?style=flat-square&logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+[![CI/CD](https://img.shields.io/badge/GitHub%20Actions-Automated%20Builds-2088FF?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/palakharinkhede4/DuoTrack/actions)
+[![License](https://img.shields.io/badge/License-MIT-10B981?style=flat-square)](LICENSE)
 
 ---
 
-</div>
+## Executive Summary
 
-## 📖 The Philosophy: Solo by Default, Together on Demand
-
-Building habits starts with personal consistency. **DuoTrack** lets any user track their own routines solo. Whenever you want an accountability partner, family member, or friend to keep an eye on you, simply share your unique **Secret Code** (e.g. `PLK-8429`). They can connect from their phone or laptop to view and synchronize habits with you live!
+DuoTrack is an architectural evolution of collaborative habit tracking. It supports both solo tracking and synchronized dual-user accountability pods. Unlike traditional platforms that require mandatory logins with third-party tracking, DuoTrack uses cryptographic secret codes for instant pairing, offline-first state persistence, client-side notification dispatching, and a storage-optimized Neon PostgreSQL schema designed to operate comfortably within strict infrastructure quotas.
 
 ---
 
-## ✨ Key Features
+## System Architecture
 
-### 👤 1. Real User Accounts & Secret Code Sharing
-- **Unique @Username**: Pick your identity on first launch (e.g. `@palak`).
-- **Private Secret Code**: Generates a shareable key for easy pairing without complex passwords.
-- **Solo Mode by Default**: Track sleep, steps, meditation, water, reading, workouts, and vitamins independently.
-- **Accountability Partner Mode**: Connect with a partner to turn on the dual-colored Together Pod dial.
+DuoTrack consists of a progressive web frontend, native Android container, serverless API gateway, and serverless PostgreSQL database.
 
-### 🌓 2. Light / Dark / Auto (System) Theme Modes
-- **Light Mode ☀️**: Clean porcelain surfaces with crisp slate typography and soft drop shadows.
-- **Dark Mode 🌙**: Deep obsidian and emerald tones with high-contrast glowing indicators.
-- **Auto Mode ⚙️**: Automatically mirrors your device's system appearance (`prefers-color-scheme`).
-
-### 📱 3. Responsive Web & Mobile Layouts
-- **Desktop / Laptop Viewport**: Spacious, modern web application dashboard (multi-column cards, sticky header, profile chip, zero fake phone bezels).
-- **Mobile Viewport (iOS & Android)**: Edge-to-edge native layout with safe-area insets, Dynamic Island activity alerts, and bottom tab bar.
-- **Auto OS Detection**: Automatically loads **iOS 18 Liquid Glass** on Apple devices or **Android 16 Material 3 Expressive** on Android phones.
-
-### 🎯 4. Signature Progress Dial & Habit Cards
-- **Adaptive Dotted Arch Dial**: 22-segment curved arc. Fills continuously across the arch in Solo mode, and splits side-by-side in Together mode.
-- **💤 Sleep Cycles**: Horizontal segmented sleep bars comparing hours & minutes.
-- **👟 Steps**: Concentric circular progress rings with quick `+500` and `+1.5k` steppers.
-- **🧘 Meditation**: Mindfulness breathing pulse animation with quick minutes logger.
-- **💧 Hydration**: Interactive liquid pint counter with tactile drink action.
-- **📖 Reading & 🏋️ Workouts**: Visual bookmark meters and active exercise hero tracking.
-- **💊 Vitamins**: AM/PM split toggle pill with micro-animations.
-- **🌱 Beyond Today**: Periodic shared goals for Savings (`$`) and Weight (`lbs`).
-
-### 📱 5. Symmetrical 5-Widget Suite (Both OSs)
-1. **Small (2×2) Pod Sync Ring**: Frosted glass squircle / M3 surface dial.
-2. **Medium (4×2) Shared Pod Progress**: Side-by-side user progress with inline action chips.
-3. **Bento (4×2) Dashboard Card**: Pod score, step rings, vitamin check, and instant partner ping.
-4. **Scalloped (2×2) Organic Dial**: Tactile circular gauge with quick logger button.
-5. **Lock Screen Minimal Capsule**: At-a-glance lock screen status widget.
-
----
-
-## 🐘 Deploy to Vercel & Neon PostgreSQL
-
-DuoTrack runs serverless on Vercel and connects to **Neon Serverless PostgreSQL** for permanent, robust data storage.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User (@palak)
-    participant Vercel as Vercel Serverless (/api/user & /api/pod)
-    participant Neon as Neon PostgreSQL Database
-    actor Partner as Partner (@alex)
-
-    User->>Vercel: POST /api/user (create @palak, code: PLK-8429)
-    Vercel->>Neon: INSERT INTO duotrack_users
-    Neon-->>Vercel: User saved
-    Vercel-->>User: Registered!
-    Partner->>Vercel: POST /api/user (action: 'pair', code: 'PLK-8429')
-    Vercel->>Neon: INSERT INTO duotrack_pairings
-    Neon-->>Vercel: Paired!
-    Vercel-->>Partner: Linked with @palak
-    Vercel-->>User: Live 4s poll reflects partner in real time!
+```
++-------------------------------------------------------------------------+
+|                              Client Layer                               |
+|                                                                         |
+|   +--------------------------+          +---------------------------+   |
+|   |   Android Native App     |          |      Safari iOS (PWA)     |   |
+|   |  (Capacitor / Android 16)|          |     (Standalone Display)  |   |
+|   +------------+-------------+          +-------------+-------------+   |
+|                |                                      |                 |
+|                +------------------+-------------------+                 |
+|                                   |                                     |
+|                                   v                                     |
+|                     +---------------------------+                       |
+|                     |     React 19 Frontend     |                       |
+|                     |  - Adaptive Dotted Arch   |                       |
+|                     |  - Local Notification Sched|                      |
+|                     |  - Light / Dark / Auto    |                       |
+|                     +-------------+-------------+                       |
++-----------------------------------|-------------------------------------+
+                                    |
+                                    v HTTPS / REST
++-----------------------------------|-------------------------------------+
+|                             Backend Layer                               |
+|                                                                         |
+|                     +-------------+-------------+                       |
+|                     |  Serverless Functions     |                       |
+|                     |  - /api/user              |                       |
+|                     |  - /api/pod               |                       |
+|                     +-------------+-------------+                       |
+|                                   |                                     |
+|                                   v Connection Pooling                  |
+|                     +-------------+-------------+                       |
+|                     |  Neon PostgreSQL Engine   |                       |
+|                     |  (duotrack_users, habits) |                       |
+|                     +---------------------------+                       |
++-------------------------------------------------------------------------+
 ```
 
-### 1-Minute Setup:
-1. **Create Free Neon Database**:
-   - Go to [neon.tech](https://neon.tech) and create a free PostgreSQL project.
-   - Copy your connection string (`postgres://user:password@ep-xxx.neon.tech/neondb?sslmode=require`).
-2. **Add to Vercel**:
-   - Go to your project on [vercel.com](https://vercel.com) &rarr; **Settings** &rarr; **Environment Variables**.
-   - Add variable: `DATABASE_URL` = your Neon connection string.
-   - Redeploy.
-3. **Automatic Migration**:
-   - DuoTrack automatically creates the `duotrack_users`, `duotrack_habits`, and `duotrack_pairings` tables on its first query!
+---
 
-*(Note: Even before setting `DATABASE_URL`, DuoTrack includes an in-memory/local storage fallback so it works immediately without breaking!)*
+## Database Storage Architecture & 0.5 GB Free Tier Optimization
+
+DuoTrack is engineered specifically to operate within Neon's 0.5 GB (512 MB) storage limit while guaranteeing continuous operation for 50 or more active users for over a full calendar year.
+
+### Mathematical Storage Analysis
+
+Traditional relational models insert one row per habit completion per day (50 users x 10 habits x 365 days = 182,500 rows/year), resulting in table bloat, heavy index overhead, and rapid quota exhaustion.
+
+DuoTrack eliminates this overhead through a **Single-Row Consolidated JSONB Map Pattern**:
+
+1. **Fixed Row Allocation**: Each user habit occupies exactly one row in `duotrack_habits`. 50 users tracking 10 habits create a constant footprint of exactly 500 rows.
+2. **Compact Key Sizing**: Daily logs are stored within a JSONB dictionary using ISO 8601 date keys (`{"2026-09-06": 1}`).
+3. **Data Footprint per Habit/Year**:
+   - 365 days x 18 bytes per key-value pair = 6,570 bytes (~6.4 KB).
+   - 500 total habits x 6.4 KB = **3.2 MB total history data**.
+4. **Relational Table Overhead**:
+   - `duotrack_users` (50 rows x 180 bytes) = ~9 KB.
+   - `duotrack_pairings` (25 rows x 120 bytes) = ~3 KB.
+   - `duotrack_habits` base columns (500 rows x 220 bytes) = ~110 KB.
+   - B-tree Indexes (`idx_users_username`, `idx_users_secret`, `idx_habits_user`) = ~250 KB.
+5. **Total Database Consumption After 1 Year**:
+   - Total Space Consumed: **~3.6 MB**
+   - Percentage of 512 MB Neon Quota: **0.70%**
+   - Available Headroom: **99.30%** (Sufficient for over 5,000 active users).
+
+### PostgreSQL Schema Specification
+
+```sql
+-- Users Table: Unique identity and pairing secret codes
+CREATE TABLE IF NOT EXISTS duotrack_users (
+  id VARCHAR(48) PRIMARY KEY,
+  username VARCHAR(32) UNIQUE NOT NULL,
+  secret_code VARCHAR(16) UNIQUE NOT NULL,
+  display_name VARCHAR(64),
+  avatar VARCHAR(8) DEFAULT 'default',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Habits Table: 1 row per habit with compact JSONB historical tracking
+CREATE TABLE IF NOT EXISTS duotrack_habits (
+  id SERIAL PRIMARY KEY,
+  user_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+  habit_id VARCHAR(32) NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  target NUMERIC(8, 2) NOT NULL DEFAULT 1,
+  unit VARCHAR(16) DEFAULT '',
+  icon VARCHAR(32) DEFAULT 'target',
+  category VARCHAR(24) DEFAULT 'Daily',
+  today_value NUMERIC(8, 2) DEFAULT 0,
+  completed BOOLEAN DEFAULT FALSE,
+  reminder_time VARCHAR(5),
+  reminder_days VARCHAR(24),
+  streak INT DEFAULT 0,
+  history JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, habit_id)
+);
+
+-- Pairings Table: Active accountability connections
+CREATE TABLE IF NOT EXISTS duotrack_pairings (
+  id SERIAL PRIMARY KEY,
+  user1_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+  user2_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+  pod_code VARCHAR(24) UNIQUE NOT NULL,
+  status VARCHAR(16) DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_users_username ON duotrack_users(LOWER(username));
+CREATE INDEX IF NOT EXISTS idx_users_secret ON duotrack_users(UPPER(secret_code));
+CREATE INDEX IF NOT EXISTS idx_habits_user ON duotrack_habits(user_id);
+```
 
 ---
 
-## 🍎 iOS Installation (Safari PWA)
+## Core Features
 
-Apple blocks sideloading `.ipa` files directly from WhatsApp or Google Drive. DuoTrack is configured as a standalone **Progressive Web App (PWA)**:
+### 1. Flexible Habit Creation and Custom Units
+* Add custom habits with user-defined names, categories, numerical targets, and unit types (e.g., pages, minutes, repetitions, kilometers, pints).
+* Preset templates available for immediate setup: Morning Run, Journaling, Code Practice, Stretching, and Reading.
+* Quick logging controls: `-1`, `+1`, `+5`, or binary completion toggles.
+* Habit deletion and management with automatic database synchronization.
 
-1. Open your Vercel URL in **Safari** on your iPhone.
-2. Tap the **Share** button (the square with an arrow pointing up ⎋) at the bottom.
-3. Scroll down and tap **"Add to Home Screen"**.
-4. Tap **Add** in the top right corner.
-5. Launch **DuoTrack** from your home screen — it runs full-screen with native safe areas, haptics, and zero browser bars!
+### 2. Scheduled Reminders and Notification Dispatcher
+* Custom notification scheduler supporting specific reminder times (`HH:mm`).
+* Granular day-of-week selection:
+  * Individual days (Monday through Sunday).
+  * Quick filter presets: Daily, Weekdays, or Weekends.
+* Multi-layer alert execution:
+  * Browser / OS Web Notifications via the standard `Notification` API.
+  * In-app status banner alerts.
+  * Audio confirmation cues.
+* Deduplicated dispatching: Checks timestamps every 25 seconds and prevents duplicate alerts during the active window.
+
+### 3. Consecutive Streak Calculation
+* Automatic streak tracking computed from consecutive historical completions in the JSONB archive.
+* Preserves active streaks even before the current day's target is finalized.
+* Displayed on each habit card to motivate user consistency.
+
+### 4. Categorization and Progress Filtering
+* Filter habits by domain: All, Daily, Health, Fitness, Mind, and Work.
+* Real-time completion counter indicating completed habits against total active habits for the day.
+
+### 5. Solo and Together Modes
+* **Solo Mode (Default)**: Personal habit tracking with 100% user-centric progress dial metrics.
+* **Together Pod Mode**: Connect via Secret Code (e.g., `PLK-8429`) to enable live synchronization, dual progress arches, and activity logs without exposing passwords.
+
+### 6. Light, Dark, and Auto Theme Engine
+* **Light Mode**: High-contrast slate typography on neutral porcelain surfaces.
+* **Dark Mode**: Deep obsidian background with muted emerald accents.
+* **Auto Mode**: Listens to system-level `prefers-color-scheme` changes in real time.
 
 ---
 
-## 🤖 Automated APK Releases via GitHub Actions
+## Installation & Deployment
 
-This repository includes [`.github/workflows/release.yml`](./.github/workflows/release.yml) to automatically compile and publish the Android APK to GitHub's **Releases** tab:
+### Environment Configuration
 
-* **Automatic Release on Tag**: Push any version tag to trigger a release:
-  ```bash
-  git tag v1.0.1
-  git push origin v1.0.1
-  ```
-* **Manual One-Click Release**:
-  - Go to the **Actions** tab on your GitHub repo.
-  - Select **"Build & Publish DuoTrack APK Release"**.
-  - Click **"Run workflow"** &rarr; Enter your version tag &rarr; Click **Run**.
-  - GitHub Actions will build the APK with Gradle and upload it to GitHub Releases automatically!
+Configure the following environment variable on your hosting platform:
 
----
+```env
+DATABASE_URL=postgres://user:password@ep-sample-pool.neon.tech/neondb?sslmode=require
+```
 
-## 💻 Local Development
+If `DATABASE_URL` is omitted, the application automatically falls back to local storage and in-memory persistence.
+
+### Local Development
 
 ```bash
 # Clone the repository
@@ -139,18 +199,105 @@ cd DuoTrack
 # Install dependencies
 npm install
 
-# Start Vite dev server
+# Start Vite development server
 npm run dev
 
-# Build production bundle
+# Compile production bundle
 npm run build
-
-# Build Android APK locally
-npx cap sync android
-cd android && ./gradlew assembleDebug
 ```
 
 ---
 
-## 📄 License
-MIT © [Palak Harinkhede](https://github.com/palakharinkhede4)
+## Mobile Deployment Guide
+
+### Android Installation (Native APK)
+
+Pre-built binaries are available in the repository root and via GitHub Releases:
+
+1. Download [`DuoTrack.apk`](./DuoTrack.apk).
+2. Transfer the `.apk` file to your Android device via USB, Google Drive, or local storage.
+3. Tap the file in your device's file manager and allow installation from your file provider if prompted.
+4. Launch DuoTrack.
+
+To build the APK from source:
+
+```bash
+npm run build
+npx cap sync android
+cd android
+./gradlew assembleDebug
+```
+
+Compiled output is generated at:
+`android/app/build/outputs/apk/debug/app-debug.apk`
+
+### iOS Installation (Safari Standalone PWA)
+
+Apple requires Apple Developer Program membership to sign native `.ipa` files for sideloading. DuoTrack provides full native parity through a standalone Progressive Web App configuration:
+
+1. Open your production URL in **Safari** on iOS.
+2. Tap the **Share** button in the Safari toolbar.
+3. Scroll down the actions sheet and tap **Add to Home Screen**.
+4. Confirm by tapping **Add** in the top right corner.
+5. Launch **DuoTrack** from the home screen. The app operates in standalone mode with full viewport height, system haptics, and zero browser navigation chrome.
+
+---
+
+## Automated CI/CD Pipeline
+
+The repository includes [`.github/workflows/release.yml`](./.github/workflows/release.yml) to automate APK compilation and release publishing.
+
+### Workflow Triggering
+
+* **Tag-based Release**: Push a version tag to trigger an automated build:
+  ```bash
+  git tag v1.0.1
+  git push origin v1.0.1
+  ```
+* **Manual Workflow Dispatch**:
+  1. Navigate to the **Actions** tab in GitHub.
+  2. Select **Build & Publish DuoTrack APK Release**.
+  3. Click **Run workflow**, specify the version tag, and confirm.
+  4. The workflow will compile the project with Java 21, run Gradle build tasks, and upload the signed debug APK directly to GitHub Releases.
+
+---
+
+## API Reference
+
+### `POST /api/user`
+
+Handles account provisioning, habit persistence, and partner pairing.
+
+| Action | Payload Parameters | Description |
+| :--- | :--- | :--- |
+| `create_user` | `username`, `displayName`, `avatar` | Creates a new user profile and generates a unique secret code. |
+| `sync_habits` | `userId`, `habits` (array) | Persists user habits, reminder schedules, streaks, and history. |
+| `delete_habit`| `userId`, `habitId` | Removes a habit and its historical record from the database. |
+| `pair` | `userId`, `partnerCode` | Connects two users into a synchronized accountability pod. |
+| `unpair` | `userId` | Disconnects the pod and returns the user to Solo mode. |
+
+### `POST /api/pod`
+
+Handles live bidirectional habit value updates between paired users.
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `podCode` | `string` | Unique pairing identifier. |
+| `userId` | `string` | ID of the updating participant (`user1` or `user2`). |
+| `habitId` | `string` | Identifier of the modified habit. |
+| `value` | `number \| boolean` | New value to broadcast to the paired client. |
+
+---
+
+## Security and Privacy Policy
+
+* **Zero Password Exposure**: Authentication relies on client-generated secret tokens, preventing credential stuffing and database password leaks.
+* **No Third-Party Analytics**: DuoTrack does not integrate third-party tracking scripts, advertising SDKs, or invasive telemetry.
+* **Local Data Sovereignty**: All user information can be exported as a raw JSON backup or wiped entirely via the in-app Settings panel.
+* **Input Sanitization**: All custom habit inputs and usernames undergo XSS sanitization prior to DOM rendering and database storage.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for full details.

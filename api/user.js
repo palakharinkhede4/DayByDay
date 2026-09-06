@@ -162,15 +162,27 @@ export default async function handler(req, res) {
       try {
         if (sql) {
           for (const h of habits) {
+            const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
             await sql`
-              INSERT INTO duotrack_habits (user_id, habit_id, name, target, unit, icon, category, today_value, completed, updated_at)
-              VALUES (${userId}, ${h.id}, ${h.name}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'}, ${h.todayValue ?? h.user1 ?? 0}, ${Boolean(h.completed)}, CURRENT_TIMESTAMP)
+              INSERT INTO duotrack_habits (
+                user_id, habit_id, name, target, unit, icon, category,
+                today_value, completed, reminder_time, reminder_days, streak, history, updated_at
+              )
+              VALUES (
+                ${userId}, ${h.id}, ${h.name}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
+                ${h.todayValue ?? h.user1 ?? 0}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
+                ${h.streak || 0}, ${JSON.stringify(h.history || {})}::jsonb, CURRENT_TIMESTAMP
+              )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
                 today_value = EXCLUDED.today_value,
                 completed = EXCLUDED.completed,
                 name = EXCLUDED.name,
                 target = EXCLUDED.target,
                 unit = EXCLUDED.unit,
+                reminder_time = EXCLUDED.reminder_time,
+                reminder_days = EXCLUDED.reminder_days,
+                streak = EXCLUDED.streak,
+                history = EXCLUDED.history,
                 updated_at = CURRENT_TIMESTAMP
             `;
           }
@@ -241,6 +253,15 @@ export default async function handler(req, res) {
         await sql`UPDATE duotrack_pairings SET status = 'closed' WHERE user1_id = ${userId} OR user2_id = ${userId}`;
       }
       return res.status(200).json({ success: true, isSolo: true });
+    }
+
+    // ACTION: DELETE HABIT
+    if (action === 'delete_habit') {
+      const { userId, habitId } = req.body;
+      if (sql && userId && habitId) {
+        await sql`DELETE FROM duotrack_habits WHERE user_id = ${userId} AND habit_id = ${habitId}`;
+      }
+      return res.status(200).json({ success: true });
     }
   }
 
