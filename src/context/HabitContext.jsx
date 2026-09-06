@@ -7,6 +7,9 @@ import {
   pushHabitUpdate,
   pushFullSync,
   registerUserRemote,
+  loginUserRemote,
+  getSecurityQuestionRemote,
+  resetPasswordRemote,
   fetchUserRemote,
   syncUserHabitsRemote,
   pairPartnerRemote,
@@ -384,8 +387,8 @@ export const HabitProvider = ({ children }) => {
     return () => clearInterval(reminderTimer);
   }, [habits]);
 
-  // Register New User (Calls Neon DB backend or falls back to local)
-  const registerUser = async (username, displayName = '', avatar = '🌱') => {
+  // Register New User (Calls Neon DB backend with password & recovery security question)
+  const registerUser = async (username, password, displayName = '', avatar = 'star', securityQuestion = '', securityAnswer = '') => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     const cleanDisplay = displayName || cleanUsername;
@@ -402,17 +405,9 @@ export const HabitProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
     };
 
-    try {
-      const res = await registerUserRemote(cleanUsername, cleanDisplay, avatar);
-      if (res && res.user) {
-        newUser = res.user;
-        if (res.habits && res.habits.length) {
-          // Restore user's previous habits
-          setHabits(res.habits);
-        }
-      }
-    } catch {
-      // Local fallback preserves user experience
+    const res = await registerUserRemote(cleanUsername, password, cleanDisplay, avatar, securityQuestion, securityAnswer);
+    if (res && res.user) {
+      newUser = res.user;
     }
 
     setUser(newUser);
@@ -426,11 +421,88 @@ export const HabitProvider = ({ children }) => {
       }
     }));
 
-    // Trigger celebration
     triggerCelebration();
     triggerIslandNotification(`Welcome @${newUser.username}!`, '🎉');
     return newUser;
   };
+
+  // Login Existing User
+  const loginUser = async (username, password) => {
+    sound.complete();
+    const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    const res = await loginUserRemote(cleanUsername, password);
+    if (res && res.user) {
+      setUser(res.user);
+      if (res.habits && res.habits.length) {
+        setHabits(res.habits);
+      }
+      if (res.partner) {
+        setPartner(res.partner);
+      }
+      setPod((prev) => ({
+        ...prev,
+        code: res.podCode || res.user.secretCode,
+        isPaired: Boolean(res.partner),
+        user1: {
+          name: res.user.displayName || res.user.username,
+          email: `${res.user.username}@duotrack.invalid`,
+          initial: (res.user.displayName || res.user.username)[0].toUpperCase(),
+        },
+        user2: res.partner
+          ? {
+              name: res.partner.displayName || res.partner.username,
+              email: `${res.partner.username}@duotrack.invalid`,
+              initial: (res.partner.displayName || res.partner.username)[0].toUpperCase(),
+            }
+          : prev.user2,
+      }));
+      triggerCelebration();
+      triggerIslandNotification(`Welcome back @${res.user.username}!`, '👋');
+      return res;
+    }
+  };
+
+  // Get Security Question for User
+  const getSecurityQuestion = async (username) => {
+    const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    return await getSecurityQuestionRemote(cleanUsername);
+  };
+
+  // Reset Password with Security Answer
+  const resetPassword = async (username, securityAnswer, newPassword) => {
+    sound.complete();
+    const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    const res = await resetPasswordRemote(cleanUsername, securityAnswer, newPassword);
+    triggerIslandNotification('Password reset successfully!', '🔑');
+    return res;
+  };
+
+  // Logout / Switch Account
+  const logoutUser = () => {
+    sound.tap();
+    setUser(null);
+    setPartner(null);
+    setHabits(INITIAL_HABITS);
+    setBeyondGoals(INITIAL_BEYOND);
+    setPod({
+      isPaired: false,
+      code: 'DUO-1000',
+      user1: { name: 'You', email: '', initial: 'Y' },
+      user2: { name: 'Partner', email: '', initial: 'P' },
+      daysTogether: 1,
+      currentStreak: 1,
+      bestStreak: 1,
+      podHealth: 90,
+      healthStatus: 'THRIVING',
+      yesterdayPercent: 85
+    });
+    localStorage.removeItem('duotrack_user');
+    localStorage.removeItem('duotrack_partner');
+    localStorage.removeItem('duotrack_pod');
+    localStorage.removeItem('duotrack_habits');
+    triggerIslandNotification('Logged out', '👤');
+  };
+
 
   // Pair with Partner via Secret Code
   const pairWithPartner = async (partnerSecretCode) => {
@@ -741,6 +813,10 @@ export const HabitProvider = ({ children }) => {
       value={{
         user,
         registerUser,
+        loginUser,
+        getSecurityQuestion,
+        resetPassword,
+        logoutUser,
         partner,
         isSolo,
         pairWithPartner,

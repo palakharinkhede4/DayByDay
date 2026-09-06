@@ -48,10 +48,21 @@ export async function ensureTables() {
         secret_code VARCHAR(16) UNIQUE NOT NULL,
         display_name VARCHAR(64),
         avatar VARCHAR(8) DEFAULT 'star',
+        password_hash VARCHAR(128),
+        salt VARCHAR(32),
+        security_question VARCHAR(128),
+        security_answer_hash VARCHAR(128),
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    // Ensure columns exist on existing databases
+    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(128);`;
+    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);`;
+    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);`;
+    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);`;
+
 
     // 2. Habits table (Compact JSONB historical map: 1 row per habit, keeping table <= 500 rows for 50 users)
     await sql`

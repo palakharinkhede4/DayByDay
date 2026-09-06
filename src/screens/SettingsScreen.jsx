@@ -25,6 +25,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     setServerUrl,
     syncStatus,
     syncWithCloud,
+    logoutUser,
   } = useHabits();
 
   const [copiedCode, setCopiedCode] = useState(false);
@@ -104,10 +105,15 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           </span>
         </div>
         {user && (
-          <button className="copy-secret-chip" onClick={handleCopyCode}>
-            <span>🔑 {user.secretCode}</span>
-            <span className="chip-copy-txt">{copiedCode ? 'Copied! ✓' : 'Copy'}</span>
-          </button>
+          <div className="profile-actions-row">
+            <button className="copy-secret-chip" onClick={handleCopyCode}>
+              <span>Code: {user.secretCode}</span>
+              <span className="chip-copy-txt">{copiedCode ? 'Copied! ✓' : 'Copy'}</span>
+            </button>
+            <button className="signout-profile-btn" onClick={logoutUser} title="Sign Out / Switch Account">
+              Sign Out
+            </button>
+          </div>
         )}
       </div>
 

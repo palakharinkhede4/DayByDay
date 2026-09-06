@@ -98,27 +98,96 @@ export const pushFullSync = async (podCode, userId, podInfo, habits) => {
 };
 
 // USER ACCOUNTS & PAIRING APIs
-export const registerUserRemote = async (username, displayName, avatar) => {
+export const registerUserRemote = async (username, password, displayName, avatar, securityQuestion, securityAnswer) => {
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'create_user',
+        action: 'register',
         username,
+        password,
         displayName,
         avatar,
+        securityQuestion,
+        securityAnswer,
       }),
     });
+    const data = await res.json();
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to register');
+      throw new Error(data.error || 'Failed to register');
     }
-    return await res.json();
+    return data;
   } catch (err) {
-    console.warn('User register fallback to local:', err.message);
-    return null;
+    console.warn('User register network fallback:', err.message);
+    throw err;
+  }
+};
+
+export const loginUserRemote = async (username, password) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'login',
+        username,
+        password,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid username or password');
+    }
+    return data;
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const getSecurityQuestionRemote = async (username) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_security_question',
+        username,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'User not found');
+    }
+    return data;
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const resetPasswordRemote = async (username, securityAnswer, newPassword) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'reset_password',
+        username,
+        securityAnswer,
+        newPassword,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to reset password');
+    }
+    return data;
+  } catch (err) {
+    throw err;
   }
 };
 

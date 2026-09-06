@@ -266,11 +266,14 @@ The repository includes [`.github/workflows/release.yml`](./.github/workflows/re
 
 ### `POST /api/user`
 
-Handles account provisioning, habit persistence, and partner pairing.
+Handles account provisioning, authentication, password recovery, habit persistence, and partner pairing.
 
 | Action | Payload Parameters | Description |
 | :--- | :--- | :--- |
-| `create_user` | `username`, `displayName`, `avatar` | Creates a new user profile and generates a unique secret code. |
+| `register` | `username`, `password`, `displayName`, `securityQuestion`, `securityAnswer` | Registers a new account with PBKDF2-salted password hashing and a recovery question. |
+| `login` | `username`, `password` | Authenticates existing users and returns habit progress and pod status. |
+| `get_security_question` | `username` | Retrieves the security question associated with an account for password recovery. |
+| `reset_password` | `username`, `securityAnswer`, `newPassword` | Verifies the recovery answer and updates the account password. |
 | `sync_habits` | `userId`, `habits` (array) | Persists user habits, reminder schedules, streaks, and history. |
 | `delete_habit`| `userId`, `habitId` | Removes a habit and its historical record from the database. |
 | `pair` | `userId`, `partnerCode` | Connects two users into a synchronized accountability pod. |
@@ -291,10 +294,12 @@ Handles live bidirectional habit value updates between paired users.
 
 ## Security and Privacy Policy
 
-* **Zero Password Exposure**: Authentication relies on client-generated secret tokens, preventing credential stuffing and database password leaks.
-* **No Third-Party Analytics**: DuoTrack does not integrate third-party tracking scripts, advertising SDKs, or invasive telemetry.
-* **Local Data Sovereignty**: All user information can be exported as a raw JSON backup or wiped entirely via the in-app Settings panel.
-* **Input Sanitization**: All custom habit inputs and usernames undergo XSS sanitization prior to DOM rendering and database storage.
+* **Salted Password Hashing**: Passwords are never stored in plaintext. DuoTrack uses cryptographic PBKDF2 with SHA-256 and unique 16-byte random salts per user to resist rainbow table and brute-force attacks.
+* **Security Question Account Recovery**: Forgotten passwords can be reset via personal security questions without relying on third-party email brokers or SMS gateways. Answers are case-insensitively hashed and salted.
+* **Account Impersonation Prevention**: Usernames are strictly guarded; duplicate registrations are rejected, and only authenticated users can access or modify their habit records.
+* **Data Sanitization**: All custom habit inputs, unit names, and profile information undergo XSS sanitization prior to database storage and DOM rendering.
+* **No Third-Party Telemetry**: DuoTrack includes zero tracking beacons, advertising libraries, or invasive analytic SDKs.
+* **Local Data Sovereignty**: Users retain complete control over their data, with one-click full JSON backup export and local data wipe capabilities.
 
 ---
 

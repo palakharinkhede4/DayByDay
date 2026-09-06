@@ -1,5 +1,21 @@
-// Vercel Serverless Function: User Accounts, Solo Habits & Partner Pairing
+// Vercel Serverless Function: User Accounts, Authentication, Security Questions & Partner Pairing
+import crypto from 'crypto';
 import { getDb, ensureTables, memoryDb } from './db.js';
+
+function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(String(password), String(salt), 1000, 32, 'sha256').toString('hex');
+}
+
+function hashSecurityAnswer(answer, salt) {
+  const clean = (answer || '').toLowerCase().trim();
+  return crypto.pbkdf2Sync(clean, String(salt), 1000, 32, 'sha256').toString('hex');
+}
+
+function sanitizeUser(u) {
+  if (!u) return null;
+  const { password_hash, salt, security_answer_hash, ...safe } = u;
+  return safe;
+}
 
 function generateSecretCode(username) {
   const prefix = (username || 'DUO').slice(0, 3).toUpperCase();
@@ -20,7 +36,7 @@ export default async function handler(req, res) {
   await ensureTables();
   const sql = getDb();
 
-  // 1. GET USER PROFILE & HABITS
+  // 1. GET: FETCH USER PROFILE & HABITS
   if (req.method === 'GET') {
     const { username, code } = req.query;
 
@@ -67,12 +83,12 @@ export default async function handler(req, res) {
           const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM duotrack_users WHERE id = ${partnerId}`;
           const partnerHabits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
-            partner = { ...partnerRows[0], habits: partnerHabits };
+            partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits };
           }
         }
 
         return res.status(200).json({
-          user,
+          user: sanitizeUser(user),
           habits,
           partner,
           podCode,
@@ -89,7 +105,7 @@ export default async function handler(req, res) {
 
       const habits = memoryDb.getUserHabits(user.id);
       return res.status(200).json({
-        user,
+        user: sanitizeUser(user),
         habits,
         partner: null,
         podCode: null,
@@ -100,53 +116,265 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. POST: CREATE USER, SYNC HABITS, PAIR/UNPAIR
+  // 2. POST: AUTHENTICATION, HABIT SYNC, PAIRING & RECOVERY
   if (req.method === 'POST') {
     const { action } = req.body || {};
 
-    // ACTION: CREATE USER
-    if (action === 'create_user') {
+    // ACTION: REGISTER / CREATE USER
+    if (action === 'register' || action === 'create_user') {
       const rawUsername = (req.body.username || '').trim().replace(/^@/, '');
+      const password = req.body.password;
+      const securityQuestion = (req.body.securityQuestion || '').trim();
+      const securityAnswer = (req.body.securityAnswer || '').trim();
+
       if (!rawUsername || rawUsername.length < 2) {
         return res.status(400).json({ error: 'Username must be at least 2 characters' });
+      }
+      if (!password || String(password).length < 4) {
+        return res.status(400).json({ error: 'Password must be at least 4 characters' });
+      }
+      if (!securityQuestion || !securityAnswer) {
+        return res.status(400).json({ error: 'Security question and answer are required for password recovery' });
       }
 
       const cleanUsername = rawUsername.toLowerCase();
       const displayName = req.body.displayName || rawUsername;
       const secretCode = generateSecretCode(cleanUsername);
       const userId = `usr_${cleanUsername}_${Date.now().toString(36)}`;
-      const avatar = req.body.avatar || '🌱';
+      const avatar = req.body.avatar || 'star';
+
+      const salt = crypto.randomBytes(16).toString('hex');
+      const passwordHash = hashPassword(password, salt);
+      const answerHash = hashSecurityAnswer(securityAnswer, salt);
 
       try {
         if (sql) {
           // Check if username taken
           const existing = await sql`SELECT id FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
           if (existing.length > 0) {
-            // Return existing user
-            const u = existing[0];
-            const habits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${u.id}`;
-            return res.status(200).json({ user: u, habits, isExisting: true });
+            return res.status(409).json({ error: 'Username is already taken. Please choose another username or sign in.' });
           }
 
           const created = await sql`
-            INSERT INTO duotrack_users (id, username, secret_code, display_name, avatar)
-            VALUES (${userId}, ${cleanUsername}, ${secretCode}, ${displayName}, ${avatar})
+            INSERT INTO duotrack_users (
+              id, username, secret_code, display_name, avatar,
+              password_hash, salt, security_question, security_answer_hash
+            )
+            VALUES (
+              ${userId}, ${cleanUsername}, ${secretCode}, ${displayName}, ${avatar},
+              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}
+            )
             RETURNING *
           `;
-          return res.status(201).json({ user: created[0], isExisting: false });
+          return res.status(201).json({ user: sanitizeUser(created[0]) });
         }
 
         // Memory Store Fallback
+        if (memoryDb.getUser(cleanUsername)) {
+          return res.status(409).json({ error: 'Username is already taken. Please choose another username or sign in.' });
+        }
+
         const user = {
           id: userId,
           username: cleanUsername,
           secretCode,
           displayName,
           avatar,
+          password_hash: passwordHash,
+          salt,
+          security_question: securityQuestion,
+          security_answer_hash: answerHash,
           createdAt: new Date().toISOString()
         };
         memoryDb.saveUser(user);
-        return res.status(201).json({ user, isExisting: false });
+        return res.status(201).json({ user: sanitizeUser(user) });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: LOGIN / SIGN IN
+    if (action === 'login') {
+      const rawUsername = (req.body.username || '').trim().replace(/^@/, '');
+      const password = req.body.password;
+
+      if (!rawUsername || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+      }
+
+      const cleanUsername = rawUsername.toLowerCase();
+
+      try {
+        if (sql) {
+          const rows = await sql`SELECT * FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          if (rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+          }
+
+          const user = rows[0];
+
+          // Verify password
+          if (user.password_hash) {
+            const expectedHash = hashPassword(password, user.salt || '');
+            if (expectedHash !== user.password_hash) {
+              return res.status(401).json({ error: 'Invalid username or password' });
+            }
+          }
+
+          // Fetch habits
+          const habits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${user.id} ORDER BY id ASC`;
+
+          // Check pairing
+          const pairings = await sql`
+            SELECT p.*, 
+              u1.username as u1_name, u1.secret_code as u1_code,
+              u2.username as u2_name, u2.secret_code as u2_code
+            FROM duotrack_pairings p
+            JOIN duotrack_users u1 ON p.user1_id = u1.id
+            JOIN duotrack_users u2 ON p.user2_id = u2.id
+            WHERE (p.user1_id = ${user.id} OR p.user2_id = ${user.id}) AND p.status = 'active'
+            LIMIT 1
+          `;
+
+          let partner = null;
+          let podCode = null;
+          if (pairings.length > 0) {
+            const pair = pairings[0];
+            podCode = pair.pod_code;
+            const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
+            const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM duotrack_users WHERE id = ${partnerId}`;
+            const partnerHabits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${partnerId}`;
+            if (partnerRows.length > 0) {
+              partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits };
+            }
+          }
+
+          return res.status(200).json({
+            user: sanitizeUser(user),
+            habits,
+            partner,
+            podCode,
+            isSolo: !partner
+          });
+        }
+
+        // Memory Store Fallback
+        const user = memoryDb.getUser(cleanUsername);
+        if (!user) {
+          return res.status(401).json({ error: 'Invalid username or password' });
+        }
+        if (user.password_hash) {
+          const expectedHash = hashPassword(password, user.salt || '');
+          if (expectedHash !== user.password_hash) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+          }
+        }
+        const habits = memoryDb.getUserHabits(user.id);
+        return res.status(200).json({
+          user: sanitizeUser(user),
+          habits,
+          partner: null,
+          podCode: null,
+          isSolo: true
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: GET SECURITY QUESTION FOR PASSWORD RECOVERY
+    if (action === 'get_security_question') {
+      const rawUsername = (req.body.username || '').trim().replace(/^@/, '');
+      if (!rawUsername) {
+        return res.status(400).json({ error: 'Username is required' });
+      }
+
+      const cleanUsername = rawUsername.toLowerCase();
+
+      try {
+        if (sql) {
+          const rows = await sql`SELECT username, security_question FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          if (rows.length === 0) {
+            return res.status(404).json({ error: 'No account found with this username' });
+          }
+          const user = rows[0];
+          if (!user.security_question) {
+            return res.status(400).json({ error: 'No security question set for this account' });
+          }
+          return res.status(200).json({
+            username: user.username,
+            securityQuestion: user.security_question
+          });
+        }
+
+        const user = memoryDb.getUser(cleanUsername);
+        if (!user) return res.status(404).json({ error: 'No account found with this username' });
+        if (!user.security_question) return res.status(400).json({ error: 'No security question set for this account' });
+        return res.status(200).json({ username: user.username, securityQuestion: user.security_question });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: RESET PASSWORD VIA SECURITY ANSWER
+    if (action === 'reset_password') {
+      const rawUsername = (req.body.username || '').trim().replace(/^@/, '');
+      const securityAnswer = (req.body.securityAnswer || '').trim();
+      const newPassword = req.body.newPassword;
+
+      if (!rawUsername || !securityAnswer || !newPassword) {
+        return res.status(400).json({ error: 'Username, security answer, and new password are required' });
+      }
+      if (String(newPassword).length < 4) {
+        return res.status(400).json({ error: 'New password must be at least 4 characters' });
+      }
+
+      const cleanUsername = rawUsername.toLowerCase();
+
+      try {
+        if (sql) {
+          const rows = await sql`SELECT * FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          if (rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+          }
+          const user = rows[0];
+          if (!user.security_answer_hash) {
+            return res.status(400).json({ error: 'No security question configured for this account' });
+          }
+
+          const expectedAnswerHash = hashSecurityAnswer(securityAnswer, user.salt || '');
+          if (expectedAnswerHash !== user.security_answer_hash) {
+            return res.status(401).json({ error: 'Incorrect answer to security question' });
+          }
+
+          // Generate new salt and new hashes
+          const newSalt = crypto.randomBytes(16).toString('hex');
+          const newPasswordHash = hashPassword(newPassword, newSalt);
+          const newAnswerHash = hashSecurityAnswer(securityAnswer, newSalt);
+
+          await sql`
+            UPDATE duotrack_users
+            SET password_hash = ${newPasswordHash}, salt = ${newSalt}, security_answer_hash = ${newAnswerHash}
+            WHERE id = ${user.id}
+          `;
+
+          return res.status(200).json({ success: true, message: 'Password reset successfully' });
+        }
+
+        const user = memoryDb.getUser(cleanUsername);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const expectedAnswerHash = hashSecurityAnswer(securityAnswer, user.salt || '');
+        if (expectedAnswerHash !== user.security_answer_hash) {
+          return res.status(401).json({ error: 'Incorrect answer to security question' });
+        }
+
+        const newSalt = crypto.randomBytes(16).toString('hex');
+        user.salt = newSalt;
+        user.password_hash = hashPassword(newPassword, newSalt);
+        user.security_answer_hash = hashSecurityAnswer(securityAnswer, newSalt);
+        memoryDb.saveUser(user);
+
+        return res.status(200).json({ success: true, message: 'Password reset successfully' });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
@@ -231,7 +459,7 @@ export default async function handler(req, res) {
           return res.status(200).json({
             success: true,
             podCode,
-            partner: { ...partner, habits: partnerHabits }
+            partner: { ...sanitizeUser(partner), habits: partnerHabits }
           });
         }
 
@@ -240,7 +468,7 @@ export default async function handler(req, res) {
         if (!partner) return res.status(404).json({ error: 'Partner not found' });
         const podCode = `POD_${Date.now().toString(36).toUpperCase()}`;
         memoryDb.savePairing({ user1_id: userId, user2_id: partner.id, podCode, status: 'active' });
-        return res.status(200).json({ success: true, podCode, partner });
+        return res.status(200).json({ success: true, podCode, partner: sanitizeUser(partner) });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
