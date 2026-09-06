@@ -35,7 +35,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install NPM Dependencies
@@ -69,19 +69,21 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "DuoTrack ${{ env.RELEASE_TAG }} (Android APK)"
           body: |
-            ## 🔥 DuoTrack Release ${{ env.RELEASE_TAG }}
+            ## DuoTrack Release ${{ env.RELEASE_TAG }}
             
-            ### What's New:
-            * Real User Identity & Secret Code accountability sharing.
-            * Responsive desktop web app + native edge-to-edge mobile app.
-            * Neon PostgreSQL cloud sync support.
-            * Light, Dark, and Auto system theme modes.
-            * 5 Symmetrical widgets for Android & iOS.
+            ### Included in this build:
+            * Real user identity and secret code accountability pairing.
+            * Scheduled habit notifications and active day selection.
+            * Consecutive streak tracking and JSONB history preservation.
+            * Responsive desktop web layout and native edge-to-edge mobile app.
+            * Neon PostgreSQL cloud storage optimization.
+            * Light, Dark, and Auto system appearance modes.
+            * Symmetrical widget suite for Android and iOS.
             
-            ### 📱 Android Installation:
-            1. Download `DuoTrack-${{ env.RELEASE_TAG }}.apk` below.
-            2. Install and launch on your phone.
-            3. Enjoy real-time habit tracking!
+            ### Android Installation:
+            1. Download `DuoTrack-${{ env.RELEASE_TAG }}.apk` attached below.
+            2. Open the APK on your Android device to install.
+            3. Launch DuoTrack and configure your profile.
           files: |
             DuoTrack-*.apk
           draft: false
