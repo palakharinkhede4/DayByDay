@@ -16,6 +16,12 @@ import {
   unpairPartnerRemote,
   deleteHabitRemote,
 } from '../utils/api';
+import {
+  initPersistentStorage,
+  persistSessionSnapshot,
+  recoverSessionFromVault,
+  clearVaultSession,
+} from '../utils/storageVault';
 
 const HabitContext = createContext(null);
 
@@ -161,11 +167,22 @@ export const HabitProvider = ({ children }) => {
 
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('duotrack_user');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { }
-    }
+    try {
+      const saved = localStorage.getItem('duotrack_user');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) { }
     return null; // Triggers OnboardingModal if null
+  });
+
+  // Flag to avoid modal flicker while querying IndexedDB Vault if localStorage was cleared
+  const [isSessionRestoring, setIsSessionRestoring] = useState(() => {
+    try {
+      return !localStorage.getItem('duotrack_user');
+    } catch {
+      return false;
+    }
   });
 
   // 2. Partner & Solo State
@@ -249,7 +266,7 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Sync to DOM attributes and localStorage
+  // Sync to DOM attributes
   useEffect(() => {
     localStorage.setItem('duotrack_os', osMode);
     document.documentElement.setAttribute('data-os', osMode);
@@ -265,32 +282,84 @@ export const HabitProvider = ({ children }) => {
   }, [themeColor]);
 
   useEffect(() => {
-    localStorage.setItem('duotrack_habits', JSON.stringify(habits));
-  }, [habits]);
-
-  useEffect(() => {
-    localStorage.setItem('duotrack_pod', JSON.stringify(pod));
-  }, [pod]);
-
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('duotrack_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('duotrack_user');
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (partner) {
-      localStorage.setItem('duotrack_partner', JSON.stringify(partner));
-    } else {
-      localStorage.removeItem('duotrack_partner');
-    }
-  }, [partner]);
-
-  useEffect(() => {
     localStorage.setItem('duotrack_beyond', JSON.stringify(beyondGoals));
   }, [beyondGoals]);
+
+  // Persistent Storage Vault initialization (iOS Safari ITP protection & Android WebView recovery)
+  useEffect(() => {
+    initPersistentStorage();
+
+    const checkVaultSession = async () => {
+      try {
+        if (!user) {
+          const recovered = await recoverSessionFromVault();
+          if (recovered && recovered.user) {
+            setUser(recovered.user);
+            if (recovered.partner) setPartner(recovered.partner);
+            if (recovered.habits && recovered.habits.length) setHabits(recovered.habits);
+            if (recovered.pod) setPod(recovered.pod);
+          }
+        } else {
+          // If user already loaded from localStorage, ensure IndexedDB vault is in sync
+          persistSessionSnapshot(user, partner, habits, pod);
+        }
+      } catch (err) {
+        console.warn('Vault recovery check notice:', err);
+      } finally {
+        setIsSessionRestoring(false);
+      }
+    };
+
+    checkVaultSession();
+  }, []);
+
+  // Dual-layer session snapshot sync: whenever session state changes, mirror to both localStorage and IndexedDB Vault
+  useEffect(() => {
+    if (user) {
+      persistSessionSnapshot(user, partner, habits, pod);
+    }
+  }, [user, partner, habits, pod]);
+
+  // Multi-tab real-time session and habits synchronization
+  useEffect(() => {
+    const handleStorageEvent = (e) => {
+      if (!e.key) return;
+      try {
+        if (e.key === 'duotrack_user') {
+          if (e.newValue) {
+            setUser(JSON.parse(e.newValue));
+          } else {
+            // Sign out initiated in another tab
+            setUser(null);
+            setPartner(null);
+            setHabits(INITIAL_HABITS);
+            setBeyondGoals(INITIAL_BEYOND);
+          }
+        } else if (e.key === 'duotrack_partner') {
+          setPartner(e.newValue ? JSON.parse(e.newValue) : null);
+        } else if (e.key === 'duotrack_habits') {
+          if (e.newValue) setHabits(JSON.parse(e.newValue));
+        } else if (e.key === 'duotrack_pod') {
+          if (e.newValue) setPod(JSON.parse(e.newValue));
+        } else if (e.key === 'duotrack_theme_mode') {
+          if (e.newValue) {
+            setThemeModeState(e.newValue);
+            document.documentElement.setAttribute('data-theme-mode', e.newValue);
+          }
+        } else if (e.key === 'duotrack_theme') {
+          if (e.newValue) {
+            setThemeColor(e.newValue);
+            document.documentElement.setAttribute('data-theme', e.newValue);
+          }
+        }
+      } catch (err) {
+        console.warn('Multi-tab sync notice:', err);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageEvent);
+    return () => window.removeEventListener('storage', handleStorageEvent);
+  }, []);
 
   // LIVE CLOUD SYNCHRONIZATION: Poll remote Vercel API every 4 seconds when paired
   useEffect(() => {
@@ -477,8 +546,8 @@ export const HabitProvider = ({ children }) => {
     return res;
   };
 
-  // Logout / Switch Account
-  const logoutUser = () => {
+  // Logout / Switch Account: EXPLICIT user sign-out clears localStorage and IndexedDB Vault
+  const logoutUser = async () => {
     sound.tap();
     setUser(null);
     setPartner(null);
@@ -496,10 +565,7 @@ export const HabitProvider = ({ children }) => {
       healthStatus: 'THRIVING',
       yesterdayPercent: 85
     });
-    localStorage.removeItem('duotrack_user');
-    localStorage.removeItem('duotrack_partner');
-    localStorage.removeItem('duotrack_pod');
-    localStorage.removeItem('duotrack_habits');
+    await clearVaultSession();
     triggerIslandNotification('Logged out', '👤');
   };
 
@@ -761,13 +827,14 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Wipe data and reset to fresh state
-  const resetAllData = () => {
+  const resetAllData = async () => {
     sound.tap();
     wipeLocalData();
     setUser(null);
     setPartner(null);
     setHabits(INITIAL_HABITS);
     setBeyondGoals(INITIAL_BEYOND);
+    await clearVaultSession();
   };
 
   // Celebrate with confetti
@@ -812,6 +879,7 @@ export const HabitProvider = ({ children }) => {
     <HabitContext.Provider
       value={{
         user,
+        isSessionRestoring,
         registerUser,
         loginUser,
         getSecurityQuestion,

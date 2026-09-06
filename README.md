@@ -299,10 +299,23 @@ Handles live bidirectional habit value updates between paired users.
 * **Account Impersonation Prevention**: Usernames are strictly guarded; duplicate registrations are rejected, and only authenticated users can access or modify their habit records.
 * **Data Sanitization**: All custom habit inputs, unit names, and profile information undergo XSS sanitization prior to database storage and DOM rendering.
 * **No Third-Party Telemetry**: DuoTrack includes zero tracking beacons, advertising libraries, or invasive analytic SDKs.
-* **Local Data Sovereignty**: Users retain complete control over their data, with one-click full JSON backup export and local data wipe capabilities.
+---
+
+## Persistent Session Architecture and Durability
+
+DuoTrack implements a multi-layer storage vault architecture to guarantee that user sessions remain continuously active across devices until an explicit user logout is executed:
+
+* **Dual-Layer Persistence Engine**: Active sessions are written simultaneously to both `localStorage` and an IndexedDB database (`duotrack_vault`).
+* **iOS Safari ITP and Cache Flush Protection**: Mobile Safari applies Intelligent Tracking Prevention (ITP) and purges `localStorage` on unused sites after seven days. DuoTrack requests permanent storage rights via `navigator.storage.persist()`. If `localStorage` is cleared by the operating system, DuoTrack automatically recovers the user session, habits, and paired pod state from IndexedDB upon launch, re-seeding `localStorage` with zero interruption.
+* **Standalone iOS PWA Support**: In standalone Add-to-Home-Screen display mode, session snapshots survive app closures and background termination.
+* **Android Native App Lifecycle**: On Android native builds, the Capacitor WebView SQLite data layer maintains persistent storage through application restarts, background task memory collection, and system reboots.
+* **Offline-First Resilience**: DuoTrack never terminates or resets an active session due to network dropouts or backend latency. Users can access, check off, and review their habits without internet access.
+* **Multi-Tab State Synchronization**: When running across multiple tabs or browser windows, storage event listeners immediately synchronize authentication state, habit progress, and theme settings in real time.
+* **Explicit Session Termination**: Sessions and vault entries are permanently expunged only when the user explicitly triggers "Sign Out" or "Wipe Data".
 
 ---
 
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for full details.
+

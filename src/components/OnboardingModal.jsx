@@ -12,7 +12,7 @@ const PRESET_SECURITY_QUESTIONS = [
 ];
 
 export const OnboardingModal = () => {
-  const { user, registerUser, loginUser, getSecurityQuestion, resetPassword, pairWithPartner } = useHabits();
+  const { user, isSessionRestoring, registerUser, loginUser, getSecurityQuestion, resetPassword, pairWithPartner } = useHabits();
 
   // Mode: 'login' | 'register' | 'forgot'
   const [mode, setMode] = useState('login');
@@ -39,8 +39,8 @@ export const OnboardingModal = () => {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // If user is already authenticated, do not show modal
-  if (user && user.username) return null;
+  // If session is restoring from IndexedDB Vault, or user is already authenticated, do not show modal
+  if (isSessionRestoring || (user && user.username)) return null;
 
   const handleLogin = async (e) => {
     e.preventDefault();
