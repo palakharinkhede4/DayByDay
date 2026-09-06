@@ -55,41 +55,43 @@ jobs:
           ./gradlew assembleRelease --no-daemon
           cd ..
 
-      - name: Extract Version & Prepare Versioned Artifact
+      - name: Extract Version & Check If New Release Needed
         id: versioning
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "APP_VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "APP_TAG=v${VERSION}" >> $GITHUB_OUTPUT
-          
+
           # Standard single release artifact
           cp android/app/build/outputs/apk/release/app-release.apk "DayByDay-v${VERSION}.apk"
 
+          # Check if this version tag already exists on GitHub
+          if git ls-remote --tags origin | grep -q "refs/tags/v${VERSION}$"; then
+            echo "TAG_EXISTS=true" >> $GITHUB_OUTPUT
+            echo "Version v${VERSION} tag already exists — skipping release publish."
+          else
+            echo "TAG_EXISTS=false" >> $GITHUB_OUTPUT
+            echo "New version v${VERSION} detected — will publish release."
+          fi
+
       - name: Generate Release Changelog
+        if: steps.versioning.outputs.TAG_EXISTS == 'false'
         run: |
           VERSION="${{ steps.versioning.outputs.APP_VERSION }}"
-          echo "## DayByDay v${VERSION} Release" > release_body.md
+          echo "## DayByDay v${VERSION}" > release_body.md
           echo "" >> release_body.md
-          echo "### Highlights in this Build:" >> release_body.md
-          echo "* **Executive Dark Sapphire Blue Palette**: App and launcher icon upgraded with dark sapphire and glowing 24k gold trophy." >> release_body.md
-          echo "* **Interactive Progress Bar Touch Scrubbing**: Directly tap or drag along progress bars to instantly set workout minutes, steps, or reading." >> release_body.md
-          echo "* **Intuitive Long-Press Drag & Drop Reordering**: Cleanly reorder habits by holding and dragging cards." >> release_body.md
-          echo "* **Group Pod Persistence Fix**: Group pods are now securely preserved in the dual-layer IndexedDB vault across app updates." >> release_body.md
-          echo "* **Delete Custom Habit Categories**: Easily delete custom categories with automatic habit migration." >> release_body.md
-          echo "* **Avatar Action Sheet Modal**: Tapping profile avatar gives options to upload/change photo, remove photo, or cancel." >> release_body.md
-          echo "* **Responsive Track A Friend**: Fixed mobile layout to ensure buttons remain perfectly within card bounds." >> release_body.md
-          echo "* **Enhanced Hardware Haptics & Audio**: Integrated Capacitor Haptics and calibrated Web Audio synthesis." >> release_body.md
-          echo "* **Smooth Habit Loading**: Progress bars and completion rings smoothly animate into view." >> release_body.md
-          echo "" >> release_body.md
-          echo "### Recent Commits:" >> release_body.md
-          git log -n 12 --pretty=format:"* %s (%h)" >> release_body.md
+          echo "### What's New:" >> release_body.md
+          git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD \
+            --pretty=format:"* %s (%h)" >> release_body.md || \
+            git log -n 15 --pretty=format:"* %s (%h)" >> release_body.md
           echo "" >> release_body.md
           echo "" >> release_body.md
           echo "### Android Installation:" >> release_body.md
           echo "1. Download \`DayByDay-v${VERSION}.apk\` below." >> release_body.md
-          echo "2. Install over your existing app (in-place update certificate preserved; user data maintained)." >> release_body.md
+          echo "2. Install over your existing app — all user data is preserved." >> release_body.md
 
-      - name: Publish Standardized GitHub Release
+      - name: Publish GitHub Release
+        if: steps.versioning.outputs.TAG_EXISTS == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.versioning.outputs.APP_TAG }}
@@ -101,3 +103,15 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Summary
+        run: |
+          VERSION="${{ steps.versioning.outputs.APP_VERSION }}"
+          TAG_EXISTS="${{ steps.versioning.outputs.TAG_EXISTS }}"
+          echo "### Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${VERSION}" >> $GITHUB_STEP_SUMMARY
+          if [ "$TAG_EXISTS" = "false" ]; then
+            echo "**Release:** Published DayByDay-v${VERSION}.apk to GitHub Releases" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Release:** Skipped — v${VERSION} already released. Run \`.\scripts\release.ps1\` to bump version and publish a new release." >> $GITHUB_STEP_SUMMARY
+          fi
