@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { sound } from '../utils/sound';
 import {
   Copy,
   Check,
@@ -43,6 +44,7 @@ export const TrackScreen = () => {
   const myCode = user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000';
 
   const handleCopy = async () => {
+    sound.press();
     try {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(myCode);
@@ -56,6 +58,7 @@ export const TrackScreen = () => {
   };
 
   const handleShare = async () => {
+    sound.press();
     try {
       if (navigator.share) {
         await navigator.share({
@@ -79,11 +82,13 @@ export const TrackScreen = () => {
 
     try {
       await trackPartnerByCode(inputCode.trim());
+      sound.complete();
       setInputCode('');
       setShowAddForm(false);
       triggerCelebration();
       triggerIslandNotification('Friend added to your tracking list!', 'check');
     } catch (err) {
+      sound.warning();
       setError(err.message || 'Could not find user with this code');
     } finally {
       setLoading(false);
@@ -92,6 +97,7 @@ export const TrackScreen = () => {
 
   const handleSendCheer = (customMessage) => {
     if (!trackedPartner) return;
+    sound.complete();
     const partnerCode = trackedPartner.secretCode || trackedPartner.secret_code || trackedPartner.username;
     const msg = customMessage || 'Keep crushing your goals! 🔥';
     sendCheer(partnerCode, msg);
@@ -164,7 +170,10 @@ export const TrackScreen = () => {
                 <button
                   key={code}
                   className={`partner-chip-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => selectTrackedPartner(code)}
+                  onClick={() => {
+                    sound.selection();
+                    selectTrackedPartner(code);
+                  }}
                 >
                   <div className="chip-avatar">
                     {partner.profilePicture ? (

@@ -167,6 +167,10 @@ class SoundEngine {
     try {
       if (type === 'success') {
         await Haptics.notification({ type: NotificationType.Success }).catch(() => {});
+      } else if (type === 'warning') {
+        await Haptics.notification({ type: NotificationType.Warning }).catch(() => {});
+      } else if (type === 'heavy') {
+        await Haptics.impact({ style: ImpactStyle.Heavy }).catch(() => {});
       } else if (type === 'medium') {
         await Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
       } else {
@@ -180,6 +184,78 @@ class SoundEngine {
         } catch {}
       }
     }
+  }
+
+  // Play synthetic tone with frequency sweep and exponential volume decay
+  playTone({ type = 'sine', startFreq = 500, endFreq = 200, duration = 0.04, gainVal = 0.08 }) {
+    if (!this.enabled) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(startFreq, now);
+      if (endFreq && endFreq !== startFreq) {
+        osc.frequency.exponentialRampToValueAtTime(Math.max(10, endFreq), now + duration);
+      }
+
+      gain.gain.setValueAtTime(gainVal, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + duration);
+
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
+    } catch {
+      // Audio fallback
+    }
+  }
+
+  // Micro-tick for tab switching or segmented filters (Vibration + Crisp Sound)
+  selection() {
+    this.triggerHaptic('light', 18);
+    this.playTone({ type: 'sine', startFreq: 750, endFreq: 400, duration: 0.025, gainVal: 0.05 });
+  }
+
+  // Snappy responsive click for + and - steppers (Vibration + Bubble Tap Sound)
+  step() {
+    this.triggerHaptic('light', 24);
+    this.playTone({ type: 'sine', startFreq: 640, endFreq: 180, duration: 0.038, gainVal: 0.09 });
+  }
+
+  // Button press or modal confirm (Vibration + Solid Click Sound)
+  press() {
+    this.triggerHaptic('medium', 32);
+    this.playTone({ type: 'sine', startFreq: 500, endFreq: 140, duration: 0.045, gainVal: 0.1 });
+  }
+
+  // Drag start trigger on long-press or handle grab (Heavy Vibration + Pick-up Pop Sound)
+  dragStart() {
+    this.triggerHaptic('heavy', 45);
+    this.playTone({ type: 'triangle', startFreq: 320, endFreq: 680, duration: 0.05, gainVal: 0.12 });
+  }
+
+  // Micro-haptic tick when dragging over reorder slots (Micro Vibration + Sub-tick Sound)
+  dragOver() {
+    this.triggerHaptic('light', 12);
+    this.playTone({ type: 'sine', startFreq: 880, endFreq: 600, duration: 0.015, gainVal: 0.03 });
+  }
+
+  // Warning or deletion haptic (Warning Vibration + Alert Buzz Tone)
+  warning() {
+    this.triggerHaptic('warning', [40, 50, 40]);
+    this.playTone({ type: 'sawtooth', startFreq: 280, endFreq: 160, duration: 0.08, gainVal: 0.07 });
   }
 
   vibrate(pattern = 35) {

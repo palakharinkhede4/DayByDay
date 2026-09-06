@@ -65,6 +65,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     updateHabit,
     removeGoal,
     reorderHabit,
+    reorderHabitToIndex,
     customCategories = ['Daily', 'Health', 'Fitness', 'Mind', 'Work'],
     addCustomCategory,
     deleteCustomCategory,
@@ -92,6 +93,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   const handleCreateCategory = (e) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
+    sound.press();
     if (addCustomCategory) {
       addCustomCategory(newCatName.trim());
     }
@@ -102,6 +104,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
 
   const handleDeleteCategory = (e, cat) => {
     e.stopPropagation();
+    sound.press();
     if (deleteCustomCategory) {
       deleteCustomCategory(cat);
     }
@@ -131,36 +134,71 @@ export const HabitCards = ({ onOpenAddGoal }) => {
 
   const completedCount = useMemo(() => {
     return habits.filter((h) => {
+      if (!h) return false;
       if (typeof h.user1 === 'boolean') return h.user1;
-      return (h.user1 || 0) >= h.target;
+      return (Number(h.user1) || 0) >= (Number(h.target) || 1);
     }).length;
   }, [habits]);
 
   const [longPressCat, setLongPressCat] = useState(null);
   const catLongPressTimerRef = useRef(null);
 
-  // Auto-scroll when dragging near top or bottom edges of viewport
+  // Continuous RAF-driven auto-scroll loop for desktop mouse & mobile touch
   useEffect(() => {
     if (!draggedHabitId) return;
 
-    const handleWindowDragOver = (e) => {
-      const scrollThreshold = 120;
-      const scrollSpeed = 18;
-      if (e.clientY < scrollThreshold) {
-        window.scrollBy({ top: -scrollSpeed, behavior: 'auto' });
-      } else if (e.clientY > window.innerHeight - scrollThreshold) {
-        window.scrollBy({ top: scrollSpeed, behavior: 'auto' });
+    let rafId = null;
+    let currentPointerY = null;
+
+    const onPointerMove = (e) => {
+      if (e.touches && e.touches.length > 0) {
+        currentPointerY = e.touches[0].clientY;
+      } else if (e.clientY !== undefined) {
+        currentPointerY = e.clientY;
       }
     };
 
-    window.addEventListener('dragover', handleWindowDragOver);
-    return () => window.removeEventListener('dragover', handleWindowDragOver);
+    const scrollThreshold = 120;
+    const maxSpeed = 22;
+
+    const loop = () => {
+      if (currentPointerY !== null) {
+        if (currentPointerY < scrollThreshold) {
+          const intensity = Math.min(1, (scrollThreshold - currentPointerY) / scrollThreshold);
+          const speed = Math.max(4, Math.round(intensity * maxSpeed));
+          window.scrollBy(0, -speed);
+          if (document.scrollingElement) {
+            document.scrollingElement.scrollTop -= speed;
+          }
+        } else if (currentPointerY > window.innerHeight - scrollThreshold) {
+          const intensity = Math.min(1, (currentPointerY - (window.innerHeight - scrollThreshold)) / scrollThreshold);
+          const speed = Math.max(4, Math.round(intensity * maxSpeed));
+          window.scrollBy(0, speed);
+          if (document.scrollingElement) {
+            document.scrollingElement.scrollTop += speed;
+          }
+        }
+      }
+      rafId = requestAnimationFrame(loop);
+    };
+
+    window.addEventListener('dragover', onPointerMove, { passive: true });
+    window.addEventListener('mousemove', onPointerMove, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+    rafId = requestAnimationFrame(loop);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('dragover', onPointerMove);
+      window.removeEventListener('mousemove', onPointerMove);
+      window.removeEventListener('touchmove', onPointerMove);
+    };
   }, [draggedHabitId]);
 
   const handleCatTouchStart = (cat) => {
     catLongPressTimerRef.current = setTimeout(() => {
       setLongPressCat(cat);
-      sound.vibrate(35);
+      sound.press();
     }, 450);
   };
 
@@ -170,27 +208,33 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     }
   };
 
-  // Drag-and-drop reorder handlers
+  // Drag-and-drop reorder handlers with synchronized dual-haptics
   const handleDragStart = (habitId) => {
     setDraggedHabitId(habitId);
-    sound.tap();
+    sound.dragStart();
   };
 
   const handleDragEnter = (targetIdx) => {
-    setDragOverIndex(targetIdx);
+    if (dragOverIndex !== targetIdx) {
+      setDragOverIndex(targetIdx);
+      sound.dragOver();
+    }
   };
 
   const handleDrop = (targetIdx) => {
     if (!draggedHabitId) return;
     const sourceIdx = habits.findIndex((h) => h.id === draggedHabitId);
-    if (sourceIdx !== -1 && sourceIdx !== targetIdx && reorderHabit) {
-      // Reorder based on direction
-      const diff = targetIdx - sourceIdx;
-      const direction = diff > 0 ? 'down' : 'up';
-      for (let i = 0; i < Math.abs(diff); i++) {
-        reorderHabit(draggedHabitId, direction);
+    if (sourceIdx !== -1 && sourceIdx !== targetIdx) {
+      if (reorderHabitToIndex) {
+        reorderHabitToIndex(draggedHabitId, targetIdx);
+      } else if (reorderHabit) {
+        const diff = targetIdx - sourceIdx;
+        const direction = diff > 0 ? 'down' : 'up';
+        for (let i = 0; i < Math.abs(diff); i++) {
+          reorderHabit(draggedHabitId, direction);
+        }
       }
-      sound.tap();
+      sound.step();
     }
     setDraggedHabitId(null);
     setDragOverIndex(null);
@@ -228,6 +272,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
                   type="button"
                   className={`category-chip ${selectedCategory === cat ? 'active' : ''}`}
                   onClick={() => {
+                    sound.selection();
                     setSelectedCategory(cat);
                     setLongPressCat(null);
                   }}
@@ -377,12 +422,12 @@ const ModernHabitCard = ({
   const longPressTimerRef = useRef(null);
 
   const handleToggleBool = () => {
-    sound.tap();
+    sound.step();
     onUpdate(habit.id, activeUserId, !isDone, true);
   };
 
   const handleStep = (amount) => {
-    sound.tap();
+    sound.step();
     const next = Math.max(0, val + amount);
     onUpdate(habit.id, activeUserId, next, true);
   };
@@ -402,7 +447,7 @@ const ModernHabitCard = ({
   const handleCardTouchStart = () => {
     longPressTimerRef.current = setTimeout(() => {
       setIsLongPressing(true);
-      sound.vibrate(35);
+      sound.dragStart();
     }, 380);
   };
 
@@ -418,6 +463,7 @@ const ModernHabitCard = ({
       className={`modern-habit-card ${isDone ? 'completed-card' : ''} ${
         isLongPressing || isDragging ? 'is-reordering' : ''
       } ${isDragOver ? 'drag-over' : ''}`}
+      data-index={index}
       draggable
       onDragStart={onDragStart}
       onDragEnter={onDragEnter}
@@ -429,15 +475,38 @@ const ModernHabitCard = ({
       onTouchCancel={handleCardTouchEnd}
     >
       <div className="habit-card-top">
-        {/* Long-press drag handle grip */}
-        <div className="habit-drag-handle" title="Hold and drag to reorder">
+        {/* Long-press or touch drag handle grip */}
+        <div
+          className="habit-drag-handle"
+          title="Hold and drag to reorder"
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            onDragStart();
+          }}
+          onTouchMove={(e) => {
+            e.stopPropagation();
+            const touch = e.touches[0];
+            const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+            const card = elem?.closest('.modern-habit-card');
+            if (card && card.dataset.index !== undefined) {
+              onDragEnter(Number(card.dataset.index));
+            }
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            onDrop();
+          }}
+        >
           <GripVertical size={16} className="text-slate-500" />
         </div>
 
         {/* Tappable Habit Info Area */}
         <div
           className="habit-card-info clickable-card-info"
-          onClick={onOpenEdit}
+          onClick={() => {
+            sound.press();
+            onOpenEdit();
+          }}
           title="Tap to edit habit, reminders, or delete"
         >
           <div className="habit-icon-box">
@@ -473,7 +542,10 @@ const ModernHabitCard = ({
         <div className="habit-actions-right">
           <button
             className="habit-options-btn"
-            onClick={onOpenEdit}
+            onClick={() => {
+              sound.press();
+              onOpenEdit();
+            }}
             title="Edit habit settings"
             aria-label="Edit habit settings"
           >

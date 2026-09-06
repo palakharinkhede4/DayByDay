@@ -13,8 +13,20 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(AppInstallerPlugin.class);
         super.onCreate(savedInstanceState);
+        cleanupCachedApk();
         requestNotificationPermission();
+    }
+
+    private void cleanupCachedApk() {
+        try {
+            java.io.File cacheDir = getCacheDir();
+            java.io.File apkFile = new java.io.File(cacheDir, "update.apk");
+            if (apkFile.exists()) {
+                apkFile.delete();
+            }
+        } catch (Exception ignored) {}
     }
 
     private void requestNotificationPermission() {

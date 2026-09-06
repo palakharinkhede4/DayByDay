@@ -1,5 +1,6 @@
 import React from 'react';
 import { useHabits } from '../context/HabitContext';
+import { sound } from '../utils/sound';
 import {
   CheckCircle2,
   Eye,
@@ -48,7 +49,10 @@ export const BottomNavBar = ({ activeTab, onTabChange }) => {
             <button
               key={tab.id}
               className={`nav-tab-btn ${isActive ? 'active' : ''}`}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => {
+                sound.selection();
+                onTabChange(tab.id);
+              }}
               aria-selected={isActive}
             >
               {osMode === 'android' ? (

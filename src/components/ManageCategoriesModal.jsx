@@ -23,13 +23,13 @@ export const ManageCategoriesModal = ({ isOpen, onClose }) => {
   const handleAdd = (e) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
-    sound.tap();
+    sound.complete();
     addCustomCategory(newCatName.trim());
     setNewCatName('');
   };
 
   const handleConfirmDelete = (cat) => {
-    sound.tap();
+    sound.warning();
     deleteCustomCategory(cat);
     setCatToDelete(null);
   };
@@ -51,7 +51,10 @@ export const ManageCategoriesModal = ({ isOpen, onClose }) => {
           <button
             type="button"
             className="manage-cat-close-btn"
-            onClick={onClose}
+            onClick={() => {
+              sound.press();
+              onClose();
+            }}
             aria-label="Close"
           >
             <X size={18} />

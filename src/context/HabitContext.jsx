@@ -1266,6 +1266,22 @@ export const HabitProvider = ({ children }) => {
     });
   };
 
+  // Reorder habit directly to target index (atomic drag-and-drop)
+  const reorderHabitToIndex = (habitId, targetIdx) => {
+    sound.press();
+    setHabits((prev) => {
+      const fromIdx = prev.findIndex((h) => h.id === habitId);
+      if (fromIdx === -1 || targetIdx < 0 || targetIdx >= prev.length || fromIdx === targetIdx) {
+        return prev;
+      }
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIdx, 1);
+      copy.splice(targetIdx, 0, moved);
+      localStorage.setItem('daybyday_habits', JSON.stringify(copy));
+      return copy;
+    });
+  };
+
   // Track Partner by Secret Code (Multi-Partner support up to 5 friends)
   const selectTrackedPartner = (code) => {
     sound.tap();
@@ -1594,7 +1610,18 @@ export const HabitProvider = ({ children }) => {
       };
     }
 
-    const currentMemberId = activeUserId || user?.id || 'usr_me';
+    const currentMemberId = user?.id || user?.username || 'usr_me';
+    const initProg = {
+      value: 0,
+      completed: false,
+      updatedAt: new Date().toISOString(),
+    };
+    const initialMemberProgress = {
+      [currentMemberId]: initProg,
+    };
+    if (user?.id) initialMemberProgress[user.id] = initProg;
+    if (user?.username) initialMemberProgress[user.username] = initProg;
+
     const newGoal = {
       id: goalObj.id || `sg_${Date.now().toString(36)}`,
       name: (goalObj.name || 'Shared Goal').trim(),
@@ -1605,13 +1632,7 @@ export const HabitProvider = ({ children }) => {
       delta: Math.max(1, Number(goalObj.delta) || 1),
       createdBy: currentMemberId,
       current: 0,
-      memberProgress: {
-        [currentMemberId]: {
-          value: 0,
-          completed: false,
-          updatedAt: new Date().toISOString(),
-        },
-      },
+      memberProgress: initialMemberProgress,
       createdAt: new Date().toISOString(),
     };
 
@@ -1633,33 +1654,46 @@ export const HabitProvider = ({ children }) => {
     }
 
     triggerCelebration();
+    sound.complete();
     triggerIslandNotification('Shared goal added to pod!', 'target');
   };
 
   const updateSharedGoalProgress = async (goalId, delta, explicitValue) => {
-    sound.tap();
     if (!groupPod) return;
 
-    const currentMemberId = activeUserId || user?.id || 'usr_me';
+    const myKey = user?.id || user?.username || 'usr_me';
     let newCompletedState = false;
 
     const updatedGoals = (groupPod.sharedGoals || []).map((g) => {
       if (g.id === goalId) {
         const memberProgress = { ...(g.memberProgress || {}) };
-        const memberData = memberProgress[currentMemberId] || { value: 0, completed: false };
+        const prevEntry = memberProgress[myKey] ??
+                          (user?.id ? memberProgress[user.id] : undefined) ??
+                          (user?.username ? memberProgress[user.username] : undefined) ??
+                          memberProgress['user1'] ??
+                          { value: 0, completed: false };
+
+        const currentVal = typeof prevEntry === 'object'
+          ? (Number(prevEntry.value) || 0)
+          : (Number(prevEntry) || 0);
+
         let nextVal = explicitValue !== undefined
           ? Math.max(0, Number(explicitValue))
-          : Math.max(0, (Number(memberData.value) || 0) + (Number(delta) || 0));
+          : Math.max(0, currentVal + (Number(delta) || 0));
 
         newCompletedState = nextVal >= (Number(g.target) || 1);
-        memberProgress[currentMemberId] = {
+        const updatedEntry = {
           value: nextVal,
           completed: newCompletedState,
           updatedAt: new Date().toISOString(),
         };
 
+        memberProgress[myKey] = updatedEntry;
+        if (user?.id) memberProgress[user.id] = updatedEntry;
+        if (user?.username) memberProgress[user.username] = updatedEntry;
+
         const totalSum = Object.values(memberProgress).reduce(
-          (acc, m) => acc + (Number(m.value) || 0),
+          (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
           0
         );
 
@@ -1679,6 +1713,8 @@ export const HabitProvider = ({ children }) => {
     if (newCompletedState) {
       sound.complete();
       triggerCelebration();
+    } else {
+      sound.step();
     }
 
     if (groupPod.code) {
@@ -1686,15 +1722,55 @@ export const HabitProvider = ({ children }) => {
         groupPod.code,
         goalId,
         delta,
-        currentMemberId,
+        myKey,
         explicitValue,
         newCompletedState
       ).catch(() => {});
     }
   };
 
+  const editSharedGoal = async (goalId, updates) => {
+    sound.press();
+    if (!groupPod) return;
+
+    const updatedGoals = (groupPod.sharedGoals || []).map((g) => {
+      if (g.id === goalId) {
+        return {
+          ...g,
+          name: updates.name ? updates.name.trim() : g.name,
+          target: updates.target ? Math.max(1, Number(updates.target) || 1) : g.target,
+          unit: updates.unit ? updates.unit.trim() : g.unit,
+          delta: updates.delta ? Math.max(1, Number(updates.delta) || 1) : g.delta,
+          category: updates.category || g.category,
+        };
+      }
+      return g;
+    });
+
+    const updatedPod = { ...groupPod, sharedGoals: updatedGoals };
+    setGroupPod(updatedPod);
+    localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedPod));
+
+    if (groupPod.code) {
+      try {
+        const baseUrl = getApiBaseUrl();
+        await fetch(`${baseUrl}/api/user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'edit_group_goal',
+            podCode: groupPod.code,
+            goalId,
+            updates,
+          }),
+        });
+      } catch {}
+    }
+    triggerIslandNotification('Pod goal updated', 'check');
+  };
+
   const deleteSharedGoal = async (goalId) => {
-    sound.tap();
+    sound.warning();
     if (!groupPod) return;
     const filtered = (groupPod.sharedGoals || []).filter((g) => g.id !== goalId);
     const updatedPod = { ...groupPod, sharedGoals: filtered };
@@ -2253,6 +2329,7 @@ export const HabitProvider = ({ children }) => {
         importData,
         resetAllData,
         reorderHabit,
+        reorderHabitToIndex,
         customCategories,
         addCustomCategory,
         deleteCustomCategory,
@@ -2270,6 +2347,7 @@ export const HabitProvider = ({ children }) => {
         joinGroupPod,
         leaveGroupPod,
         addSharedGoal,
+        editSharedGoal,
         updateSharedGoalProgress,
         deleteSharedGoal,
         serverUrl,

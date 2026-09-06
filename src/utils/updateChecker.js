@@ -3,7 +3,7 @@
  * Queries GitHub Releases API to detect newer builds and provides direct APK download links.
  */
 
-export const CURRENT_APP_VERSION = '1.13.0';
+export const CURRENT_APP_VERSION = '1.13.1';
 export const RELEASES_PAGE_URL = 'https://github.com/palakharinkhede4/DayByDay/releases';
 export const DIRECT_APK_URL = 'https://github.com/palakharinkhede4/DayByDay/releases/latest';
 const RELEASES_API_URL = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest';
@@ -62,6 +62,24 @@ export const openExternalUrl = (url) => {
   } catch {
     window.open(url, '_blank');
   }
+};
+
+/**
+ * Direct in-app installer for native Android or fallback to browser download
+ */
+export const installApkDirectly = async (url) => {
+  const targetUrl = url || DIRECT_APK_URL;
+  try {
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.AppInstaller) {
+      const res = await window.Capacitor.Plugins.AppInstaller.installApk({ url: targetUrl });
+      return { success: true, native: true, res };
+    }
+  } catch (err) {
+    console.warn('Native installer error or permission needed:', err);
+    // Fallback to open external
+  }
+  openExternalUrl(targetUrl);
+  return { success: true, native: false };
 };
 
 /**
@@ -148,6 +166,17 @@ export const checkForAppUpdate = async () => {
       updateAvailable = false;
     }
 
+    let finalDownloadUrl = downloadUrl;
+    try {
+      const cdnRes = await fetch('/api/user?action=resolve_latest_apk');
+      if (cdnRes.ok) {
+        const cdnData = await cdnRes.json();
+        if (cdnData.directApkUrl) {
+          finalDownloadUrl = cdnData.directApkUrl;
+        }
+      }
+    } catch {}
+
     return {
       success: true,
       currentVersion,
@@ -157,7 +186,8 @@ export const checkForAppUpdate = async () => {
       publishedAt,
       formattedDate,
       releasePageUrl: data.html_url || RELEASES_PAGE_URL,
-      directApkUrl: downloadUrl,
+      directApkUrl: finalDownloadUrl,
+      rawGithubUrl: downloadUrl,
       apkSize: sizeFormatted,
       changelog: data.body || 'No release notes provided.',
     };

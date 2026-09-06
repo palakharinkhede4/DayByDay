@@ -1166,6 +1166,108 @@ export default async function handler(req, res) {
       }
     }
 
+    // ACTION: EDIT GROUP SHARED GOAL (title, target, unit, delta, category)
+    if (action === 'edit_group_goal') {
+      const { podCode, goalId, updates } = req.body;
+      const cleanCode = (podCode || '').trim().toUpperCase();
+      if (!cleanCode || !goalId || !updates) {
+        return res.status(400).json({ error: 'Pod code, goal ID and updates required' });
+      }
+
+      try {
+        let pod = null;
+        if (sql) {
+          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (rows.length > 0) {
+            const r = rows[0];
+            pod = {
+              id: r.id,
+              name: r.name,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+              createdAt: r.created_at,
+              maxMembers: 10,
+            };
+          }
+        } else {
+          pod = memoryDb.getGroupPod(cleanCode);
+        }
+
+        if (!pod) return res.status(404).json({ error: 'Pod not found' });
+
+        const updatedGoals = (pod.sharedGoals || []).map((g) => {
+          if (g.id === goalId) {
+            return {
+              ...g,
+              name: updates.name ? updates.name.trim() : g.name,
+              target: updates.target ? Math.max(1, Number(updates.target) || 1) : g.target,
+              unit: updates.unit ? updates.unit.trim() : g.unit,
+              delta: updates.delta ? Math.max(1, Number(updates.delta) || 1) : g.delta,
+              category: updates.category || g.category,
+            };
+          }
+          return g;
+        });
+
+        pod.sharedGoals = updatedGoals;
+        if (sql) {
+          await sql`
+            UPDATE daybyday_group_pods 
+            SET shared_goals = ${JSON.stringify(updatedGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            WHERE UPPER(code) = ${cleanCode}
+          `;
+        }
+        memoryDb.saveGroupPod(pod);
+
+        return res.status(200).json({ success: true, pod });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: RESOLVE DIRECT RAW APK RELEASE ASSET (Bypasses GitHub 302 redirect for instant Chrome downloads)
+    if (action === 'resolve_latest_apk') {
+      try {
+        const ghRes = await fetch('https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest', {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'DayByDay-App'
+          }
+        });
+        if (!ghRes.ok) throw new Error('GitHub API unavailable');
+        const ghData = await ghRes.json();
+        const apkAsset = Array.isArray(ghData.assets)
+          ? ghData.assets.find((a) => a.name && (a.name.endsWith('.apk') || a.name === 'DayByDay.apk'))
+          : null;
+        if (!apkAsset || !apkAsset.browser_download_url) {
+          return res.status(404).json({ error: 'No APK found in release' });
+        }
+
+        // Perform HEAD request with redirect: manual to capture the signed CDN URL
+        let directCdnUrl = apkAsset.browser_download_url;
+        try {
+          const headRes = await fetch(apkAsset.browser_download_url, {
+            method: 'HEAD',
+            redirect: 'manual',
+            headers: { 'User-Agent': 'DayByDay-App' }
+          });
+          const loc = headRes.headers.get('location');
+          if (loc) directCdnUrl = loc;
+        } catch {}
+
+        return res.status(200).json({
+          success: true,
+          directCdnUrl,
+          tagName: ghData.tag_name,
+          apkName: apkAsset.name,
+          apkSize: apkAsset.size,
+        });
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to resolve APK: ' + err.message });
+      }
+    }
+
     // ACTION: SEND CHEER / ENCOURAGEMENT (Real cross-user delivery)
     if (action === 'send_cheer') {
       const { toUserId, fromUserId, fromUsername, fromName, fromAvatar, podCode, message } = req.body;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { sound } from '../utils/sound';
 import {
   X,
   Bell,
@@ -56,6 +57,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
   }, []);
 
   const handleToggleDay = (dayKey) => {
+    sound.selection();
     setReminderDays((prev) =>
       prev.includes(dayKey)
         ? prev.filter((d) => d !== dayKey)
@@ -65,6 +67,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
 
   const handleSave = (e) => {
     e?.preventDefault();
+    sound.complete();
 
     const numericTarget = Math.max(1, Number(target) || 1);
 
@@ -82,6 +85,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
   };
 
   const handleDelete = () => {
+    sound.warning();
     removeGoal(habit.id);
     onClose();
   };

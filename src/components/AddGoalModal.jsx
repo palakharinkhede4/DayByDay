@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { sound } from '../utils/sound';
 import {
   Sparkles,
   Dumbbell,
@@ -84,6 +85,7 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const toggleDay = (dayKey) => {
+    sound.selection();
     if (reminderDays.includes(dayKey)) {
       if (reminderDays.length > 1) {
         setReminderDays(reminderDays.filter((d) => d !== dayKey));
@@ -94,12 +96,14 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
   };
 
   const selectDayPreset = (type) => {
+    sound.selection();
     if (type === 'all') setReminderDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
     else if (type === 'weekdays') setReminderDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
     else if (type === 'weekends') setReminderDays(['Sat', 'Sun']);
   };
 
   const handleAddPreset = async (preset) => {
+    sound.complete();
     addGoal({
       id: `${preset.id}_${Date.now().toString(36)}`,
       name: preset.name,
@@ -120,6 +124,8 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
   const handleCreateCustom = async (e) => {
     e.preventDefault();
     if (!customName.trim()) return;
+
+    sound.complete();
 
     if (enableReminder) {
       await requestNotificationPermission();
@@ -161,7 +167,14 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
             <h2 className="modal-title font-extrabold">Add New Habit</h2>
             <p className="modal-subtitle">Track personal consistency or collaborate with friends</p>
           </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close">
+          <button
+            className="modal-close-btn"
+            onClick={() => {
+              sound.press();
+              onClose();
+            }}
+            aria-label="Close"
+          >
             <X size={18} />
           </button>
         </div>
@@ -171,14 +184,20 @@ export const AddGoalModal = ({ isOpen, onClose }) => {
           <button
             type="button"
             className={`tab-btn ${tab === 'preset' ? 'active' : ''}`}
-            onClick={() => setTab('preset')}
+            onClick={() => {
+              sound.selection();
+              setTab('preset');
+            }}
           >
             Popular Presets
           </button>
           <button
             type="button"
             className={`tab-btn ${tab === 'custom' ? 'active' : ''}`}
-            onClick={() => setTab('custom')}
+            onClick={() => {
+              sound.selection();
+              setTab('custom');
+            }}
           >
             Custom Habit & Reminders
           </button>

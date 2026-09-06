@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Sparkles, Download, ExternalLink, X, CheckCircle2, RefreshCw, Copy, Check, Info } from 'lucide-react';
-import { openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL } from '../utils/updateChecker';
+import { Sparkles, Download, ExternalLink, X, CheckCircle2, RefreshCw, Copy, Check, Info, Loader2 } from 'lucide-react';
+import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL } from '../utils/updateChecker';
 import { sound } from '../utils/sound';
 
 export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false }) => {
@@ -8,10 +8,11 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
 
   const isUpdate = updateInfo?.updateAvailable;
   const [copied, setCopied] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
 
   const handleCopyLink = async () => {
-    sound.tap();
-    const url = updateInfo?.directApkUrl || DIRECT_APK_URL;
+    sound.press();
+    const url = updateInfo?.directApkUrl || updateInfo?.rawGithubUrl || DIRECT_APK_URL;
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(url);
@@ -30,6 +31,17 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
       setTimeout(() => setCopied(false), 2500);
     } catch {
       // Non-blocking fallback
+    }
+  };
+
+  const handleInstall = async () => {
+    sound.complete();
+    setIsInstalling(true);
+    try {
+      const url = updateInfo?.directApkUrl || DIRECT_APK_URL;
+      await installApkDirectly(url);
+    } finally {
+      setIsInstalling(false);
     }
   };
 
@@ -59,7 +71,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
               ? 'Connecting to GitHub Releases to check for the latest DayByDay build...'
               : isUpdate
               ? `A new version (${updateInfo?.releaseTag || 'Latest'}) of DayByDay is ready for you.`
-              : `You are on the latest build (${updateInfo?.currentVersion || 'v1.12.0'}).`}
+              : `You are on the latest build (${updateInfo?.currentVersion || 'v1.13.0'}).`}
           </p>
         </div>
 
@@ -98,10 +110,10 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
           <div className="update-tip-box">
             <div className="update-tip-header">
               <Info size={15} className="update-tip-icon" />
-              <span className="update-tip-title">Mobile Chrome Download Tip</span>
+              <span className="update-tip-title">Direct Download & In-App Update</span>
             </div>
             <p className="update-tip-text">
-              If Chrome pauses the download or says <em>"File might be harmful"</em>, pull down your notification tray and tap <strong>"Download anyway"</strong>. Or tap <strong>Copy Direct Link</strong> below and download smoothly in Brave or Firefox.
+              Direct high-speed CDN download is enabled. If Android prompts to allow unknown apps, enable DayByDay in settings and return to complete installation seamlessly.
             </p>
           </div>
         )}
@@ -112,18 +124,15 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
             <button
               type="button"
               className="update-action-btn primary font-bold"
-              onClick={() => {
-                sound.complete();
-                openExternalUrl(updateInfo?.directApkUrl || DIRECT_APK_URL);
-                onClose();
-              }}
+              disabled={isInstalling}
+              onClick={handleInstall}
             >
-              <Download size={18} />
-              <span>Download & Install APK</span>
+              {isInstalling ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+              <span>{isInstalling ? 'Starting Installation...' : 'Download & Install APK'}</span>
             </button>
           )}
 
-          {isUpdate && (
+          {!isChecking && (
             <button
               type="button"
               className="update-action-btn secondary font-medium"
@@ -138,7 +147,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
             type="button"
             className="update-action-btn secondary font-medium"
             onClick={() => {
-              sound.tap();
+              sound.press();
               openExternalUrl(updateInfo?.releasePageUrl || RELEASES_PAGE_URL);
               onClose();
             }}
@@ -151,7 +160,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
             type="button"
             className="update-action-btn close font-medium"
             onClick={() => {
-              sound.tap();
+              sound.press();
               onClose();
             }}
           >

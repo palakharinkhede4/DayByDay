@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { sound } from '../utils/sound';
 import {
   Users,
   Plus,
@@ -17,7 +18,179 @@ import {
   Minus,
   X,
   Sparkles,
+  SlidersHorizontal,
 } from 'lucide-react';
+const POD_GOAL_PRESETS = [
+  { name: '10,000 Steps', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
+  { name: 'Daily Hydration', category: 'Health', target: 8, unit: 'glasses', delta: 1 },
+  { name: 'Group Workout', category: 'Fitness', target: 30, unit: 'min', delta: 5 },
+  { name: 'Book Reading', category: 'Mind', target: 20, unit: 'pages', delta: 5 },
+  { name: 'Deep Work', category: 'Productivity', target: 60, unit: 'min', delta: 15 },
+  { name: 'Mindfulness', category: 'Mind', target: 10, unit: 'min', delta: 5 },
+];
+
+const getMemberProgressVal = (memberProgressMap, m) => {
+  if (!memberProgressMap || !m) return 0;
+  const raw = memberProgressMap[m.id] ??
+              (m.username ? memberProgressMap[m.username] : undefined) ??
+              (m.secretCode ? memberProgressMap[m.secretCode] : undefined) ??
+              (m.secret_code ? memberProgressMap[m.secret_code] : undefined) ??
+              memberProgressMap['user1'];
+  if (raw === undefined || raw === null) return 0;
+  if (typeof raw === 'object') return Number(raw.value) || 0;
+  return Number(raw) || 0;
+};
+
+const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
+  const [name, setName] = useState(goal.name || '');
+  const [category, setCategory] = useState(goal.category || 'Daily');
+  const [target, setTarget] = useState(goal.target || 1);
+  const [unit, setUnit] = useState(goal.unit || 'times');
+  const [delta, setDelta] = useState(goal.delta || 1);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    sound.press();
+    onSave(goal.id, {
+      name: name.trim() || goal.name,
+      category,
+      target: Math.max(1, Number(target) || 1),
+      unit: unit.trim() || goal.unit,
+      delta: Math.max(1, Number(delta) || 1),
+    });
+    onClose();
+  };
+
+  return (
+    <div className="habit-modal-backdrop" onClick={onClose}>
+      <div className="habit-modal-card" onClick={(e) => e.stopPropagation()} role="dialog">
+        <div className="habit-modal-header">
+          <div className="habit-modal-title-group">
+            <h2 className="habit-modal-title font-extrabold">Pod Goal Settings</h2>
+            <p className="habit-modal-subtitle">Update target, units, or step increments for all pod members.</p>
+          </div>
+          <button className="habit-modal-close-btn" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="habit-modal-form">
+          <div className="modal-field-group">
+            <label className="modal-field-label">Goal Name</label>
+            <input
+              type="text"
+              className="modal-text-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="modal-field-group">
+            <label className="modal-field-label">Category</label>
+            <select
+              className="modal-select-input"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="Fitness">Fitness</option>
+              <option value="Health">Health</option>
+              <option value="Mind">Mind</option>
+              <option value="Productivity">Productivity</option>
+              <option value="Daily">Daily</option>
+            </select>
+          </div>
+
+          <div className="modal-two-col-grid">
+            <div className="modal-field-group">
+              <label className="modal-field-label">Target per Person</label>
+              <input
+                type="number"
+                min="1"
+                className="modal-text-input"
+                value={target}
+                onChange={(e) => setTarget(Number(e.target.value))}
+                required
+              />
+            </div>
+
+            <div className="modal-field-group">
+              <label className="modal-field-label">Unit</label>
+              <input
+                type="text"
+                className="modal-text-input"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="modal-field-group">
+            <label className="modal-field-label">Step Increment (+ / -)</label>
+            <input
+              type="number"
+              min="1"
+              className="modal-text-input"
+              value={delta}
+              onChange={(e) => setDelta(Number(e.target.value))}
+              required
+            />
+          </div>
+
+          <div className="modal-actions-footer">
+            {showDeleteConfirm ? (
+              <div className="modal-delete-confirm-row">
+                <span className="confirm-delete-warning font-bold text-rose-400 text-xs">
+                  Remove this goal for all pod members?
+                </span>
+                <div className="confirm-btns-wrap">
+                  <button
+                    type="button"
+                    className="confirm-cancel-sm-btn"
+                    onClick={() => setShowDeleteConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="confirm-delete-sm-btn"
+                    onClick={() => {
+                      onDelete(goal.id);
+                      onClose();
+                    }}
+                  >
+                    Yes, Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="modal-btns-standard-row">
+                <button
+                  type="button"
+                  className="modal-delete-btn"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 size={16} />
+                  <span>Delete Goal</span>
+                </button>
+                <div className="modal-right-btns">
+                  <button type="button" className="modal-cancel-btn" onClick={onClose}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="modal-save-btn">
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 export const TogetherScreen = () => {
   const {
@@ -27,6 +200,7 @@ export const TogetherScreen = () => {
     joinGroupPod,
     leaveGroupPod,
     addSharedGoal,
+    editSharedGoal,
     updateSharedGoalProgress,
     deleteSharedGoal,
     sendCheer,
@@ -39,6 +213,7 @@ export const TogetherScreen = () => {
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(null);
   
   // Shared Goal Modal Form State
   const [goalName, setGoalName] = useState('');
@@ -280,6 +455,30 @@ export const TogetherScreen = () => {
                   </button>
                 </div>
 
+                {/* Quick Presets Row */}
+                <div className="pod-presets-row">
+                  <span className="preset-label font-bold text-xs text-slate-400">Presets:</span>
+                  <div className="preset-chips-scroll">
+                    {POD_GOAL_PRESETS.map((p) => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        className="pod-preset-pill"
+                        onClick={() => {
+                          sound.selection();
+                          setGoalName(p.name);
+                          setGoalCategory(p.category);
+                          setGoalTarget(p.target);
+                          setGoalUnit(p.unit);
+                          setGoalDelta(p.delta);
+                        }}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="shared-goal-fields-grid">
                   <div className="shared-field">
                     <label className="field-lbl">Goal Name</label>
@@ -372,7 +571,7 @@ export const TogetherScreen = () => {
                 // Calculate completed count
                 let completedCount = 0;
                 members.forEach((m) => {
-                  const mVal = Number(memberProgressMap[m.id]) || 0;
+                  const mVal = getMemberProgressVal(memberProgressMap, m);
                   if (mVal >= target) {
                     completedCount += 1;
                   }
@@ -407,11 +606,25 @@ export const TogetherScreen = () => {
                         </div>
 
                         <button
+                          className="edit-shared-goal-btn"
+                          onClick={() => {
+                            sound.selection();
+                            setEditingGoal(sg);
+                          }}
+                          title="Edit goal settings"
+                        >
+                          <SlidersHorizontal size={14} />
+                        </button>
+
+                        <button
                           className="delete-shared-goal-btn"
-                          onClick={() => deleteSharedGoal(sg.id)}
+                          onClick={() => {
+                            sound.warning();
+                            deleteSharedGoal(sg.id);
+                          }}
                           title="Delete this shared goal"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -424,8 +637,9 @@ export const TogetherScreen = () => {
 
                       {members.map((m) => {
                         const mId = m.id;
-                        const isMe = user?.id && String(user.id) === String(mId);
-                        const mVal = Number(memberProgressMap[mId]) || 0;
+                        const isMe = (user?.id && String(user.id) === String(mId)) ||
+                                     (user?.username && m.username && String(user.username).toLowerCase() === String(m.username).toLowerCase());
+                        const mVal = getMemberProgressVal(memberProgressMap, m);
                         const isDone = mVal >= target;
                         const pct = Math.min(100, Math.round((mVal / target) * 100));
 
@@ -484,23 +698,49 @@ export const TogetherScreen = () => {
                               )}
 
                               {isMe && (
-                                <div className="member-steppers-group">
+                                <div className="member-actions-combo">
+                                  {/* 1-tap completion check button */}
                                   <button
-                                    className="member-step-btn minus"
-                                    onClick={() => updateSharedGoalProgress(sg.id, -deltaAmount)}
-                                    disabled={mVal <= 0}
-                                    title={`Subtract ${deltaAmount} ${sg.unit}`}
+                                    className={`member-check-toggle-btn ${isDone ? 'checked' : ''}`}
+                                    onClick={() => {
+                                      if (isDone) {
+                                        sound.step();
+                                        updateSharedGoalProgress(sg.id, 0, 0);
+                                      } else {
+                                        sound.complete();
+                                        updateSharedGoalProgress(sg.id, 0, target);
+                                      }
+                                    }}
+                                    title={isDone ? 'Mark Incomplete' : 'Mark Complete'}
                                   >
-                                    <Minus size={12} />
+                                    <Check size={13} strokeWidth={2.8} />
                                   </button>
-                                  <button
-                                    className="member-step-btn plus font-bold"
-                                    onClick={() => updateSharedGoalProgress(sg.id, deltaAmount)}
-                                    title={`Add ${deltaAmount} ${sg.unit}`}
-                                  >
-                                    <Plus size={12} />
-                                    <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
-                                  </button>
+
+                                  {/* Steppers */}
+                                  <div className="member-steppers-group">
+                                    <button
+                                      className="member-step-btn minus"
+                                      onClick={() => {
+                                        sound.step();
+                                        updateSharedGoalProgress(sg.id, -deltaAmount);
+                                      }}
+                                      disabled={mVal <= 0}
+                                      title={`Subtract ${deltaAmount} ${sg.unit}`}
+                                    >
+                                      <Minus size={12} />
+                                    </button>
+                                    <button
+                                      className="member-step-btn plus font-bold"
+                                      onClick={() => {
+                                        sound.step();
+                                        updateSharedGoalProgress(sg.id, deltaAmount);
+                                      }}
+                                      title={`Add ${deltaAmount} ${sg.unit}`}
+                                    >
+                                      <Plus size={12} />
+                                      <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
+                                    </button>
+                                  </div>
                                 </div>
                               )}
 
@@ -623,6 +863,16 @@ export const TogetherScreen = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Shared Goal Settings Modal */}
+      {editingGoal && (
+        <EditSharedGoalModal
+          goal={editingGoal}
+          onClose={() => setEditingGoal(null)}
+          onSave={editSharedGoal}
+          onDelete={deleteSharedGoal}
+        />
       )}
     </div>
   );
