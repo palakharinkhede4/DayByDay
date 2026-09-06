@@ -14,8 +14,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     setThemeColor,
     themeMode,
     setThemeMode,
-    osMode,
-    setOsMode,
     habits,
     removeGoal,
     exportData,
@@ -37,8 +35,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [gentleNotifications, setGentleNotifications] = useState(true);
   const [editingGoals, setEditingGoals] = useState(false);
-  const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [showNeonGuide, setShowNeonGuide] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [partnerCodeInput, setPartnerCodeInput] = useState('');
@@ -282,30 +278,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             </div>
           </div>
 
-          {/* OS ENGINE TOGGLE */}
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">📱</span>
-              <div>
-                <span className="row-title">UI Style Engine</span>
-                <span className="row-hint">Material 3 Expressive vs iOS Liquid Glass</span>
-              </div>
-            </div>
-            <div className="os-toggle-pills">
-              <button
-                className={`os-pill-btn ${osMode === 'android' ? 'active' : ''}`}
-                onClick={() => setOsMode('android')}
-              >
-                Android M3
-              </button>
-              <button
-                className={`os-pill-btn ${osMode === 'ios' ? 'active' : ''}`}
-                onClick={() => setOsMode('ios')}
-              >
-                iOS Glass
-              </button>
-            </div>
-          </div>
 
           {/* COLOR SWATCH ACCENTS */}
           <div className="settings-row-item">
@@ -405,42 +377,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* SECTION: DATABASE & NEON DB */}
-      <div className="settings-group">
-        <span className="group-label">DATABASE & CLOUD STORAGE</span>
-        <div className="settings-group-content">
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">🐘</span>
-              <div>
-                <span className="row-title">Neon PostgreSQL Database</span>
-                <span className="row-hint">
-                  {process.env.DATABASE_URL ? 'Connected to Neon DB' : 'Ready for DATABASE_URL'}
-                </span>
-              </div>
-            </div>
-            <button
-              className="guide-mini-toggle"
-              onClick={() => setShowNeonGuide((p) => !p)}
-            >
-              {showNeonGuide ? 'Hide Setup' : 'How to configure Neon? ℹ️'}
-            </button>
-          </div>
-
-          {showNeonGuide && (
-            <div className="neon-guide-box">
-              <h4 className="deploy-guide-title">🐘 How to Connect Neon PostgreSQL (Free):</h4>
-              <ol className="deploy-guide-steps">
-                <li>Create a free database at <a href="https://neon.tech" target="_blank" rel="noreferrer">neon.tech</a>.</li>
-                <li>Copy your connection string: <code>postgres://user:password@ep-xxx.neon.tech/neondb?sslmode=require</code></li>
-                <li>Go to your project settings on <a href="https://vercel.com" target="_blank" rel="noreferrer">vercel.com</a> &rarr; <strong>Settings &rarr; Environment Variables</strong>.</li>
-                <li>Add variable: <code>DATABASE_URL</code> = your Neon connection string.</li>
-                <li>Click <strong>Save & Redeploy</strong>. DayByDay will automatically create the tables and store all users, habits, and history permanently!</li>
-              </ol>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* SECTION: GOALS */}
       <div className="settings-group">
@@ -481,44 +417,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* SECTION: INSTALLATION GUIDES */}
-      <div className="settings-group">
-        <span className="group-label">DEVICE INSTALLATION</span>
-        <div className="settings-group-content">
-          <div
-            className="settings-row-item clickable"
-            onClick={() => setShowInstallGuide((prev) => !prev)}
-          >
-            <div className="row-left">
-              <span className="row-icon">📲</span>
-              <span className="row-title">How to Install on iOS & Android</span>
-            </div>
-            <span className="row-arrow">{showInstallGuide ? '⌄' : '›'}</span>
-          </div>
-
-          {showInstallGuide && (
-            <div className="install-guide-box">
-              <div className="guide-card ios-guide">
-                <h4 className="guide-title">🍎 iPhone / iOS Setup (No Sideloading Required!)</h4>
-                <ol className="guide-steps">
-                  <li>Open this link in <strong>Safari</strong> on iPhone.</li>
-                  <li>Tap the <strong>Share</strong> button (box with upward arrow ⎋) at the bottom.</li>
-                  <li>Scroll down and tap <strong>"Add to Home Screen"</strong>.</li>
-                  <li>Tap <strong>Add</strong>. Launch from your home screen with zero browser bars!</li>
-                </ol>
-              </div>
-
-              <div className="guide-card android-guide">
-                <h4 className="guide-title">🤖 Android Setup</h4>
-                <ol className="guide-steps">
-                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DayByDay/releases/download/latest/DayByDay.apk" target="_blank" rel="noreferrer">Download DayByDay.apk</a></li>
-                  <li>Or open in Chrome and tap <strong>"Install App"</strong>.</li>
-                </ol>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* SECTION: DATA BACKUP & WIPE */}
       <div className="settings-group">

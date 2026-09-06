@@ -16,6 +16,9 @@ export const getApiBaseUrl = () => {
   if (customUrl && customUrl.trim()) {
     return customUrl.trim().replace(/\/$/, '');
   }
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
+    return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
+  }
   // When running on public web / Vercel
   if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost')) {
     return window.location.origin;

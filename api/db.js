@@ -2,6 +2,8 @@
 // Storage-Optimized Architecture: Designed for <= 0.5 GB Free Tier
 // Supports 50-500+ active users for 1+ years within < 5 MB total storage footprint
 
+import { neon } from '@neondatabase/serverless';
+
 let neonSql = null;
 let tablesInitialized = false;
 
@@ -17,18 +19,7 @@ export function getDb() {
   if (!dbUrl) return null;
 
   if (!neonSql) {
-    try {
-      const { neon } = require('@neondatabase/serverless');
-      neonSql = neon(dbUrl);
-    } catch {
-      try {
-        import('@neondatabase/serverless').then((mod) => {
-          neonSql = mod.neon(dbUrl);
-        });
-      } catch (e) {
-        console.warn('Neon serverless driver initialization notice:', e.message);
-      }
-    }
+    neonSql = neon(dbUrl);
   }
   return neonSql;
 }

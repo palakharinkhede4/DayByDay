@@ -124,9 +124,7 @@ const INITIAL_BEYOND = [];
 
 function detectInitialOS() {
   if (typeof window === 'undefined') return 'ios';
-  const saved = localStorage.getItem('daybyday_os') || localStorage.getItem('duotrack_os');
-  if (saved) return saved;
-  const ua = window.navigator.userAgent;
+  const ua = window.navigator.userAgent || '';
   if (/Android/i.test(ua)) return 'android';
   if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
   return 'ios';

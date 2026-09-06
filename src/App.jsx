@@ -10,7 +10,7 @@ import { BottomNavBar } from './components/BottomNavBar';
 import { PairingModal } from './components/PairingModal';
 import { AddGoalModal } from './components/AddGoalModal';
 import { OnboardingModal } from './components/OnboardingModal';
-import { IOSInstallBanner } from './components/IOSInstallBanner';
+import { IosInstallPrompt } from './components/IosInstallPrompt';
 
 const MainAppContent = () => {
   const [activeTab, setActiveTab] = useState('habits');
@@ -19,8 +19,8 @@ const MainAppContent = () => {
 
   return (
     <div className="app-root">
-      {/* Smart iOS Install Banner (shows only on iOS Safari) */}
-      <IOSInstallBanner />
+      {/* Dynamic iOS Pop-up (shows only on iOS browser) */}
+      <IosInstallPrompt />
 
       {/* Main Responsive Application Layout */}
       <AppLayout
