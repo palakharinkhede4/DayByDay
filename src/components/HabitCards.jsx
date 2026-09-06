@@ -18,6 +18,7 @@ import {
   FolderPlus,
   GripVertical,
   X,
+  Activity,
 } from 'lucide-react';
 import { HabitDetailModal } from './HabitDetailModal';
 import { ManageCategoriesModal } from './ManageCategoriesModal';
@@ -69,7 +70,40 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     customCategories = ['Daily', 'Health', 'Fitness', 'Mind', 'Work'],
     addCustomCategory,
     deleteCustomCategory,
+    syncDeviceHealth,
+    triggerIslandNotification,
   } = useHabits();
+
+  const [isSyncingHealth, setIsSyncingHealth] = useState(false);
+
+  const handleSyncHealth = async () => {
+    sound.press();
+    setIsSyncingHealth(true);
+    try {
+      if (syncDeviceHealth) {
+        const res = await syncDeviceHealth();
+        if (res && res.success) {
+          sound.complete();
+          triggerIslandNotification?.(
+            `Synced ${res.stats?.steps?.toLocaleString() || 0} steps from device!`,
+            'health',
+            'success'
+          );
+        } else {
+          sound.step();
+          triggerIslandNotification?.(
+            res?.message || 'Device health synced',
+            'health',
+            'info'
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('Health sync error in HabitCards:', err);
+    } finally {
+      setIsSyncingHealth(false);
+    }
+  };
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showAddCatInput, setShowAddCatInput] = useState(false);
@@ -334,6 +368,15 @@ export const HabitCards = ({ onOpenAddGoal }) => {
               >
                 <SlidersHorizontal size={13} />
                 <span>Manage</span>
+              </button>
+              <button
+                type="button"
+                className={`category-chip health-sync-chip font-medium ${isSyncingHealth ? 'loading' : ''}`}
+                onClick={handleSyncHealth}
+                title="Import steps and fitness data from device"
+              >
+                <Activity size={13} className={isSyncingHealth ? 'animate-spin text-emerald-400' : 'text-emerald-400'} />
+                <span>{isSyncingHealth ? 'Syncing...' : 'Sync Steps'}</span>
               </button>
             </>
           )}

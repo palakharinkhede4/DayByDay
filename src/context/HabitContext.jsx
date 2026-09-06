@@ -44,6 +44,12 @@ import {
   clearVaultSession,
   removeVaultItem,
 } from '../utils/storageVault';
+import {
+  checkHealthPermission,
+  requestHealthPermission,
+  importDeviceHealthStats,
+  syncHealthDataToHabitsAndPod,
+} from '../utils/fitnessSync';
 
 const HabitContext = createContext(null);
 
@@ -1801,6 +1807,36 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
+  // Import Native OS Fitness & Step Stats and Auto-Sync to Habits and Pod
+  const syncDeviceHealth = async () => {
+    sound.press();
+    const hasPerm = await checkHealthPermission();
+    if (!hasPerm) {
+      const granted = await requestHealthPermission();
+      if (!granted) {
+        triggerIslandNotification('Activity permission required to sync steps', 'untrack');
+        return { success: false, reason: 'permission_denied' };
+      }
+    }
+
+    const healthData = await importDeviceHealthStats();
+    if (healthData && healthData.success) {
+      await syncHealthDataToHabitsAndPod({
+        healthData,
+        habits,
+        sharedGoals: groupPod?.sharedGoals || [],
+        activeUserId: user?.id,
+        onUpdateHabit: updateHabit,
+        onUpdateSharedGoal: updateSharedGoalProgress,
+        triggerIslandNotification,
+      });
+      return healthData;
+    } else {
+      triggerIslandNotification(healthData?.error || 'Could not import health stats', 'untrack');
+      return healthData;
+    }
+  };
+
   const editSharedGoal = async (goalId, updates) => {
     sound.press();
     if (!groupPod) return;
@@ -2427,6 +2463,7 @@ export const HabitProvider = ({ children }) => {
         syncStatus,
         lastSyncedAt,
         syncWithCloud,
+        syncDeviceHealth,
       }}
     >
       {children}

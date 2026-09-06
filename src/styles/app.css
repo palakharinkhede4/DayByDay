@@ -6855,132 +6855,259 @@ button:active {
   cursor: pointer;
 }
 
-/* Modern Group Shared Goal Card */
-.shared-goal-card.modern-group-goal {
-  background: var(--bg-surface-container, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
-  border-radius: 14px;
-  padding: 1.15rem;
+/* =========================================================
+   FLAT & MODERN TOGETHER / POD ARCHITECTURE
+   (No nested box-inside-box, full-width cards, circular check toggles)
+   ========================================================= */
+
+/* Clean Section Headers */
+.together-goals-section,
+.together-roster-section {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  width: 100%;
 }
 
-.shared-goal-header-row {
+.together-section-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
+  padding: 0 0.25rem;
+  flex-wrap: wrap;
 }
 
-.shared-goal-name-wrap {
+.together-section-title-wrap {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
 }
 
-.goal-category-tag {
-  font-size: 0.68rem;
-  color: var(--primary, #2563EB);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.shared-goal-title {
-  font-size: 1.15rem;
+.together-section-title {
+  font-size: 1.05rem;
   color: var(--text-primary, #f8fafc);
   margin: 0;
 }
 
-.shared-goal-target-sub {
-  font-size: 0.78rem;
-  color: var(--text-tertiary, #64748b);
+.together-section-hint {
+  font-size: 0.76rem;
+  color: var(--text-tertiary, #94a3b8);
+  display: block;
 }
 
-.goal-header-right {
+.together-section-actions {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
-.goal-completion-badge {
+/* Sync Health Quick Action Button */
+.together-health-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.together-health-sync-btn:hover {
+  background: rgba(16, 185, 129, 0.22);
+  transform: translateY(-1px);
+}
+
+.together-health-sync-btn.loading {
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* Category Chip Health Sync button */
+.category-chip.health-sync-chip {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.category-chip.health-sync-chip:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+/* Together Goals Full-Width Flat Cards */
+.together-goals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.together-goal-card {
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.035));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.together-goal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.together-goal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.together-cat-pill {
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--primary, #3b82f6);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.together-goal-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary, #f8fafc);
+  margin: 0;
+  word-break: break-word;
+}
+
+.together-goal-target-sub {
+  font-size: 0.8rem;
+  color: var(--text-tertiary, #94a3b8);
+}
+
+.together-goal-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.together-completion-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
   border-radius: 8px;
   padding: 0.35rem 0.65rem;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.goal-completion-badge.all-done {
-  background: rgba(16, 185, 129, 0.15);
+.together-completion-badge.all-done {
+  background: rgba(16, 185, 129, 0.16);
   border-color: rgba(16, 185, 129, 0.35);
-  color: #10B981;
+  color: #34d399;
 }
 
-.delete-shared-goal-btn {
-  background: rgba(244, 63, 94, 0.1);
-  border: 1px solid rgba(244, 63, 94, 0.2);
-  color: #FDA4AF;
-  border-radius: 8px;
+.together-icon-btn {
   width: 32px;
   height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  background: var(--bg-surface-high, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-secondary, #94a3b8);
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.delete-shared-goal-btn:hover {
-  background: rgba(244, 63, 94, 0.22);
+.together-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary, #f8fafc);
 }
 
-/* Individual Member Progress Breakdown */
-.members-goal-breakdown {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-  padding: 0.85rem;
-}
-
-.member-progress-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.85rem 1rem;
-  border-radius: 12px;
-  background: var(--bg-surface-container, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-  transition: all 0.2s ease;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.member-progress-row.member-completed {
-  background: rgba(16, 185, 129, 0.06);
+.together-icon-btn.sync {
+  background: rgba(16, 185, 129, 0.1);
   border-color: rgba(16, 185, 129, 0.25);
 }
 
-.member-progress-row.current-user-row {
+.together-icon-btn.sync:hover {
+  background: rgba(16, 185, 129, 0.22);
+}
+
+.together-icon-btn.delete {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.2);
+}
+
+.together-icon-btn.delete:hover {
+  background: rgba(244, 63, 94, 0.22);
+  color: #fb7185;
+}
+
+/* Clean Members Flat List (Directly inside Goal Card) */
+.together-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.together-member-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: var(--bg-surface, rgba(15, 23, 42, 0.4));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.05));
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.together-member-row.is-me {
   border-color: rgba(37, 99, 235, 0.35);
   background: rgba(37, 99, 235, 0.05);
 }
 
-.member-progress-top {
+.together-member-row.done {
+  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.together-member-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
   gap: 0.75rem;
-  min-width: 0;
+  width: 100%;
 }
 
-.member-user-cell {
+.together-member-identity {
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -6988,30 +7115,28 @@ button:active {
   flex: 1;
 }
 
-.member-avatar-box {
+.together-avatar-circle {
   width: 34px;
   height: 34px;
   border-radius: 50%;
   overflow: hidden;
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--primary, #2563EB), #06B6D4);
+  background: linear-gradient(135deg, var(--primary, #2563eb), #06b6d4);
   color: #ffffff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
-.member-mini-avatar-img {
+.together-avatar-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.member-avatar-initials {
-  font-size: 0.84rem;
-}
-
-.member-name-wrap {
+.together-name-box {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -7019,62 +7144,64 @@ button:active {
   overflow: hidden;
 }
 
-.member-row-name {
+.together-member-name {
   font-size: 0.9rem;
+  font-weight: 700;
   color: var(--text-primary, #f8fafc);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
 
-.you-mini-tag {
+.together-you-badge {
   font-size: 0.62rem;
+  font-weight: 800;
   background: rgba(37, 99, 235, 0.25);
-  color: #93C5FD;
+  color: #93c5fd;
   padding: 0.1rem 0.4rem;
   border-radius: 9999px;
   border: 1px solid rgba(37, 99, 235, 0.4);
-  font-weight: 700;
   flex-shrink: 0;
 }
 
-.member-score-cell {
+.together-member-score-box {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.5rem;
   flex-shrink: 0;
 }
 
-.member-score-text {
-  font-size: 0.82rem;
-  color: var(--text-secondary, #94a3b8);
+.together-score-val {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
   white-space: nowrap;
 }
 
-.member-unit-label {
+.together-unit {
   font-size: 0.74rem;
+  font-weight: 500;
   color: var(--text-tertiary, #64748b);
 }
 
-.member-pct-pill {
+.together-pct-tag {
   font-size: 0.74rem;
+  font-weight: 800;
   padding: 0.15rem 0.55rem;
   border-radius: 9999px;
   background: rgba(37, 99, 235, 0.18);
-  color: #60A5FA;
+  color: #60a5fa;
   border: 1px solid rgba(37, 99, 235, 0.3);
-  font-weight: 800;
   white-space: nowrap;
 }
 
-.member-pct-pill.done {
+.together-pct-tag.done {
   background: rgba(16, 185, 129, 0.2);
-  color: #34D399;
+  color: #34d399;
   border-color: rgba(16, 185, 129, 0.4);
 }
 
-.member-progress-track {
+.together-progress-track {
   width: 100%;
   height: 6px;
   background: rgba(148, 163, 184, 0.12);
@@ -7082,18 +7209,18 @@ button:active {
   overflow: hidden;
 }
 
-.member-progress-fill {
+.together-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary, #2563EB), #06B6D4);
+  background: linear-gradient(90deg, var(--primary, #2563eb), #06b6d4);
   border-radius: 9999px;
-  transition: width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.member-progress-fill.done {
-  background: linear-gradient(90deg, #10B981, #34D399);
+.together-progress-fill.done {
+  background: linear-gradient(90deg, #10b981, #34d399);
 }
 
-.member-progress-bottom {
+.together-member-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7102,69 +7229,77 @@ button:active {
   min-width: 0;
 }
 
-.member-status-info {
+.together-status-info {
   font-size: 0.78rem;
   min-width: 0;
   flex: 1;
 }
 
-.member-completed-note {
+.together-done-text {
   font-size: 0.78rem;
-  color: #34D399;
+  font-weight: 700;
+  color: #34d399;
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
 
-.member-remaining-note {
+.together-remaining-text {
   font-size: 0.78rem;
+  font-weight: 500;
   color: var(--text-tertiary, #94a3b8);
 }
 
-.member-actions-side {
+.together-actions-side {
   flex-shrink: 0;
 }
 
-.member-actions-combo {
+.together-user-controls {
   display: flex;
   align-items: center;
   gap: 0.45rem;
 }
 
-.member-check-toggle-btn {
-  height: 30px;
-  padding: 0 0.65rem;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: var(--text-secondary, #94a3b8);
-  font-size: 0.74rem;
-  font-weight: 700;
+/* Circular Completion Check Button (Replaces bulky rectangular Mark Done) */
+.member-check-circle-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--border-medium, rgba(148, 163, 184, 0.3));
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.05));
+  color: transparent;
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 
-.member-check-toggle-btn.checked {
-  background: #10B981;
-  border-color: #10B981;
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+.member-check-circle-btn:hover {
+  border-color: #34d399;
+  transform: scale(1.06);
 }
 
-.member-steppers-group {
+.member-check-circle-btn.checked {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
+/* Stepper buttons */
+.together-steppers {
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
 
-.member-step-btn {
+.together-step-btn {
   background: var(--bg-surface-high, rgba(255, 255, 255, 0.08));
   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
   border-radius: 7px;
-  padding: 0.3rem 0.55rem;
+  padding: 0.32rem 0.55rem;
   font-size: 0.74rem;
   color: var(--text-primary, #f8fafc);
   cursor: pointer;
@@ -7174,14 +7309,32 @@ button:active {
   transition: all 0.15s ease;
 }
 
-.member-step-btn:hover {
+.together-step-btn:hover {
   background: rgba(255, 255, 255, 0.16);
 }
 
-.member-step-btn.plus {
-  background: rgba(16, 185, 129, 0.18);
-  color: #10B981;
+.together-step-btn.plus {
+  background: rgba(16, 185, 129, 0.16);
+  color: #34d399;
   border-color: rgba(16, 185, 129, 0.35);
+  font-weight: 700;
+}
+
+.together-step-btn.plus:hover {
+  background: rgba(16, 185, 129, 0.28);
+}
+
+.together-step-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Members Roster Grid */
+.together-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
 }
 
 .cheer-member-mini-btn {
@@ -10554,143 +10707,157 @@ button:active {
   color: #d97706 !important;
 }
 
-/* Shared Pod Goals Container & Cards */
-[data-theme-mode="light"] .shared-goal-card {
-  background: #f8fafc !important;
+/* Flat Together Goals Container & Cards (Light Mode) */
+[data-theme-mode="light"] .together-goal-card {
+  background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
-[data-theme-mode="light"] .shared-goal-card h3,
-[data-theme-mode="light"] .shared-goal-name {
+[data-theme-mode="light"] .together-goal-title {
   color: #0f172a !important;
 }
 
-[data-theme-mode="light"] .shared-goal-target,
-[data-theme-mode="light"] .shared-goal-category {
+[data-theme-mode="light"] .together-goal-target-sub {
   color: #64748b !important;
 }
 
-[data-theme-mode="light"] .shared-goal-progress-badge {
-  background: #e2e8f0 !important;
-  color: #334155 !important;
-  border: 1px solid #cbd5e1 !important;
+[data-theme-mode="light"] .together-goal-target-sub strong {
+  color: #0f172a !important;
 }
 
-[data-theme-mode="light"] .shared-goal-progress-badge.all-done {
+[data-theme-mode="light"] .together-completion-badge {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+}
+
+[data-theme-mode="light"] .together-completion-badge.all-done {
   background: rgba(16, 185, 129, 0.15) !important;
   color: #059669 !important;
   border-color: rgba(16, 185, 129, 0.3) !important;
 }
 
-/* Members Goal Breakdown (Inner Box) */
-[data-theme-mode="light"] .members-goal-breakdown {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
-}
-
-[data-theme-mode="light"] .members-breakdown-title {
-  color: #0f172a !important;
-}
-
-/* Individual Member Progress Rows */
-[data-theme-mode="light"] .member-progress-row {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
-}
-
-[data-theme-mode="light"] .member-progress-row.current-user-row {
-  background: #eff6ff !important;
-  border-color: rgba(37, 99, 235, 0.35) !important;
-}
-
-[data-theme-mode="light"] .member-progress-row.member-completed {
-  background: #f0fdf4 !important;
-  border-color: rgba(16, 185, 129, 0.35) !important;
-}
-
-[data-theme-mode="light"] .member-row-name {
-  color: #0f172a !important;
-}
-
-[data-theme-mode="light"] .member-score-text {
-  color: #1e293b !important;
-}
-
-[data-theme-mode="light"] .member-unit-label {
-  color: #64748b !important;
-}
-
-[data-theme-mode="light"] .member-pct-pill {
-  background: rgba(37, 99, 235, 0.12) !important;
-  border-color: rgba(37, 99, 235, 0.25) !important;
-  color: #2563EB !important;
-}
-
-[data-theme-mode="light"] .member-pct-pill.done {
-  background: rgba(16, 185, 129, 0.15) !important;
-  border-color: rgba(16, 185, 129, 0.3) !important;
-  color: #059669 !important;
-}
-
-[data-theme-mode="light"] .member-progress-track {
-  background: #e2e8f0 !important;
-}
-
-[data-theme-mode="light"] .member-remaining-note {
-  color: #64748b !important;
-}
-
-[data-theme-mode="light"] .member-completed-note {
-  color: #059669 !important;
-}
-
-/* Checkmark Toggle & Steppers & Actions */
-[data-theme-mode="light"] .member-check-toggle-btn {
+[data-theme-mode="light"] .together-icon-btn {
   background: #f1f5f9 !important;
-  border: 1px solid #cbd5e1 !important;
+  border-color: #cbd5e1 !important;
   color: #475569 !important;
 }
 
-[data-theme-mode="light"] .member-check-toggle-btn.checked {
-  background: #10b981 !important;
-  border-color: #10b981 !important;
-  color: #ffffff !important;
-}
-
-[data-theme-mode="light"] .member-step-btn {
-  background: #f1f5f9 !important;
-  border: 1px solid #cbd5e1 !important;
+[data-theme-mode="light"] .together-icon-btn:hover {
+  background: #e2e8f0 !important;
   color: #0f172a !important;
 }
 
-[data-theme-mode="light"] .member-step-btn:hover {
-  background: #e2e8f0 !important;
-}
-
-[data-theme-mode="light"] .member-step-btn.plus {
+[data-theme-mode="light"] .together-icon-btn.sync {
   background: rgba(16, 185, 129, 0.12) !important;
   border-color: rgba(16, 185, 129, 0.3) !important;
   color: #059669 !important;
 }
 
-[data-theme-mode="light"] .cheer-member-mini-btn {
-  background: rgba(245, 158, 11, 0.12) !important;
-  border: 1px solid rgba(245, 158, 11, 0.3) !important;
-  color: #d97706 !important;
+[data-theme-mode="light"] .together-health-sync-btn {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #059669 !important;
 }
 
-[data-theme-mode="light"] .edit-shared-goal-btn {
-  background: #f1f5f9 !important;
-  border: 1px solid #cbd5e1 !important;
+[data-theme-mode="light"] .together-health-sync-btn:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+}
+
+/* Individual Member Rows (Light Mode) */
+[data-theme-mode="light"] .together-member-row {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+}
+
+[data-theme-mode="light"] .together-member-row.is-me {
+  background: #eff6ff !important;
+  border-color: rgba(37, 99, 235, 0.35) !important;
+}
+
+[data-theme-mode="light"] .together-member-row.done {
+  background: #f0fdf4 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+[data-theme-mode="light"] .together-member-name {
+  color: #0f172a !important;
+}
+
+[data-theme-mode="light"] .together-score-val {
+  color: #1e293b !important;
+}
+
+[data-theme-mode="light"] .together-unit {
   color: #64748b !important;
 }
 
-[data-theme-mode="light"] .edit-shared-goal-btn:hover {
+[data-theme-mode="light"] .together-pct-tag {
+  background: rgba(37, 99, 235, 0.12) !important;
+  border-color: rgba(37, 99, 235, 0.25) !important;
+  color: #2563EB !important;
+}
+
+[data-theme-mode="light"] .together-pct-tag.done {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #059669 !important;
+}
+
+[data-theme-mode="light"] .together-progress-track {
   background: #e2e8f0 !important;
+}
+
+[data-theme-mode="light"] .together-remaining-text {
+  color: #64748b !important;
+}
+
+[data-theme-mode="light"] .together-done-text {
+  color: #059669 !important;
+}
+
+/* Circular Check Button (Light Mode) */
+[data-theme-mode="light"] .member-check-circle-btn {
+  background: #f1f5f9 !important;
+  border: 2px solid #cbd5e1 !important;
+  color: transparent !important;
+}
+
+[data-theme-mode="light"] .member-check-circle-btn.checked {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4) !important;
+}
+
+/* Stepper Buttons (Light Mode) */
+[data-theme-mode="light"] .together-step-btn {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
   color: #0f172a !important;
+}
+
+[data-theme-mode="light"] .together-step-btn:hover {
+  background: #e2e8f0 !important;
+}
+
+[data-theme-mode="light"] .together-step-btn.plus {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #059669 !important;
+}
+
+/* Backward compatibility for any remaining legacy classes */
+[data-theme-mode="light"] .shared-goal-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+[data-theme-mode="light"] .member-progress-row {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
 }
 
 [data-theme-mode="light"] .add-shared-goal-btn {

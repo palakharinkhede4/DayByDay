@@ -19,6 +19,7 @@ import {
   X,
   Sparkles,
   SlidersHorizontal,
+  Activity,
 } from 'lucide-react';
 const POD_GOAL_PRESETS = [
   { name: '10,000 Steps', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
@@ -227,9 +228,41 @@ export const TogetherScreen = () => {
     updateSharedGoalProgress,
     deleteSharedGoal,
     sendCheer,
+    syncDeviceHealth,
     triggerIslandNotification,
     triggerCelebration,
   } = useHabits();
+
+  const [syncingHealth, setSyncingHealth] = useState(false);
+
+  const handleSyncHealth = async () => {
+    sound.press();
+    setSyncingHealth(true);
+    try {
+      if (syncDeviceHealth) {
+        const res = await syncDeviceHealth();
+        if (res && res.success) {
+          sound.complete();
+          triggerIslandNotification?.(
+            `Synced ${res.stats?.steps?.toLocaleString() || 0} steps from device!`,
+            'health',
+            'success'
+          );
+        } else {
+          sound.step();
+          triggerIslandNotification?.(
+            res?.message || 'Device health synced',
+            'health',
+            'info'
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('Health sync error:', e);
+    } finally {
+      setSyncingHealth(false);
+    }
+  };
 
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -390,15 +423,20 @@ export const TogetherScreen = () => {
           </div>
 
           {/* Members Roster (up to 10 members) */}
-          <div className="group-section-box">
-            <div className="group-section-header">
-              <h3 className="group-section-title font-bold">
-                Pod Members ({groupPod.members?.length || 1} / 10)
-              </h3>
-              <span className="group-section-hint">Tap flame to cheer teammate</span>
+          <div className="together-roster-section">
+            <div className="together-section-header">
+              <div className="together-section-title-wrap">
+                <Users size={18} className="text-blue-500 flex-shrink-0" />
+                <div>
+                  <h3 className="together-section-title font-bold">
+                    Pod Members ({groupPod.members?.length || 1} / 10)
+                  </h3>
+                  <span className="together-section-hint">Tap flame to cheer teammate</span>
+                </div>
+              </div>
             </div>
 
-            <div className="group-members-grid">
+            <div className="together-members-grid">
               {(groupPod.members || []).map((m, idx) => {
                 const isMe = user?.id && String(user.id) === String(m.id);
                 const isCheered = (cheeredMemberId === (m.id || m.username));
@@ -446,23 +484,37 @@ export const TogetherScreen = () => {
             </div>
           </div>
 
-          {/* Shared Goals Section */}
-          <div className="group-section-box">
-            <div className="group-section-header">
-              <div className="shared-goal-title-wrap">
-                <Target size={18} className="text-emerald-500" />
+          {/* Shared Goals Section - Clean, modern flat card architecture */}
+          <div className="together-goals-section">
+            <div className="together-section-header">
+              <div className="together-section-title-wrap">
+                <Target size={20} className="text-emerald-500 flex-shrink-0" />
                 <div>
-                  <h3 className="group-section-title font-bold">Shared Pod Goals</h3>
-                  <span className="group-section-hint">Goals tracked collectively with individual breakdowns</span>
+                  <h3 className="together-section-title font-bold">Shared Pod Goals</h3>
+                  <span className="together-section-hint">Collective goals with individual progress tracking</span>
                 </div>
               </div>
-              <button
-                className="add-shared-goal-btn"
-                onClick={() => setIsAddingGoal(!isAddingGoal)}
-              >
-                <Plus size={15} />
-                <span>Add Goal</span>
-              </button>
+
+              <div className="together-section-actions">
+                <button
+                  type="button"
+                  className={`together-health-sync-btn ${syncingHealth ? 'loading' : ''}`}
+                  onClick={handleSyncHealth}
+                  title="Import steps and fitness data from device"
+                >
+                  <Activity size={14} className={syncingHealth ? 'animate-spin' : ''} />
+                  <span>{syncingHealth ? 'Syncing...' : 'Sync Health'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="add-shared-goal-btn"
+                  onClick={() => setIsAddingGoal(!isAddingGoal)}
+                >
+                  <Plus size={15} />
+                  <span>Add Goal</span>
+                </button>
+              </div>
             </div>
 
             {/* Modal / Inline form for Add Shared Goal */}
@@ -585,12 +637,13 @@ export const TogetherScreen = () => {
             )}
 
             {/* Shared Goals List */}
-            <div className="shared-goals-list">
+            <div className="together-goals-list">
               {(groupPod.sharedGoals || []).map((sg) => {
                 const target = Number(sg.target) || 1;
                 const members = groupPod.members || [];
                 const memberProgressMap = sg.memberProgress || {};
                 const deltaAmount = Number(sg.delta) || (sg.unit === 'steps' ? 1000 : 1);
+                const isStepGoal = sg.unit === 'steps' || sg.name?.toLowerCase().includes('step');
 
                 // Calculate completed count
                 let completedCount = 0;
@@ -604,33 +657,43 @@ export const TogetherScreen = () => {
                 const isAllCompleted = members.length > 0 && completedCount === members.length;
 
                 return (
-                  <div key={sg.id} className="shared-goal-card modern-group-goal">
+                  <div key={sg.id} className="together-goal-card">
                     {/* Goal Header */}
-                    <div className="shared-goal-header-row">
-                      <div className="shared-goal-name-wrap">
-                        <span className="goal-category-tag font-bold">{sg.category || 'Shared'}</span>
-                        <h4 className="shared-goal-title font-black">{sg.name}</h4>
-                        <span className="shared-goal-target-sub">
-                          Target: <strong className="text-slate-200">{target} {sg.unit}</strong> per person
+                    <div className="together-goal-header">
+                      <div className="together-goal-meta">
+                        <span className="together-cat-pill">{sg.category || 'Shared'}</span>
+                        <h4 className="together-goal-title">{sg.name}</h4>
+                        <span className="together-goal-target-sub">
+                          Target: <strong className="font-bold text-slate-200">{target.toLocaleString()} {sg.unit}</strong> per person
                         </span>
                       </div>
 
-                      <div className="goal-header-right">
-                        <div className={`goal-completion-badge ${isAllCompleted ? 'all-done' : ''}`}>
+                      <div className="together-goal-top-actions">
+                        <div className={`together-completion-badge ${isAllCompleted ? 'all-done' : ''}`}>
                           {completedCount === members.length ? (
                             <>
-                              <CheckCircle2 size={15} className="text-emerald-400" />
-                              <span className="font-bold">All {members.length} Completed! 🎉</span>
+                              <CheckCircle2 size={14} className="text-emerald-400" />
+                              <span className="font-bold">All {members.length} Done! 🎉</span>
                             </>
                           ) : (
-                            <>
-                              <span className="font-bold text-amber-400">{completedCount} of {members.length} Completed</span>
-                            </>
+                            <span className="font-bold">{completedCount} of {members.length} Done</span>
                           )}
                         </div>
 
+                        {isStepGoal && (
+                          <button
+                            type="button"
+                            className="together-icon-btn sync"
+                            onClick={handleSyncHealth}
+                            title="Sync step data from device"
+                          >
+                            <Activity size={14} className="text-emerald-400" />
+                          </button>
+                        )}
+
                         <button
-                          className="edit-shared-goal-btn"
+                          type="button"
+                          className="together-icon-btn edit"
                           onClick={() => {
                             sound.selection();
                             setEditingGoal(sg);
@@ -641,24 +704,21 @@ export const TogetherScreen = () => {
                         </button>
 
                         <button
-                          className="delete-shared-goal-btn"
+                          type="button"
+                          className="together-icon-btn delete"
                           onClick={() => {
                             sound.warning();
                             deleteSharedGoal(sg.id);
                           }}
-                          title="Delete this shared goal"
+                          title="Delete goal"
                         >
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
 
-                    {/* Individual Members Progress Breakdown (Stacked one below other) */}
-                    <div className="members-goal-breakdown">
-                      <div className="breakdown-header-label font-bold text-xs uppercase tracking-wider text-slate-400 mb-1">
-                        Individual Member Progress:
-                      </div>
-
+                    {/* Member List (Direct flat list, no box-in-box wrapping) */}
+                    <div className="together-members-list">
                       {members.map((m) => {
                         const mId = m.id;
                         const isMe = (user?.id && String(user.id) === String(mId)) ||
@@ -670,72 +730,72 @@ export const TogetherScreen = () => {
                         return (
                           <div
                             key={mId || m.username}
-                            className={`member-progress-row ${isDone ? 'member-completed' : ''} ${isMe ? 'current-user-row' : ''}`}
+                            className={`together-member-row ${isDone ? 'done' : ''} ${isMe ? 'is-me' : ''}`}
                           >
-                            {/* Member Progress Top: Avatar & Name on Left, Score & Single Percent Badge on Right */}
-                            <div className="member-progress-top">
-                              <div className="member-user-cell">
-                                <div className="member-avatar-box">
+                            {/* Member row top: Avatar + Name on left, Numbers + % on right */}
+                            <div className="together-member-top">
+                              <div className="together-member-identity">
+                                <div className="together-avatar-circle">
                                   {m.profilePicture ? (
                                     <img
                                       src={m.profilePicture}
                                       alt={m.displayName || m.username}
-                                      className="member-mini-avatar-img"
+                                      className="together-avatar-img"
                                     />
                                   ) : (
-                                    <div className="member-avatar-initials font-bold">
+                                    <span className="together-avatar-char">
                                       {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
-                                    </div>
+                                    </span>
                                   )}
                                 </div>
-                                <div className="member-name-wrap">
-                                  <span className="member-row-name font-bold">
+                                <div className="together-name-box">
+                                  <span className="together-member-name">
                                     {m.displayName || m.username}
                                   </span>
-                                  {isMe && <span className="you-mini-tag">You</span>}
+                                  {isMe && <span className="together-you-badge">You</span>}
                                 </div>
                               </div>
 
-                              <div className="member-score-cell">
-                                <span className="member-score-text font-bold">
-                                  {mVal} / {target} <span className="member-unit-label font-medium">{sg.unit}</span>
+                              <div className="together-member-score-box">
+                                <span className="together-score-val">
+                                  {mVal.toLocaleString()} <span className="together-unit">/ {target.toLocaleString()} {sg.unit}</span>
                                 </span>
-                                <span className={`member-pct-pill font-bold ${isDone ? 'done' : ''}`}>
+                                <span className={`together-pct-tag ${isDone ? 'done' : ''}`}>
                                   {pct}%
                                 </span>
                               </div>
                             </div>
 
-                            {/* Full Width Progress Bar */}
-                            <div className="member-progress-track">
+                            {/* Full-width sleek progress track */}
+                            <div className="together-progress-track">
                               <div
-                                className={`member-progress-fill ${isDone ? 'done' : ''}`}
+                                className={`together-progress-fill ${isDone ? 'done' : ''}`}
                                 style={{ width: `${pct}%` }}
                               />
                             </div>
 
-                            {/* Member Progress Bottom: Status Note on Left, Actions on Right */}
-                            <div className="member-progress-bottom">
-                              <div className="member-status-info">
+                            {/* Member row bottom: remaining status on left, circular check & steppers on right */}
+                            <div className="together-member-bottom">
+                              <div className="together-status-info">
                                 {isDone ? (
-                                  <span className="member-completed-note font-bold text-emerald-400">
-                                    <Check size={13} strokeWidth={2.8} className="inline mr-1" />
-                                    Goal Completed! 🎉
+                                  <span className="together-done-text">
+                                    <Check size={13} strokeWidth={2.8} />
+                                    <span>Goal Completed! 🎉</span>
                                   </span>
                                 ) : (
-                                  <span className="member-remaining-note font-medium text-slate-400">
-                                    {target - mVal > 0 ? `${target - mVal} ${sg.unit} remaining` : 'In progress'}
+                                  <span className="together-remaining-text">
+                                    {target - mVal > 0 ? `${(target - mVal).toLocaleString()} ${sg.unit} remaining` : 'In progress'}
                                   </span>
                                 )}
                               </div>
 
-                              <div className="member-actions-side">
+                              <div className="together-actions-side">
                                 {isMe ? (
-                                  <div className="member-actions-combo">
-                                    {/* 1-tap completion check button */}
+                                  <div className="together-user-controls">
+                                    {/* Circular completion button (replaces big Mark Done button) */}
                                     <button
                                       type="button"
-                                      className={`member-check-toggle-btn ${isDone ? 'checked' : ''}`}
+                                      className={`member-check-circle-btn ${isDone ? 'checked' : ''}`}
                                       onClick={() => {
                                         if (isDone) {
                                           sound.step();
@@ -746,16 +806,16 @@ export const TogetherScreen = () => {
                                         }
                                       }}
                                       title={isDone ? 'Mark Incomplete' : 'Mark Complete'}
+                                      aria-label={isDone ? 'Mark Incomplete' : 'Mark Complete'}
                                     >
-                                      <Check size={13} strokeWidth={2.8} />
-                                      <span>{isDone ? 'Done' : 'Mark Done'}</span>
+                                      <Check size={17} strokeWidth={2.8} />
                                     </button>
 
-                                    {/* Steppers */}
-                                    <div className="member-steppers-group">
+                                    {/* Compact steppers (+ / -) */}
+                                    <div className="together-steppers">
                                       <button
                                         type="button"
-                                        className="member-step-btn minus"
+                                        className="together-step-btn minus"
                                         onClick={() => {
                                           sound.step();
                                           updateSharedGoalProgress(sg.id, -deltaAmount);
@@ -763,18 +823,18 @@ export const TogetherScreen = () => {
                                         disabled={mVal <= 0}
                                         title={`Subtract ${deltaAmount} ${sg.unit}`}
                                       >
-                                        <Minus size={12} />
+                                        <Minus size={13} />
                                       </button>
                                       <button
                                         type="button"
-                                        className="member-step-btn plus font-bold"
+                                        className="together-step-btn plus"
                                         onClick={() => {
                                           sound.step();
                                           updateSharedGoalProgress(sg.id, deltaAmount);
                                         }}
                                         title={`Add ${deltaAmount} ${sg.unit}`}
                                       >
-                                        <Plus size={12} />
+                                        <Plus size={13} />
                                         <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
                                       </button>
                                     </div>
@@ -784,9 +844,9 @@ export const TogetherScreen = () => {
                                     type="button"
                                     className="cheer-member-mini-btn"
                                     onClick={() => handleCheerMember(m, sg.name)}
-                                    title={`Encourage @${m.username} on ${sg.name}`}
+                                    title={`Encourage @${m.username}`}
                                   >
-                                    <Flame size={14} className="text-amber-400" />
+                                    <Flame size={13} className="text-amber-400" />
                                     <span>Encourage</span>
                                   </button>
                                 )}
@@ -801,14 +861,14 @@ export const TogetherScreen = () => {
               })}
 
               {(!groupPod.sharedGoals || groupPod.sharedGoals.length === 0) && (
-                <div className="empty-shared-goals text-center py-6">
-                  <Target size={32} className="text-slate-500 mx-auto mb-2" />
-                  <p className="font-bold text-slate-300">No shared goals created yet</p>
+                <div className="empty-shared-goals text-center py-8">
+                  <Target size={36} className="text-slate-500 mx-auto mb-2 opacity-60" />
+                  <p className="font-bold text-slate-300">No shared goals yet</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    Create a group goal (e.g. 10,000 steps, daily meditation) so all pod members can track it simultaneously!
+                    Create a team goal (e.g. 10,000 steps, daily workout) to track together in real-time!
                   </p>
                   <button
-                    className="add-shared-goal-btn mx-auto mt-3"
+                    className="add-shared-goal-btn mx-auto mt-4"
                     onClick={() => setIsAddingGoal(true)}
                   >
                     <Plus size={14} />
