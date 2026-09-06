@@ -24,8 +24,6 @@ import {
   Camera,
   FileText,
   Flame,
-  Cloud,
-  Server,
 } from 'lucide-react';
 import {
   checkForAppUpdate,
@@ -59,8 +57,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     logoutUser,
     profilePicture,
     setProfilePicture,
-    syncWithCloud,
-    syncStatus,
   } = useHabits();
 
   const fileInputRef = useRef(null);
@@ -365,32 +361,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* SECTION: CLOUD SYNC */}
-      <div className="settings-group">
-        <span className="group-label">CLOUD SYNC</span>
-        <div className="settings-group-content">
-          <div className="settings-row-item">
-            <div className="row-left">
-              <Cloud size={18} className="text-blue-400" />
-              <div>
-                <span className="row-title">Cloud Synchronization</span>
-                <span className="row-hint">Automatic live backup & partner sync</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="sync-now-btn"
-                onClick={syncWithCloud}
-                disabled={syncStatus === 'syncing'}
-              >
-                <RefreshCw size={12} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
-                <span>{syncStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* SECTION: DATA BACKUP & RESTORE */}
       <div className="settings-group">

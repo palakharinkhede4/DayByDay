@@ -56,7 +56,12 @@ $checker = $checker -replace `
 $checker | Set-Content "src/utils/updateChecker.js" -NoNewline
 Write-Host "Updated updateChecker.js" -ForegroundColor Gray
 
-# ── 5. Commit and push ───────────────────────────────────────────────────────
+# ── 5. Build and sync assets ────────────────────────────────────────────────
+Write-Host "Building web bundle and syncing to Android..." -ForegroundColor Cyan
+npm run build
+npx cap sync android
+
+# ── 6. Commit and push ───────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "Committing version bump and all changes..." -ForegroundColor Cyan
 git add -A

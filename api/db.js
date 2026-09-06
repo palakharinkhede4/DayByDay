@@ -62,6 +62,7 @@ export async function ensureTables() {
         salt VARCHAR(32),
         security_question VARCHAR(128),
         security_answer_hash VARCHAR(128),
+        preferences JSONB DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -72,6 +73,7 @@ export async function ensureTables() {
     await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);`;
     await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);`;
     await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);`;
+    await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb;`;
 
     // 2. Habits table (Compact JSONB historical map: 1 row per habit, keeping table <= 500 rows for 50 users)
     await sql`
@@ -80,6 +82,7 @@ export async function ensureTables() {
         user_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
         habit_id VARCHAR(32) NOT NULL,
         name VARCHAR(64) NOT NULL,
+        description TEXT DEFAULT '',
         target NUMERIC(8, 2) NOT NULL DEFAULT 1,
         unit VARCHAR(16) DEFAULT '',
         icon VARCHAR(32) DEFAULT 'target',
@@ -94,6 +97,8 @@ export async function ensureTables() {
         UNIQUE(user_id, habit_id)
       );
     `;
+
+    await sql`ALTER TABLE daybyday_habits ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';`;
 
     // 3. Pairings table
     await sql`
@@ -120,10 +125,18 @@ export async function ensureTables() {
 
 // Memory fallback store helpers
 export const memoryDb = {
-  getUser(usernameOrCode) {
-    const clean = (usernameOrCode || '').toLowerCase().trim();
+  getUser(idOrUsernameOrCode) {
+    if (!idOrUsernameOrCode) return null;
+    if (memoryStore.users.has(idOrUsernameOrCode)) {
+      return memoryStore.users.get(idOrUsernameOrCode);
+    }
+    const clean = String(idOrUsernameOrCode).toLowerCase().trim();
     for (const u of memoryStore.users.values()) {
-      if (u.username.toLowerCase() === clean || (u.secretCode && u.secretCode.toUpperCase() === clean.toUpperCase())) {
+      if (
+        u.id === idOrUsernameOrCode ||
+        u.username.toLowerCase() === clean ||
+        (u.secretCode && u.secretCode.toUpperCase() === clean.toUpperCase())
+      ) {
         return u;
       }
     }

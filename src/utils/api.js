@@ -266,7 +266,31 @@ export const fetchUserRemote = async (usernameOrCode) => {
   }
 };
 
-export const syncUserHabitsRemote = async (userId, habits) => {
+export const syncUserHabitsRemote = async (userId, habits, preferences = null) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const payload = {
+      action: 'sync_habits',
+      userId,
+      habits,
+    };
+    if (preferences && typeof preferences === 'object') {
+      payload.preferences = preferences;
+    }
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch (err) {
+    return null;
+  }
+};
+
+export const syncPreferencesRemote = async (userId, preferences) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
@@ -274,9 +298,9 @@ export const syncUserHabitsRemote = async (userId, habits) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'sync_habits',
+        action: 'sync_preferences',
         userId,
-        habits,
+        preferences,
       }),
     });
     if (!res.ok) return null;

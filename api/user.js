@@ -14,7 +14,28 @@ function hashSecurityAnswer(answer, salt) {
 function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, ...safe } = u;
+  if (!safe.preferences) safe.preferences = {};
   return safe;
+}
+
+function formatHabitFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.habit_id || String(row.id),
+    name: row.name || 'Habit',
+    category: row.category || 'Daily',
+    description: row.description || '',
+    target: Number(row.target) || 1,
+    unit: row.unit || '',
+    icon: row.icon || 'star',
+    user1: Number(row.today_value) || 0,
+    user2: 0,
+    completed: Boolean(row.completed),
+    reminderTime: row.reminder_time || '',
+    reminderDays: row.reminder_days ? row.reminder_days.split(',') : [],
+    streak: Number(row.streak) || 0,
+    history: typeof row.history === 'object' && row.history !== null ? row.history : {},
+  };
 }
 
 function generateSecretCode(username) {
@@ -80,16 +101,17 @@ export default async function handler(req, res) {
           const pair = pairings[0];
           podCode = pair.pod_code;
           const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-          const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM daybyday_users WHERE id = ${partnerId}`;
+          const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
           const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
-            partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits };
+            partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
           }
         }
 
         return res.status(200).json({
           user: sanitizeUser(user),
-          habits,
+          habits: habits.map(formatHabitFromRow),
+          preferences: user.preferences || {},
           partner,
           podCode,
           isSolo: !partner
@@ -107,6 +129,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         user: sanitizeUser(user),
         habits,
+        preferences: user.preferences || {},
         partner: null,
         podCode: null,
         isSolo: true
@@ -242,16 +265,17 @@ export default async function handler(req, res) {
             const pair = pairings[0];
             podCode = pair.pod_code;
             const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-            const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM daybyday_users WHERE id = ${partnerId}`;
+            const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
             const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
             if (partnerRows.length > 0) {
-              partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits };
+              partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
             }
           }
 
           return res.status(200).json({
             user: sanitizeUser(user),
-            habits,
+            habits: habits.map(formatHabitFromRow),
+            preferences: user.preferences || {},
             partner,
             podCode,
             isSolo: !partner
@@ -273,6 +297,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           user: sanitizeUser(user),
           habits,
+          preferences: user.preferences || {},
           partner: null,
           podCode: null,
           isSolo: true
@@ -380,33 +405,39 @@ export default async function handler(req, res) {
       }
     }
 
-    // ACTION: SYNC HABITS (Save user's habits)
+    // ACTION: SYNC HABITS (Save user's habits & preferences)
     if (action === 'sync_habits') {
-      const { userId, habits } = req.body;
+      const { userId, habits, preferences } = req.body;
       if (!userId || !Array.isArray(habits)) {
         return res.status(400).json({ error: 'User ID and habits array required' });
       }
 
       try {
         if (sql) {
+          if (preferences && typeof preferences === 'object') {
+            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(preferences)}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
+          }
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
             await sql`
               INSERT INTO daybyday_habits (
-                user_id, habit_id, name, target, unit, icon, category,
+                user_id, habit_id, name, description, target, unit, icon, category,
                 today_value, completed, reminder_time, reminder_days, streak, history, updated_at
               )
               VALUES (
-                ${userId}, ${h.id}, ${h.name}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
-                ${h.todayValue ?? h.user1 ?? 0}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
+                ${userId}, ${h.id}, ${h.name}, ${h.description || ''}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
+                ${h.user1 ?? h.todayValue ?? 0}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
                 ${h.streak || 0}, ${JSON.stringify(h.history || {})}::jsonb, CURRENT_TIMESTAMP
               )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
                 today_value = EXCLUDED.today_value,
                 completed = EXCLUDED.completed,
                 name = EXCLUDED.name,
+                description = EXCLUDED.description,
                 target = EXCLUDED.target,
                 unit = EXCLUDED.unit,
+                icon = EXCLUDED.icon,
+                category = EXCLUDED.category,
                 reminder_time = EXCLUDED.reminder_time,
                 reminder_days = EXCLUDED.reminder_days,
                 streak = EXCLUDED.streak,
@@ -415,11 +446,41 @@ export default async function handler(req, res) {
             `;
           }
           const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;
-          return res.status(200).json({ success: true, habits: savedHabits });
+          return res.status(200).json({ success: true, habits: savedHabits.map(formatHabitFromRow) });
         }
 
         memoryDb.saveUserHabits(userId, habits);
+        if (preferences) {
+          const u = memoryDb.getUser(userId);
+          if (u) u.preferences = preferences;
+        }
         return res.status(200).json({ success: true, habits });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: SYNC PREFERENCES (Accent color, theme, profile picture, custom categories, goals)
+    if (action === 'sync_preferences') {
+      const { userId, preferences } = req.body;
+      if (!userId || !preferences || typeof preferences !== 'object') {
+        return res.status(400).json({ error: 'User ID and preferences required' });
+      }
+
+      try {
+        if (sql) {
+          await sql`
+            UPDATE daybyday_users 
+            SET preferences = ${JSON.stringify(preferences)}::jsonb, last_active = CURRENT_TIMESTAMP 
+            WHERE id = ${userId}
+          `;
+          const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
+          return res.status(200).json({ success: true, preferences: rows[0]?.preferences || {} });
+        }
+
+        const u = memoryDb.getUser(userId);
+        if (u) u.preferences = preferences;
+        return res.status(200).json({ success: true, preferences });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }

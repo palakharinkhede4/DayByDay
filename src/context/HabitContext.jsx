@@ -12,10 +12,12 @@ import {
   resetPasswordRemote,
   fetchUserRemote,
   syncUserHabitsRemote,
+  syncPreferencesRemote,
   pairPartnerRemote,
   unpairPartnerRemote,
   deleteHabitRemote,
   hasRemoteBackend,
+  getApiBaseUrl,
 } from '../utils/api';
 import {
   initPersistentStorage,
@@ -484,6 +486,29 @@ export const HabitProvider = ({ children }) => {
           }
           persistSessionSnapshot(user, partner, habits, pod, groupPod || recovered?.groupPod);
         }
+
+        // Automatic Cloud Sync on Startup: pull latest preferences & habits from Cloud DB
+        const activeUser = user || recovered?.user;
+        if (activeUser?.username) {
+          fetchUserRemote(activeUser.username).then((remoteData) => {
+            if (remoteData && remoteData.user) {
+              if (remoteData.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
+                setHabits(remoteData.habits);
+                localStorage.setItem('daybyday_habits', JSON.stringify(remoteData.habits));
+              }
+              if (remoteData.preferences) {
+                applyPreferences(remoteData.preferences);
+              }
+              if (remoteData.partner) {
+                setPartner(remoteData.partner);
+                localStorage.setItem('daybyday_partner', JSON.stringify(remoteData.partner));
+              }
+              if (remoteData.podCode) {
+                setPod((prev) => ({ ...prev, code: remoteData.podCode, isPaired: Boolean(remoteData.partner) }));
+              }
+            }
+          }).catch(() => {});
+        }
       } catch (err) {
         console.warn('Vault recovery check notice:', err);
       } finally {
@@ -637,6 +662,82 @@ export const HabitProvider = ({ children }) => {
     return () => clearInterval(reminderTimer);
   }, [habits]);
 
+  // Apply all user preferences & customizations from remote DB or local vault
+  const applyPreferences = (prefs) => {
+    if (!prefs || typeof prefs !== 'object') return;
+
+    if (prefs.themeColor) {
+      setThemeColor(prefs.themeColor);
+      localStorage.setItem('daybyday_theme', prefs.themeColor);
+      document.documentElement.setAttribute('data-theme', prefs.themeColor);
+    }
+    if (prefs.themeMode) {
+      setThemeModeState(prefs.themeMode);
+      localStorage.setItem('daybyday_theme_mode', prefs.themeMode);
+      document.documentElement.setAttribute('data-theme-mode', prefs.themeMode);
+    }
+    if (prefs.useMaterial3Theme !== undefined) {
+      const isM3 = Boolean(prefs.useMaterial3Theme);
+      setUseMaterial3ThemeState(isM3);
+      localStorage.setItem('daybyday_material3', String(isM3));
+      if (isM3) {
+        document.documentElement.setAttribute('data-theme-m3', 'true');
+      } else {
+        document.documentElement.removeAttribute('data-theme-m3');
+      }
+    }
+    if (prefs.customCategories && Array.isArray(prefs.customCategories) && prefs.customCategories.length) {
+      setCustomCategories(prefs.customCategories);
+      localStorage.setItem('daybyday_categories', JSON.stringify(prefs.customCategories));
+    }
+    if (prefs.profilePicture !== undefined) {
+      setProfilePictureState(prefs.profilePicture);
+      if (prefs.profilePicture) {
+        localStorage.setItem('daybyday_profile_pic', prefs.profilePicture);
+      } else {
+        localStorage.removeItem('daybyday_profile_pic');
+      }
+    }
+    if (prefs.activeFocusHabitId !== undefined) {
+      setActiveFocusHabitIdState(prefs.activeFocusHabitId || '');
+      if (prefs.activeFocusHabitId) {
+        localStorage.setItem('daybyday_focus_habit_id', prefs.activeFocusHabitId);
+      } else {
+        localStorage.removeItem('daybyday_focus_habit_id');
+      }
+    }
+    if (prefs.beyondGoals && Array.isArray(prefs.beyondGoals) && prefs.beyondGoals.length) {
+      setBeyondGoals(prefs.beyondGoals);
+      localStorage.setItem('daybyday_beyond', JSON.stringify(prefs.beyondGoals));
+    }
+  };
+
+  // Automatic real-time preference sync to Cloud DB
+  const isInitialPrefsMount = useRef(true);
+  useEffect(() => {
+    if (isInitialPrefsMount.current) {
+      isInitialPrefsMount.current = false;
+      return;
+    }
+    if (!user?.id) return;
+
+    const currentPreferences = {
+      themeColor,
+      themeMode,
+      useMaterial3Theme,
+      customCategories,
+      profilePicture,
+      activeFocusHabitId,
+      beyondGoals,
+    };
+
+    const timer = setTimeout(() => {
+      syncPreferencesRemote(user.id, currentPreferences).catch(() => {});
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [themeColor, themeMode, useMaterial3Theme, customCategories, profilePicture, activeFocusHabitId, beyondGoals, user?.id]);
+
   // Register New User (Supports remote Neon DB backend with automatic local Storage Vault fallback)
   const registerUser = async (username, password, displayName = '', avatar = '', securityQuestion = '', securityAnswer = '') => {
     sound.complete();
@@ -656,19 +757,35 @@ export const HabitProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
     };
 
+    const currentPrefs = {
+      themeColor,
+      themeMode,
+      useMaterial3Theme,
+      customCategories,
+      profilePicture,
+      activeFocusHabitId,
+      beyondGoals,
+    };
+
     try {
       const res = await registerUserRemote(cleanUsername, password, cleanDisplay, cleanAvatar, securityQuestion, securityAnswer);
       if (res && res.user) {
         newUser = res.user;
+        // Immediately sync local habits and current preferences to cloud account
+        syncUserHabitsRemote(newUser.id, habits, currentPrefs).catch(() => {});
       }
     } catch (err) {
       console.warn('Remote sync unavailable; continuing with local-first persistent vault:', err.message);
+      if (err.message && err.message.toLowerCase().includes('already taken')) {
+        throw err;
+      }
     }
 
     // Always store offline credential record in vault so native/offline access is instantaneous
     localStorage.setItem(`daybyday_local_acc_${cleanUsername}`, JSON.stringify({
       user: newUser,
       password,
+      preferences: currentPrefs,
       securityQuestion,
       securityAnswer: (securityAnswer || '').trim().toLowerCase(),
     }));
@@ -689,7 +806,7 @@ export const HabitProvider = ({ children }) => {
     return newUser;
   };
 
-  // Login Existing User
+  // Login Existing User (Automatically syncs all customizations, preferences, and habits from DB)
   const loginUser = async (username, password) => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
@@ -699,8 +816,24 @@ export const HabitProvider = ({ children }) => {
       const res = await loginUserRemote(cleanUsername, password);
       if (res && res.user) {
         setUser(res.user);
-        if (res.habits && res.habits.length) setHabits(res.habits);
-        if (res.partner) setPartner(res.partner);
+
+        // 1. Restore & format habits from DB
+        if (res.habits && Array.isArray(res.habits) && res.habits.length > 0) {
+          setHabits(res.habits);
+          localStorage.setItem('daybyday_habits', JSON.stringify(res.habits));
+        } else if (habits && habits.length > 0) {
+          // If DB has no habits, seed it with current habits
+          syncUserHabitsRemote(res.user.id, habits).catch(() => {});
+        }
+
+        // 2. Restore all Preferences & Customizations from DB
+        const prefs = res.preferences || res.user.preferences || {};
+        applyPreferences(prefs);
+
+        if (res.partner) {
+          setPartner(res.partner);
+          localStorage.setItem('daybyday_partner', JSON.stringify(res.partner));
+        }
         setPod((prev) => ({
           ...prev,
           code: res.podCode || res.user.secretCode,
@@ -718,6 +851,16 @@ export const HabitProvider = ({ children }) => {
               }
             : null,
         }));
+
+        // Cache credentials and preferences locally in vault for immediate offline access
+        localStorage.setItem(`daybyday_local_acc_${cleanUsername}`, JSON.stringify({
+          user: res.user,
+          password,
+          preferences: prefs,
+          securityQuestion: res.user.securityQuestion || '',
+          securityAnswer: res.user.securityAnswer || '',
+        }));
+
         triggerCelebration();
         triggerIslandNotification(`Welcome back @${res.user.username}!`, 'user');
         return res;
@@ -738,6 +881,7 @@ export const HabitProvider = ({ children }) => {
         const parsed = JSON.parse(localAcc);
         if (parsed.password === password) {
           setUser(parsed.user);
+          if (parsed.preferences) applyPreferences(parsed.preferences);
           triggerCelebration();
           triggerIslandNotification(`Welcome back @${parsed.user.username}!`, 'user');
           return { user: parsed.user };
@@ -1324,7 +1468,7 @@ export const HabitProvider = ({ children }) => {
   const deleteAccountPermanently = async () => {
     sound.tap();
     try {
-      const API_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const API_URL = getApiBaseUrl();
       if (user?.id || user?.username) {
         await fetch(`${API_URL}/api/user`, {
           method: 'POST',
