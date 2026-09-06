@@ -66,6 +66,71 @@ function generatePodCode(name) {
   return `${prefix}-${randNum}${randChar}`;
 }
 
+async function resolveLatestApkCdn(explicitUrl) {
+  try {
+    let targetDownloadUrl = explicitUrl;
+    let tagName = 'latest';
+    let assetSize = null;
+    let fileName = 'DayByDay.apk';
+
+    if (!targetDownloadUrl) {
+      const repoUrl = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest';
+      const ghRes = await fetch(repoUrl, {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'DayByDay-App-Server',
+        },
+      });
+      if (!ghRes.ok) {
+        return { success: false, error: 'GitHub Releases API unavailable' };
+      }
+      const ghData = await ghRes.json();
+      tagName = ghData.tag_name || 'latest';
+      const apkAsset = Array.isArray(ghData.assets)
+        ? ghData.assets.find((a) => a.name && (a.name.endsWith('.apk') || a.name === 'DayByDay.apk'))
+        : null;
+
+      if (!apkAsset || !apkAsset.browser_download_url) {
+        return { success: false, error: 'No APK asset found in latest release' };
+      }
+      targetDownloadUrl = apkAsset.browser_download_url;
+      assetSize = apkAsset.size;
+      fileName = apkAsset.name;
+    }
+
+    // Follow redirect to obtain direct raw CDN link (release-assets.githubusercontent.com)
+    let directCdnUrl = targetDownloadUrl;
+    try {
+      const headRes = await fetch(targetDownloadUrl, {
+        method: 'HEAD',
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'DayByDay-CDN-Resolver',
+        },
+      });
+      if (headRes.status >= 300 && headRes.status < 400) {
+        const loc = headRes.headers.get('location');
+        if (loc) {
+          directCdnUrl = loc;
+        }
+      }
+    } catch (e) {
+      console.warn('Notice resolving CDN redirect:', e.message);
+    }
+
+    return {
+      success: true,
+      directApkUrl: directCdnUrl,
+      rawGithubUrl: targetDownloadUrl,
+      version: tagName,
+      apkSize: assetSize,
+      fileName,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
 export default async function handler(req, res) {
   // CORS Headers for Web & Native Apps
   const origin = req.headers.origin || '*';
@@ -86,9 +151,14 @@ export default async function handler(req, res) {
   }
   const sql = getDb();
 
-  // 1. GET: FETCH USER PROFILE & HABITS
+  // 1. GET: FETCH USER PROFILE, HABITS, OR RESOLVE DIRECT APK CDN
   if (req.method === 'GET') {
-    const { username, code } = req.query;
+    const { username, code, action, url } = req.query;
+
+    if (action === 'resolve_latest_apk' || action === 'resolve_cdn') {
+      const result = await resolveLatestApkCdn(url);
+      return res.status(result.success ? 200 : 500).json(result);
+    }
 
     if (!username && !code) {
       return res.status(400).json({ error: 'Username or secret code required' });
@@ -1270,33 +1340,52 @@ export default async function handler(req, res) {
 
     // ACTION: SEND CHEER / ENCOURAGEMENT (Real cross-user delivery)
     if (action === 'send_cheer') {
-      const { toUserId, fromUserId, fromUsername, fromName, fromAvatar, podCode, message } = req.body;
-      const cheerMessage = (message || 'Keep crushing your goals! 🔥').trim();
+      const { toUserId, toUsername, fromUserId, fromUsername, fromName, fromAvatar, podCode, message, goalName } = req.body;
+      const cheerMessage = (message || (goalName ? `Encouraged you for ${goalName}! 🔥` : 'Keep crushing your goals! 🔥')).trim();
 
       try {
+        let recipientId = toUserId;
+        let recipientUsername = toUsername;
+        if (sql && (toUserId || toUsername)) {
+          const targetLookup = (toUserId || toUsername).trim();
+          const found = await sql`
+            SELECT id, username FROM daybyday_users
+            WHERE id = ${targetLookup}
+               OR LOWER(username) = LOWER(${targetLookup})
+               OR UPPER(secret_code) = UPPER(${targetLookup})
+            LIMIT 1
+          `;
+          if (found.length > 0) {
+            recipientId = found[0].id;
+            recipientUsername = found[0].username;
+          }
+        }
+
         if (sql) {
           await sql`
             INSERT INTO daybyday_cheers (
-              to_user_id, from_user_id, from_username, from_name, from_avatar, pod_code, message
+              to_user_id, from_user_id, from_username, from_name, from_avatar, pod_code, message, goal_name, is_read
             )
             VALUES (
-              ${toUserId || null}, ${fromUserId || null}, ${fromUsername || 'friend'},
-              ${fromName || fromUsername || 'Friend'}, ${fromAvatar || 'flame'}, ${podCode || null}, ${cheerMessage}
+              ${recipientId || recipientUsername || null}, ${fromUserId || null}, ${fromUsername || 'friend'},
+              ${fromName || fromUsername || 'Friend'}, ${fromAvatar || 'flame'}, ${podCode || null}, ${cheerMessage}, ${goalName || null}, false
             )
           `;
         }
 
         memoryDb.addCheer({
-          to_user_id: toUserId,
+          to_user_id: recipientId || recipientUsername,
           from_user_id: fromUserId,
           from_username: fromUsername,
           from_name: fromName,
           from_avatar: fromAvatar,
           pod_code: podCode,
           message: cheerMessage,
+          goal_name: goalName,
+          is_read: false,
         });
 
-        return res.status(200).json({ success: true, message: 'Cheer delivered!' });
+        return res.status(200).json({ success: true, message: 'Encouragement delivered!' });
       } catch (err) {
         return res.status(500).json({ error: 'Failed to deliver cheer: ' + err.message });
       }
@@ -1304,38 +1393,63 @@ export default async function handler(req, res) {
 
     // ACTION: GET CHEERS (Fetch incoming cheers for user or group pod)
     if (action === 'get_cheers') {
-      const { userId, podCode } = req.body;
+      const { userId, username, podCode } = req.body;
+      const targetId = userId || username;
 
       try {
         let cheers = [];
         if (sql) {
-          if (userId && podCode) {
+          if (targetId && podCode) {
             cheers = await sql`
               SELECT * FROM daybyday_cheers
-              WHERE (to_user_id = ${userId} OR pod_code = ${podCode})
-              ORDER BY created_at DESC LIMIT 15
+              WHERE (to_user_id = ${targetId} OR to_user_id = ${username || targetId} OR pod_code = ${podCode})
+              ORDER BY created_at DESC LIMIT 20
             `;
-          } else if (userId) {
+          } else if (targetId) {
             cheers = await sql`
               SELECT * FROM daybyday_cheers
-              WHERE to_user_id = ${userId}
-              ORDER BY created_at DESC LIMIT 15
+              WHERE to_user_id = ${targetId} OR to_user_id = ${username || targetId}
+              ORDER BY created_at DESC LIMIT 20
             `;
           } else if (podCode) {
             cheers = await sql`
               SELECT * FROM daybyday_cheers
               WHERE pod_code = ${podCode}
-              ORDER BY created_at DESC LIMIT 15
+              ORDER BY created_at DESC LIMIT 20
             `;
           }
         } else {
-          cheers = memoryDb.getCheersForUser(userId, podCode);
+          cheers = memoryDb.getCheersForUser(targetId, podCode);
         }
 
         return res.status(200).json({ success: true, cheers: cheers || [] });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
+    }
+
+    // ACTION: MARK CHEERS READ
+    if (action === 'mark_cheers_read') {
+      const { userId, username } = req.body;
+      const targetId = userId || username;
+      try {
+        if (sql && targetId) {
+          await sql`
+            UPDATE daybyday_cheers
+            SET is_read = true
+            WHERE to_user_id = ${targetId} OR to_user_id = ${username || targetId}
+          `;
+        }
+        return res.status(200).json({ success: true });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: RESOLVE LATEST APK DIRECT CDN URL
+    if (action === 'resolve_latest_apk' || action === 'resolve_cdn') {
+      const result = await resolveLatestApkCdn(req.body?.url);
+      return res.status(result.success ? 200 : 500).json(result);
     }
 
     // ACTION: LEAVE GROUP POD

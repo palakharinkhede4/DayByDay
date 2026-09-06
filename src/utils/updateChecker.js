@@ -3,7 +3,9 @@
  * Queries GitHub Releases API to detect newer builds and provides direct APK download links.
  */
 
-export const CURRENT_APP_VERSION = '1.14.0';
+import { getApiBaseUrl } from './api';
+
+export const CURRENT_APP_VERSION = '1.15.0';
 export const RELEASES_PAGE_URL = 'https://github.com/palakharinkhede4/DayByDay/releases';
 export const DIRECT_APK_URL = 'https://github.com/palakharinkhede4/DayByDay/releases/latest';
 const RELEASES_API_URL = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest';
@@ -65,10 +67,40 @@ export const openExternalUrl = (url) => {
 };
 
 /**
+ * Resolves direct signed Azure CDN link (release-assets.githubusercontent.com)
+ */
+export const resolveDirectCdnUrl = async (inputUrl) => {
+  if (inputUrl && inputUrl.includes('release-assets.githubusercontent.com')) {
+    return inputUrl;
+  }
+  try {
+    const baseUrl = getApiBaseUrl();
+    const query = inputUrl ? `&url=${encodeURIComponent(inputUrl)}` : '';
+    const res = await fetch(`${baseUrl}/api/user?action=resolve_latest_apk${query}`, {
+      cache: 'no-cache',
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.directApkUrl) {
+        return data.directApkUrl;
+      }
+    }
+  } catch (err) {
+    console.warn('CDN resolution notice:', err);
+  }
+  return inputUrl || DIRECT_APK_URL;
+};
+
+/**
  * Direct in-app installer for native Android or fallback to browser download
  */
 export const installApkDirectly = async (url) => {
-  const targetUrl = url || DIRECT_APK_URL;
+  let targetUrl = url || DIRECT_APK_URL;
+  try {
+    const directUrl = await resolveDirectCdnUrl(targetUrl);
+    if (directUrl) targetUrl = directUrl;
+  } catch {}
+
   try {
     if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.AppInstaller) {
       const res = await window.Capacitor.Plugins.AppInstaller.installApk({ url: targetUrl });
@@ -168,12 +200,9 @@ export const checkForAppUpdate = async () => {
 
     let finalDownloadUrl = downloadUrl;
     try {
-      const cdnRes = await fetch('/api/user?action=resolve_latest_apk');
-      if (cdnRes.ok) {
-        const cdnData = await cdnRes.json();
-        if (cdnData.directApkUrl) {
-          finalDownloadUrl = cdnData.directApkUrl;
-        }
+      const directCdn = await resolveDirectCdnUrl(downloadUrl);
+      if (directCdn) {
+        finalDownloadUrl = directCdn;
       }
     } catch {}
 

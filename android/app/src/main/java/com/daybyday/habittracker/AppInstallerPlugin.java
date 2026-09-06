@@ -45,20 +45,30 @@ public class AppInstallerPlugin extends Plugin {
 
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                URL url = new URL(downloadUrl);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("User-Agent", "DayByDay-Android");
-                connection.connect();
+                String currentUrl = downloadUrl;
+                HttpURLConnection connection = null;
+                int redirectCount = 0;
+                while (redirectCount < 6) {
+                    URL url = new URL(currentUrl);
+                    connection = (HttpURLConnection) url.openConnection();
+                    connection.setConnectTimeout(30000);
+                    connection.setReadTimeout(60000);
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setRequestProperty("User-Agent", "DayByDay-Android");
+                    connection.connect();
 
-                int responseCode = connection.getResponseCode();
-                if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP || responseCode == 307 || responseCode == 308) {
-                    String redirectUrl = connection.getHeaderField("Location");
-                    if (redirectUrl != null) {
-                        connection = (HttpURLConnection) new URL(redirectUrl).openConnection();
-                        connection.setRequestProperty("User-Agent", "DayByDay-Android");
-                        connection.connect();
+                    int responseCode = connection.getResponseCode();
+                    if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || 
+                        responseCode == HttpURLConnection.HTTP_MOVED_TEMP || 
+                        responseCode == 307 || responseCode == 308) {
+                        String redirectUrl = connection.getHeaderField("Location");
+                        if (redirectUrl != null && !redirectUrl.isEmpty()) {
+                            currentUrl = redirectUrl;
+                            redirectCount++;
+                            continue;
+                        }
                     }
+                    break;
                 }
 
                 File cacheDir = context.getCacheDir();

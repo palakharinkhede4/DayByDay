@@ -64,33 +64,36 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
 
   return (
     <div className="habit-modal-backdrop" onClick={onClose}>
-      <div className="habit-modal-card" onClick={(e) => e.stopPropagation()} role="dialog">
+      <div className="habit-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Edit Pod Goal">
         <div className="habit-modal-header">
           <div className="habit-modal-title-group">
             <h2 className="habit-modal-title font-extrabold">Pod Goal Settings</h2>
             <p className="habit-modal-subtitle">Update target, units, or step increments for all pod members.</p>
           </div>
-          <button className="habit-modal-close-btn" onClick={onClose}>
+          <button className="habit-modal-close-btn" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="habit-modal-form">
-          <div className="modal-field-group">
-            <label className="modal-field-label">Goal Name</label>
+        <form onSubmit={handleSubmit} className="habit-modal-body">
+          {/* Goal Name */}
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">Goal Name</label>
             <input
               type="text"
-              className="modal-text-input"
+              className="habit-modal-input font-medium"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 10,000 Steps, 3L Hydration"
               required
             />
           </div>
 
-          <div className="modal-field-group">
-            <label className="modal-field-label">Category</label>
+          {/* Category */}
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">Category</label>
             <select
-              className="modal-select-input"
+              className="habit-modal-input habit-modal-select font-medium"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
@@ -102,61 +105,82 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
             </select>
           </div>
 
-          <div className="modal-two-col-grid">
-            <div className="modal-field-group">
-              <label className="modal-field-label">Target per Person</label>
+          {/* Target, Unit & Increment */}
+          <div className="habit-modal-row-split">
+            <div className="habit-modal-field">
+              <label className="habit-modal-label font-bold">Target per Person</label>
               <input
                 type="number"
                 min="1"
-                className="modal-text-input"
+                max="1000000"
+                className="habit-modal-input font-medium"
                 value={target}
-                onChange={(e) => setTarget(Number(e.target.value))}
+                onChange={(e) => setTarget(e.target.value)}
                 required
               />
             </div>
 
-            <div className="modal-field-group">
-              <label className="modal-field-label">Unit</label>
+            <div className="habit-modal-field">
+              <label className="habit-modal-label font-bold">Unit</label>
               <input
                 type="text"
-                className="modal-text-input"
+                className="habit-modal-input font-medium"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
+                placeholder="steps, min, reps"
+                required
+              />
+            </div>
+
+            <div className="habit-modal-field">
+              <label className="habit-modal-label font-bold">Step (+ / -)</label>
+              <input
+                type="number"
+                min="1"
+                max="100000"
+                className="habit-modal-input font-medium"
+                value={delta}
+                onChange={(e) => setDelta(e.target.value)}
+                placeholder="e.g. 1000, 5, 1"
                 required
               />
             </div>
           </div>
 
-          <div className="modal-field-group">
-            <label className="modal-field-label">Step Increment (+ / -)</label>
-            <input
-              type="number"
-              min="1"
-              className="modal-text-input"
-              value={delta}
-              onChange={(e) => setDelta(Number(e.target.value))}
-              required
-            />
-          </div>
-
-          <div className="modal-actions-footer">
-            {showDeleteConfirm ? (
-              <div className="modal-delete-confirm-row">
-                <span className="confirm-delete-warning font-bold text-rose-400 text-xs">
-                  Remove this goal for all pod members?
-                </span>
-                <div className="confirm-btns-wrap">
+          {/* Delete Danger Section */}
+          <div className="habit-danger-section">
+            {!showDeleteConfirm ? (
+              <button
+                type="button"
+                className="habit-delete-trigger-btn font-semibold"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 size={16} />
+                <span>Delete Pod Goal</span>
+              </button>
+            ) : (
+              <div className="delete-confirm-card">
+                <div className="confirm-text-group">
+                  <span className="font-bold text-rose-400">
+                    Remove this shared goal for all members?
+                  </span>
+                </div>
+                <p className="confirm-subtext">
+                  This will delete the goal and progress records for all pod members.
+                </p>
+                <div className="confirm-btn-group">
                   <button
                     type="button"
-                    className="confirm-cancel-sm-btn"
+                    className="confirm-action-btn cancel font-medium"
                     onClick={() => setShowDeleteConfirm(false)}
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    className="confirm-delete-sm-btn"
+                    className="confirm-action-btn danger font-bold"
                     onClick={() => {
+                      sound.warning();
                       onDelete(goal.id);
                       onClose();
                     }}
@@ -165,26 +189,25 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="modal-btns-standard-row">
-                <button
-                  type="button"
-                  className="modal-delete-btn"
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 size={16} />
-                  <span>Delete Goal</span>
-                </button>
-                <div className="modal-right-btns">
-                  <button type="button" className="modal-cancel-btn" onClick={onClose}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="modal-save-btn">
-                    Save Changes
-                  </button>
-                </div>
-              </div>
             )}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="habit-modal-footer">
+            <button
+              type="button"
+              className="habit-footer-btn cancel font-semibold"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="habit-footer-btn save font-bold"
+            >
+              <Check size={16} strokeWidth={2.6} />
+              <span>Save Changes</span>
+            </button>
           </div>
         </form>
       </div>
@@ -298,12 +321,13 @@ export const TogetherScreen = () => {
     triggerIslandNotification('Shared goal added to pod! 🎯', 'check');
   };
 
-  const handleCheerMember = (member) => {
+  const handleCheerMember = (member, goalName) => {
     const code = member.secretCode || member.secret_code || member.username;
-    sendCheer(code, 'Crushing it in the pod! 🔥');
+    const msg = goalName ? `Cheering you on for ${goalName}! Keep crushing it! 🔥` : 'Crushing it in the pod! 🔥';
+    sendCheer(code, msg, goalName);
     setCheeredMemberId(member.id || member.username);
     triggerCelebration();
-    triggerIslandNotification(`Cheer sent to @${member.username}! 🚀`, 'check');
+    triggerIslandNotification(`Encouragement sent to @${member.username}! 🚀`, 'flame');
     setTimeout(() => setCheeredMemberId(null), 2500);
   };
 
@@ -394,7 +418,7 @@ export const TogetherScreen = () => {
                     </div>
                     <div className="member-info">
                       <div className="member-name font-bold">
-                        {m.displayName || m.username}
+                        <span className="member-name-text">{m.displayName || m.username}</span>
                         {isMe && <span className="you-badge">You</span>}
                         {m.role === 'Owner' && <span className="owner-badge">Leader</span>}
                       </div>
@@ -648,111 +672,125 @@ export const TogetherScreen = () => {
                             key={mId || m.username}
                             className={`member-progress-row ${isDone ? 'member-completed' : ''} ${isMe ? 'current-user-row' : ''}`}
                           >
-                            {/* Member Identity & Profile Picture */}
-                            <div className="member-avatar-box">
-                              {m.profilePicture ? (
-                                <img
-                                  src={m.profilePicture}
-                                  alt={m.displayName || m.username}
-                                  className="member-mini-avatar-img"
-                                />
-                              ) : (
-                                <div className="member-avatar-initials font-bold">
-                                  {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
+                            {/* Member Progress Top: Avatar & Name on Left, Score & Single Percent Badge on Right */}
+                            <div className="member-progress-top">
+                              <div className="member-user-cell">
+                                <div className="member-avatar-box">
+                                  {m.profilePicture ? (
+                                    <img
+                                      src={m.profilePicture}
+                                      alt={m.displayName || m.username}
+                                      className="member-mini-avatar-img"
+                                    />
+                                  ) : (
+                                    <div className="member-avatar-initials font-bold">
+                                      {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-
-                            <div className="member-progress-details">
-                              <div className="member-progress-label-row">
-                                <span className="member-row-name font-bold">
-                                  {m.displayName || m.username}
+                                <div className="member-name-wrap">
+                                  <span className="member-row-name font-bold">
+                                    {m.displayName || m.username}
+                                  </span>
                                   {isMe && <span className="you-mini-tag">You</span>}
-                                </span>
-                                <div className="member-row-values font-semibold">
-                                  <span>{mVal} / {target} {sg.unit}</span>
-                                  <span className="member-pct-tag font-bold">({pct}%)</span>
                                 </div>
                               </div>
 
-                              {/* Progress bar */}
-                              <div className="member-progress-track">
-                                <div
-                                  className={`member-progress-fill ${isDone ? 'done' : ''}`}
-                                  style={{ width: `${pct}%` }}
-                                />
+                              <div className="member-score-cell">
+                                <span className="member-score-text font-bold">
+                                  {mVal} / {target} <span className="member-unit-label font-medium">{sg.unit}</span>
+                                </span>
+                                <span className={`member-pct-pill font-bold ${isDone ? 'done' : ''}`}>
+                                  {pct}%
+                                </span>
                               </div>
                             </div>
 
-                            {/* Status badge & Stepper if it's the current user */}
-                            <div className="member-row-status-actions">
-                              {isDone ? (
-                                <div className="completed-pill font-bold">
-                                  <Check size={13} />
-                                  <span>Done</span>
-                                </div>
-                              ) : (
-                                <div className="in-progress-pill font-bold">
-                                  <span>{pct}%</span>
-                                </div>
-                              )}
+                            {/* Full Width Progress Bar */}
+                            <div className="member-progress-track">
+                              <div
+                                className={`member-progress-fill ${isDone ? 'done' : ''}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
 
-                              {isMe && (
-                                <div className="member-actions-combo">
-                                  {/* 1-tap completion check button */}
-                                  <button
-                                    className={`member-check-toggle-btn ${isDone ? 'checked' : ''}`}
-                                    onClick={() => {
-                                      if (isDone) {
-                                        sound.step();
-                                        updateSharedGoalProgress(sg.id, 0, 0);
-                                      } else {
-                                        sound.complete();
-                                        updateSharedGoalProgress(sg.id, 0, target);
-                                      }
-                                    }}
-                                    title={isDone ? 'Mark Incomplete' : 'Mark Complete'}
-                                  >
-                                    <Check size={13} strokeWidth={2.8} />
-                                  </button>
+                            {/* Member Progress Bottom: Status Note on Left, Actions on Right */}
+                            <div className="member-progress-bottom">
+                              <div className="member-status-info">
+                                {isDone ? (
+                                  <span className="member-completed-note font-bold text-emerald-400">
+                                    <Check size={13} strokeWidth={2.8} className="inline mr-1" />
+                                    Goal Completed! 🎉
+                                  </span>
+                                ) : (
+                                  <span className="member-remaining-note font-medium text-slate-400">
+                                    {target - mVal > 0 ? `${target - mVal} ${sg.unit} remaining` : 'In progress'}
+                                  </span>
+                                )}
+                              </div>
 
-                                  {/* Steppers */}
-                                  <div className="member-steppers-group">
+                              <div className="member-actions-side">
+                                {isMe ? (
+                                  <div className="member-actions-combo">
+                                    {/* 1-tap completion check button */}
                                     <button
-                                      className="member-step-btn minus"
+                                      type="button"
+                                      className={`member-check-toggle-btn ${isDone ? 'checked' : ''}`}
                                       onClick={() => {
-                                        sound.step();
-                                        updateSharedGoalProgress(sg.id, -deltaAmount);
+                                        if (isDone) {
+                                          sound.step();
+                                          updateSharedGoalProgress(sg.id, 0, 0);
+                                        } else {
+                                          sound.complete();
+                                          updateSharedGoalProgress(sg.id, 0, target);
+                                        }
                                       }}
-                                      disabled={mVal <= 0}
-                                      title={`Subtract ${deltaAmount} ${sg.unit}`}
+                                      title={isDone ? 'Mark Incomplete' : 'Mark Complete'}
                                     >
-                                      <Minus size={12} />
+                                      <Check size={13} strokeWidth={2.8} />
+                                      <span>{isDone ? 'Done' : 'Mark Done'}</span>
                                     </button>
-                                    <button
-                                      className="member-step-btn plus font-bold"
-                                      onClick={() => {
-                                        sound.step();
-                                        updateSharedGoalProgress(sg.id, deltaAmount);
-                                      }}
-                                      title={`Add ${deltaAmount} ${sg.unit}`}
-                                    >
-                                      <Plus size={12} />
-                                      <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
-                                    </button>
+
+                                    {/* Steppers */}
+                                    <div className="member-steppers-group">
+                                      <button
+                                        type="button"
+                                        className="member-step-btn minus"
+                                        onClick={() => {
+                                          sound.step();
+                                          updateSharedGoalProgress(sg.id, -deltaAmount);
+                                        }}
+                                        disabled={mVal <= 0}
+                                        title={`Subtract ${deltaAmount} ${sg.unit}`}
+                                      >
+                                        <Minus size={12} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="member-step-btn plus font-bold"
+                                        onClick={() => {
+                                          sound.step();
+                                          updateSharedGoalProgress(sg.id, deltaAmount);
+                                        }}
+                                        title={`Add ${deltaAmount} ${sg.unit}`}
+                                      >
+                                        <Plus size={12} />
+                                        <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-
-                              {!isMe && (
-                                <button
-                                  className="cheer-member-mini-btn"
-                                  onClick={() => handleCheerMember(m)}
-                                  title={`Cheer @${m.username}`}
-                                >
-                                  <Flame size={14} className="text-amber-400" />
-                                </button>
-                              )}
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="cheer-member-mini-btn"
+                                    onClick={() => handleCheerMember(m, sg.name)}
+                                    title={`Encourage @${m.username} on ${sg.name}`}
+                                  >
+                                    <Flame size={14} className="text-amber-400" />
+                                    <span>Encourage</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );

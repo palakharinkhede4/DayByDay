@@ -128,10 +128,12 @@ export async function ensureTables(force = false) {
           from_avatar VARCHAR(32),
           pod_code VARCHAR(24),
           message VARCHAR(256),
+          goal_name VARCHAR(64),
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           is_read BOOLEAN DEFAULT FALSE
         );
       `;
+      await sql`ALTER TABLE daybyday_cheers ADD COLUMN IF NOT EXISTS goal_name VARCHAR(64);`;
 
       // Optimized indexes for fast lookups
       await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_username ON daybyday_users(LOWER(username));`;

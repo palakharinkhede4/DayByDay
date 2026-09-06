@@ -696,7 +696,7 @@ export const leaveGroupPodRemote = async (podCode, userId) => {
 // CHEERS & ENCOURAGEMENT SERVICES
 // ==========================================
 
-export const sendCheerRemote = async ({ toUserId, fromUserId, fromUsername, fromName, fromAvatar, podCode, message }) => {
+export const sendCheerRemote = async ({ toUserId, toUsername, fromUserId, fromUsername, fromName, fromAvatar, podCode, message, goalName }) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
@@ -706,12 +706,14 @@ export const sendCheerRemote = async ({ toUserId, fromUserId, fromUsername, from
       body: JSON.stringify({
         action: 'send_cheer',
         toUserId,
+        toUsername,
         fromUserId,
         fromUsername,
         fromName,
         fromAvatar,
         podCode,
         message,
+        goalName,
       }),
     });
     const data = await parseJsonSafe(res);
@@ -721,7 +723,7 @@ export const sendCheerRemote = async ({ toUserId, fromUserId, fromUsername, from
   }
 };
 
-export const fetchCheersRemote = async (userId, podCode) => {
+export const fetchCheersRemote = async (userId, username, podCode) => {
   if (!hasRemoteBackend()) return [];
   const baseUrl = getApiBaseUrl();
   try {
@@ -731,6 +733,7 @@ export const fetchCheersRemote = async (userId, podCode) => {
       body: JSON.stringify({
         action: 'get_cheers',
         userId,
+        username,
         podCode,
       }),
     });
@@ -738,6 +741,25 @@ export const fetchCheersRemote = async (userId, podCode) => {
     return data?.cheers || [];
   } catch {
     return [];
+  }
+};
+
+export const markCheersReadRemote = async (userId, username) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'mark_cheers_read',
+        userId,
+        username,
+      }),
+    });
+    return await parseJsonSafe(res);
+  } catch {
+    return null;
   }
 };
 

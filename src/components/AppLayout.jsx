@@ -166,7 +166,6 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
             </div>
             <div className="mobile-brand-text-col">
               <span className="mobile-brand-title font-black tracking-tight">DayByDay</span>
-              <span className="mobile-brand-status font-bold">Consistent</span>
             </div>
           </div>
 

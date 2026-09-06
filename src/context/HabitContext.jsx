@@ -27,6 +27,7 @@ import {
   leaveGroupPodRemote,
   sendCheerRemote,
   fetchCheersRemote,
+  markCheersReadRemote,
   hasRemoteBackend,
   getApiBaseUrl,
   formatErrorMessage,
@@ -1461,28 +1462,99 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification('Stopped tracking partner', 'untrack');
   };
 
-  // Send Cheer / Encouragement
-  const sendCheer = async (targetUserId, targetUsername, targetName, targetAvatar) => {
+  // Send Cheer / Encouragement with goal context
+  const sendCheer = async (targetUserIdOrCode, customMessage, goalName) => {
     sound.complete();
     triggerCelebration();
 
-    const username = targetUsername || 'partner';
-    triggerIslandNotification(`Cheer sent to @${username}! 🔥`, 'flame');
+    const msg = customMessage || (goalName ? `Encouraged you for ${goalName}! 🔥` : 'Keep crushing your goals! 🔥');
 
     try {
       await sendCheerRemote({
-        toUserId: targetUserId,
+        toUserId: targetUserIdOrCode,
         fromUserId: user?.id,
         fromUsername: user?.username || 'friend',
         fromName: user?.displayName || user?.username || 'Friend',
         fromAvatar: user?.avatar || 'flame',
         podCode: groupPod?.code,
-        message: 'Keep crushing your goals! 🔥',
+        message: msg,
+        goalName,
       });
     } catch (e) {
       console.warn('Cheer delivery notice:', e);
     }
   };
+
+  // Incoming Cheer Notification Listener (Notifies user when teammates encourage them)
+  const seenCheerIdsRef = useRef(new Set());
+  useEffect(() => {
+    if (!user?.id && !user?.username) return;
+
+    let isSubscribed = true;
+    const checkCheers = async () => {
+      try {
+        const targetId = user.id || user.username;
+        const cheers = await fetchCheersRemote(targetId, user.username, groupPod?.code);
+        if (!isSubscribed || !Array.isArray(cheers) || cheers.length === 0) return;
+
+        const unread = cheers.filter((c) => !c.is_read && !seenCheerIdsRef.current.has(c.id));
+        if (unread.length > 0) {
+          unread.forEach((c) => {
+            seenCheerIdsRef.current.add(c.id);
+
+            // 1. Dynamic Island HUD
+            const fromWho = c.from_name || (c.from_username ? `@${c.from_username}` : 'A teammate');
+            const goalContext = c.goal_name || c.goalName;
+            const islandText = goalContext
+              ? `${fromWho} encouraged you for "${goalContext}"! 🔥`
+              : `${fromWho}: "${c.message}"`;
+            triggerIslandNotification(islandText, 'flame');
+
+            // 2. Local OS Notification
+            const notifTitle = goalContext
+              ? `DayByDay · Encouraged for ${goalContext} 🔥`
+              : `DayByDay Encouragement 🔥`;
+            const notifBody = goalContext
+              ? `${fromWho} cheered you on for "${goalContext}"! "${c.message}"`
+              : `${fromWho} cheered you on: "${c.message}"`;
+
+            if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.LocalNotifications) {
+              window.Capacitor.Plugins.LocalNotifications.schedule({
+                notifications: [
+                  {
+                    id: Math.floor(Math.random() * 100000),
+                    title: notifTitle,
+                    body: notifBody,
+                    schedule: { at: new Date(Date.now() + 500) },
+                    sound: 'beep.wav',
+                  },
+                ],
+              }).catch(() => {});
+            } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              try {
+                new Notification(notifTitle, {
+                  body: notifBody,
+                  icon: '/icon.svg',
+                });
+              } catch {}
+            }
+          });
+
+          sound.complete();
+
+          // Mark read on backend
+          markCheersReadRemote(targetId, user.username).catch(() => {});
+        }
+      } catch {}
+    };
+
+    checkCheers();
+    const interval = setInterval(checkCheers, 30000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [user?.id, user?.username, groupPod?.code]);
 
   // Group Pod (up to 10 users)
   const createGroupPod = async (name) => {

@@ -71,7 +71,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
               ? 'Connecting to GitHub Releases to check for the latest DayByDay build...'
               : isUpdate
               ? `A new version (${updateInfo?.releaseTag || 'Latest'}) of DayByDay is ready for you.`
-              : `You are on the latest build (${updateInfo?.currentVersion || 'v1.13.0'}).`}
+              : `You are on the latest build (${updateInfo?.currentVersion || 'v1.15.0'}).`}
           </p>
         </div>
 
