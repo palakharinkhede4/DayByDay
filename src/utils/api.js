@@ -16,7 +16,7 @@ export const getApiBaseUrl = () => {
   if (customUrl && customUrl.trim()) {
     return customUrl.trim().replace(/\/$/, '');
   }
-  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
+  if (import.meta?.env?.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
     return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
   }
   // When running on public web / Vercel
@@ -26,9 +26,26 @@ export const getApiBaseUrl = () => {
   return '';
 };
 
+export const setApiBaseUrl = (url) => {
+  if (typeof window === 'undefined') return;
+  const clean = (url || '').trim().replace(/\/$/, '');
+  if (clean) {
+    localStorage.setItem('daybyday_server_url', clean);
+  } else {
+    localStorage.removeItem('daybyday_server_url');
+    localStorage.removeItem('duotrack_server_url');
+  }
+};
+
+export const clearApiBaseUrl = () => {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('daybyday_server_url');
+  localStorage.removeItem('duotrack_server_url');
+};
+
 export const hasRemoteBackend = () => {
   const baseUrl = getApiBaseUrl();
-  if (baseUrl) return true;
+  if (baseUrl && baseUrl.trim()) return true;
   if (typeof window !== 'undefined' && window.location.protocol.startsWith('http') && !isNativePlatform()) {
     return true;
   }

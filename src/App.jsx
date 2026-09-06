@@ -8,8 +8,9 @@ import { InsightsScreen } from './screens/InsightsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { PairingModal } from './components/PairingModal';
 import { AddGoalModal } from './components/AddGoalModal';
-import { OnboardingModal } from './components/OnboardingModal';
 import { IosInstallPrompt } from './components/IosInstallPrompt';
+import { AuthScreen } from './screens/AuthScreen';
+import { useHabits } from './context/HabitContext';
 
 class ScreenErrorBoundary extends React.Component {
   constructor(props) {
@@ -64,9 +65,27 @@ class ScreenErrorBoundary extends React.Component {
 }
 
 const MainAppContent = () => {
+  const { user, isSessionRestoring } = useHabits();
   const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
+
+  // While restoring session from IndexedDB Vault, show a calm splash state
+  if (isSessionRestoring) {
+    return (
+      <div className="auth-splash-loader">
+        <div className="splash-logo-wrap">
+          <img src="./icon.png" alt="DayByDay" className="splash-logo" />
+          <div className="splash-spinner-ring" />
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, render full-page AuthScreen like real native Android/iOS apps
+  if (!user || !user.username) {
+    return <AuthScreen />;
+  }
 
   return (
     <div className="app-root">
@@ -102,9 +121,7 @@ const MainAppContent = () => {
         </ScreenErrorBoundary>
       </AppLayout>
 
-      {/* Modals */}
-      <OnboardingModal />
-
+      {/* In-App Modals */}
       <PairingModal
         isOpen={isPairingOpen}
         onClose={() => setIsPairingOpen(false)}

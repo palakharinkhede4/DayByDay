@@ -57,9 +57,9 @@ Write-Host "Updated updateChecker.js" -ForegroundColor Gray
 
 # ── 5. Commit and push ───────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "Committing version bump..." -ForegroundColor Cyan
-git add package.json android/app/build.gradle src/utils/updateChecker.js
-git commit -m "release: bump version to v$next"
+Write-Host "Committing version bump and all changes..." -ForegroundColor Cyan
+git add -A
+git commit -m "release: v$next - modern pastel navy app icon, full-page native AuthScreen, and cloud sync bridge"
 git push origin main
 
 Write-Host ""

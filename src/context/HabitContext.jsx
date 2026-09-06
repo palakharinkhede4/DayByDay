@@ -692,6 +692,7 @@ export const HabitProvider = ({ children }) => {
   const loginUser = async (username, password) => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    let remoteError = null;
 
     try {
       const res = await loginUserRemote(cleanUsername, password);
@@ -721,10 +722,15 @@ export const HabitProvider = ({ children }) => {
         return res;
       }
     } catch (err) {
-      console.warn('Remote login unavailable, attempting local vault fallback:', err.message);
+      remoteError = err.message;
+      console.warn('Remote login notice:', err.message);
+      // If server explicitly rejected password or user credentials
+      if (err.message && (err.message.includes('Invalid username') || err.message.includes('password'))) {
+        throw err;
+      }
     }
 
-    // Local Vault Fallback
+    // Local Vault Fallback (For offline use or local accounts)
     const localAcc = localStorage.getItem(`daybyday_local_acc_${cleanUsername}`);
     if (localAcc) {
       try {
@@ -735,13 +741,22 @@ export const HabitProvider = ({ children }) => {
           triggerIslandNotification(`Welcome back @${parsed.user.username}!`, 'user');
           return { user: parsed.user };
         } else {
-          throw new Error('Incorrect password');
+          throw new Error('Incorrect password. Please verify and try again.');
         }
       } catch (e) {
-        if (e.message === 'Incorrect password') throw e;
+        if (e.message.includes('password')) throw e;
       }
     }
-    throw new Error('Account not found or password incorrect');
+
+    // Context-sensitive error reporting
+    const hasRemote = hasRemoteBackend();
+    if (!hasRemote) {
+      throw new Error(`Account @${cleanUsername} was not found on this device. If you created this account on the web or another device, please connect your Cloud Server URL or import your backup below.`);
+    }
+    if (remoteError) {
+      throw new Error(`Could not reach cloud server (${remoteError}). Check your connection or verify server URL.`);
+    }
+    throw new Error(`Account @${cleanUsername} not found. Check your username or tap "Create Account".`);
   };
 
   // Get Security Question for User
