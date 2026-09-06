@@ -272,7 +272,7 @@ export const HabitProvider = ({ children }) => {
     }
     return {
       isPaired: false,
-      code: user ? user.secretCode : 'DAY-1000',
+      code: user ? (user.secretCode || user.secret_code || 'DAY-1000') : 'DAY-1000',
       user1: { name: user?.displayName || 'You', email: '', initial: (user?.displayName || 'Y')[0].toUpperCase() },
       user2: null,
       daysTogether: 0,
@@ -345,32 +345,62 @@ export const HabitProvider = ({ children }) => {
     if (!name || typeof name !== 'string') return;
     const trimmed = name.trim();
     if (!trimmed) return;
+    let nextCategories = [];
     setCustomCategories((prev) => {
       if (prev.some((c) => c.toLowerCase() === trimmed.toLowerCase())) return prev;
-      const next = [...prev, trimmed];
-      try { localStorage.setItem('daybyday_categories', JSON.stringify(next)); } catch {}
-      return next;
+      nextCategories = [...prev, trimmed];
+      try { localStorage.setItem('daybyday_categories', JSON.stringify(nextCategories)); } catch {}
+      return nextCategories;
     });
+    if (user?.id && nextCategories.length > 0) {
+      const updatedPrefs = {
+        themeColor,
+        themeMode,
+        useMaterial3Theme,
+        customCategories: nextCategories,
+        profilePicture,
+        activeFocusHabitId,
+        beyondGoals,
+      };
+      syncUserHabitsRemote(user.id, habits, updatedPrefs).catch(() => {});
+    }
   };
 
   const deleteCustomCategory = (name) => {
-    if (!name) return;
+    if (!name || name === 'All' || name === 'Daily') return;
+    const cleanName = name.trim();
+    let nextCategories = [];
     setCustomCategories((prev) => {
-      const next = prev.filter((c) => c.toLowerCase() !== name.toLowerCase());
-      try { localStorage.setItem('daybyday_categories', JSON.stringify(next)); } catch {}
-      return next;
+      nextCategories = prev.filter((c) => c.toLowerCase() !== cleanName.toLowerCase());
+      try { localStorage.setItem('daybyday_categories', JSON.stringify(nextCategories)); } catch {}
+      return nextCategories;
     });
     // Migrate habits in the deleted category to Daily
+    let updatedHabits = [];
     setHabits((prev) => {
-      const updated = prev.map((h) => {
-        if ((h.category || '').toLowerCase() === name.toLowerCase()) {
+      updatedHabits = prev.map((h) => {
+        if ((h.category || '').toLowerCase() === cleanName.toLowerCase()) {
           return { ...h, category: 'Daily' };
         }
         return h;
       });
-      try { localStorage.setItem('daybyday_habits', JSON.stringify(updated)); } catch {}
-      return updated;
+      try { localStorage.setItem('daybyday_habits', JSON.stringify(updatedHabits)); } catch {}
+      return updatedHabits;
     });
+
+    // Cloud sync category removal and habit migration
+    if (user?.id) {
+      const updatedPrefs = {
+        themeColor,
+        themeMode,
+        useMaterial3Theme,
+        customCategories: nextCategories,
+        profilePicture,
+        activeFocusHabitId,
+        beyondGoals,
+      };
+      syncUserHabitsRemote(user.id, updatedHabits, updatedPrefs).catch(() => {});
+    }
   };
 
   // Pinned Habit & Live Notifications removed per user request
@@ -843,7 +873,13 @@ export const HabitProvider = ({ children }) => {
     try {
       const res = await loginUserRemote(cleanUsername, password);
       if (res && res.user) {
-        setUser(res.user);
+        const secretCode = res.user.secretCode || res.user.secret_code || `DBD-${Math.floor(1000 + Math.random() * 9000)}`;
+        const loggedInUser = {
+          ...res.user,
+          secretCode,
+          secret_code: secretCode,
+        };
+        setUser(loggedInUser);
 
         // 1. Restore & format habits from DB
         if (res.habits && Array.isArray(res.habits) && res.habits.length > 0) {
@@ -851,11 +887,11 @@ export const HabitProvider = ({ children }) => {
           localStorage.setItem('daybyday_habits', JSON.stringify(res.habits));
         } else if (habits && habits.length > 0) {
           // If DB has no habits, seed it with current habits
-          syncUserHabitsRemote(res.user.id, habits).catch(() => {});
+          syncUserHabitsRemote(loggedInUser.id, habits).catch(() => {});
         }
 
         // 2. Restore all Preferences & Customizations from DB
-        const prefs = res.preferences || res.user.preferences || {};
+        const prefs = res.preferences || loggedInUser.preferences || {};
         applyPreferences(prefs);
 
         if (res.partner) {
@@ -864,7 +900,7 @@ export const HabitProvider = ({ children }) => {
         }
         setPod((prev) => ({
           ...prev,
-          code: res.podCode || res.user.secretCode,
+          code: res.podCode || secretCode,
           isPaired: Boolean(res.partner),
           user1: {
             name: res.user.displayName || res.user.username,
@@ -1083,7 +1119,9 @@ export const HabitProvider = ({ children }) => {
   const createGroupPod = async (name) => {
     sound.complete();
     const cleanName = (name || 'Focus Group').trim();
-    const podCode = `POD-${Math.floor(1000 + Math.random() * 9000)}`;
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const randChar = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    const podCode = `POD-${randNum}${randChar}`;
     const defaultGoals = [
       { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
       { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
@@ -1291,7 +1329,7 @@ export const HabitProvider = ({ children }) => {
     setPod((prev) => ({
       ...prev,
       isPaired: false,
-      code: user?.secretCode || 'DBD-1000',
+      code: user?.secretCode || user?.secret_code || 'DBD-1000',
       user2: { name: 'Partner', email: '', initial: 'P' }
     }));
     triggerIslandNotification('Solo mode active', 'user');

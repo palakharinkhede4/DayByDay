@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { HabitDetailModal } from './HabitDetailModal';
+import { ManageCategoriesModal } from './ManageCategoriesModal';
 import { sound } from '../utils/sound';
 
 function formatDays(days) {
@@ -75,6 +76,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   const [selectedHabitForEdit, setSelectedHabitForEdit] = useState(null);
   const [draggedHabitId, setDraggedHabitId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [isManageCatOpen, setIsManageCatOpen] = useState(false);
 
   // Smooth entry animation mount state
   const [pageMounted, setPageMounted] = useState(false);
@@ -171,7 +173,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
       <div className="habits-filter-bar">
         <div className="category-scroll-chips">
           {categories.map((cat) => {
-            const isCustom = !['All', 'Daily', 'Health', 'Fitness', 'Mind'].includes(cat);
+            const isDeletable = cat !== 'All' && cat !== 'Daily';
             return (
               <div
                 key={cat}
@@ -184,7 +186,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
                 >
                   <span>{cat}</span>
                 </button>
-                {isCustom && (
+                {isDeletable && (
                   <button
                     type="button"
                     className="cat-delete-btn"
@@ -218,15 +220,26 @@ export const HabitCards = ({ onOpenAddGoal }) => {
               </button>
             </form>
           ) : (
-            <button
-              type="button"
-              className="category-chip add-category-chip font-medium"
-              onClick={() => setShowAddCatInput(true)}
-              title="Add custom category"
-            >
-              <FolderPlus size={13} />
-              <span>+ Category</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="category-chip add-category-chip font-medium"
+                onClick={() => setShowAddCatInput(true)}
+                title="Add custom category"
+              >
+                <FolderPlus size={13} />
+                <span>+ Category</span>
+              </button>
+              <button
+                type="button"
+                className="category-chip manage-category-chip font-medium"
+                onClick={() => setIsManageCatOpen(true)}
+                title="Manage and delete categories"
+              >
+                <SlidersHorizontal size={13} />
+                <span>Manage</span>
+              </button>
+            </>
           )}
         </div>
         <div className="today-progress-chip">
@@ -274,6 +287,12 @@ export const HabitCards = ({ onOpenAddGoal }) => {
           onClose={() => setSelectedHabitForEdit(null)}
         />
       )}
+
+      {/* Manage Categories Modal */}
+      <ManageCategoriesModal
+        isOpen={isManageCatOpen}
+        onClose={() => setIsManageCatOpen(false)}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HabitProvider } from './context/HabitContext';
 import { AppLayout } from './components/AppLayout';
 import { MyHabitsScreen } from './screens/MyHabitsScreen';
@@ -8,9 +8,11 @@ import { InsightsScreen } from './screens/InsightsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { PairingModal } from './components/PairingModal';
 import { AddGoalModal } from './components/AddGoalModal';
+import { UpdateModal } from './components/UpdateModal';
 import { IosInstallPrompt } from './components/IosInstallPrompt';
 import { AuthScreen } from './screens/AuthScreen';
 import { useHabits } from './context/HabitContext';
+import { checkForAppUpdate } from './utils/updateChecker';
 
 class ScreenErrorBoundary extends React.Component {
   constructor(props) {
@@ -69,6 +71,30 @@ const MainAppContent = () => {
   const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+
+  // Automatically check for new releases when app opens (native Android APK & Web)
+  useEffect(() => {
+    let isCancelled = false;
+    const checkUpdates = async () => {
+      try {
+        const info = await checkForAppUpdate();
+        if (!isCancelled && info?.success && info?.updateAvailable) {
+          setUpdateInfo(info);
+          setIsUpdateModalOpen(true);
+        }
+      } catch (err) {
+        console.warn('Startup update check notice:', err);
+      }
+    };
+
+    const timer = setTimeout(checkUpdates, 1500);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   // While restoring session from IndexedDB Vault, show a calm splash state
   if (isSessionRestoring) {
@@ -84,7 +110,16 @@ const MainAppContent = () => {
 
   // If not authenticated, render full-page AuthScreen like real native Android/iOS apps
   if (!user || !user.username) {
-    return <AuthScreen />;
+    return (
+      <>
+        <AuthScreen />
+        <UpdateModal
+          isOpen={isUpdateModalOpen}
+          onClose={() => setIsUpdateModalOpen(false)}
+          updateInfo={updateInfo}
+        />
+      </>
+    );
   }
 
   return (
@@ -130,6 +165,13 @@ const MainAppContent = () => {
       <AddGoalModal
         isOpen={isAddGoalOpen}
         onClose={() => setIsAddGoalOpen(false)}
+      />
+
+      {/* In-App Update Modal */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        updateInfo={updateInfo}
       />
     </div>
   );

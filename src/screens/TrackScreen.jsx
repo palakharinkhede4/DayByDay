@@ -29,7 +29,7 @@ export const TrackScreen = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const myCode = user?.secretCode || pod?.code || 'DAY-1000';
+  const myCode = user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000';
 
   const handleCopy = async () => {
     try {
@@ -138,7 +138,7 @@ export const TrackScreen = () => {
                   <span className="partner-handle">@{trackedPartner.username}</span>
                 </div>
                 <span className="partner-status-text">
-                  Code: <strong className="font-mono">{trackedPartner.secretCode}</strong> · {trackedPartner.lastActive || 'Active'}
+                  Code: <strong className="font-mono">{trackedPartner.secretCode || trackedPartner.secret_code}</strong> · {trackedPartner.lastActive || 'Active'}
                 </span>
               </div>
             </div>

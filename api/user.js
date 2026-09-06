@@ -15,6 +15,9 @@ function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, ...safe } = u;
   if (!safe.preferences) safe.preferences = {};
+  const code = safe.secretCode || safe.secret_code;
+  safe.secretCode = code;
+  safe.secret_code = code;
   return safe;
 }
 
@@ -39,9 +42,17 @@ function formatHabitFromRow(row) {
 }
 
 function generateSecretCode(username) {
-  const prefix = (username || 'DUO').slice(0, 3).toUpperCase();
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}-${rand}`;
+  const clean = (username || 'DBD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'DBD';
+  const randNum = Math.floor(1000 + Math.random() * 9000);
+  const randChar = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return `${clean}-${randNum}${randChar}`;
+}
+
+function generatePodCode(name) {
+  const prefix = (name || 'POD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'POD';
+  const randNum = Math.floor(1000 + Math.random() * 9000);
+  const randChar = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return `${prefix}-${randNum}${randChar}`;
 }
 
 export default async function handler(req, res) {
@@ -267,6 +278,16 @@ export default async function handler(req, res) {
             const expectedHash = hashPassword(password, user.salt || '');
             if (expectedHash !== user.password_hash) {
               return res.status(401).json({ error: 'Invalid username or password' });
+            }
+          }
+
+          // Ensure user has a distinct, unique secret code (upgrade legacy/missing/dummy codes)
+          if (!user.secret_code || user.secret_code === 'DAY-1000' || user.secret_code === 'DBD-1000' || user.secret_code === 'DUO-1000') {
+            user.secret_code = generateSecretCode(user.username);
+            try {
+              await sql`UPDATE daybyday_users SET secret_code = ${user.secret_code} WHERE id = ${user.id}`;
+            } catch (err) {
+              console.warn('Notice updating legacy secret_code:', err.message);
             }
           }
 
@@ -574,7 +595,7 @@ export default async function handler(req, res) {
     if (action === 'create_group_pod') {
       const { userId, name, podCode, sharedGoals } = req.body;
       const cleanName = (name || 'Focus Group').trim();
-      const cleanCode = (podCode || `POD-${Math.floor(1000 + Math.random() * 9000)}`).trim().toUpperCase();
+      const cleanCode = (podCode || generatePodCode(cleanName)).trim().toUpperCase();
       const id = `gpod_${Date.now().toString(36)}`;
 
       try {

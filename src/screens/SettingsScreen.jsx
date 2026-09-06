@@ -32,6 +32,7 @@ import {
   RELEASES_PAGE_URL,
   DIRECT_APK_URL,
 } from '../utils/updateChecker';
+import { UpdateModal } from '../components/UpdateModal';
 
 
 export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
@@ -150,7 +151,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   };
 
   const handleCopyCode = async () => {
-    const code = user?.secretCode || pod.code || '';
+    const code = user?.secretCode || user?.secret_code || pod?.code || '';
     if (!code) return;
     try {
       if (navigator.clipboard) {
@@ -222,6 +223,34 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               Sign Out
             </button>
           )}
+        </div>
+      </div>
+
+      {/* SECTION: ACCOUNT & SECRET CODE */}
+      <div className="settings-group">
+        <span className="group-label">ACCOUNT & SECRET CODE</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item clickable" onClick={handleCopyCode}>
+            <div className="row-left">
+              <Key size={18} className="text-amber-400" />
+              <div>
+                <span className="row-title">Your Secret Code</span>
+                <span className="row-hint">Share this code with a friend for 1-on-1 partner tracking</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="font-mono font-bold text-sm" style={{ padding: '0.25rem 0.6rem', borderRadius: '8px', background: 'rgba(249, 115, 22, 0.12)', color: 'var(--primary, #F97316)' }}>
+                {user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000'}
+              </span>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                aria-label="Copy secret code"
+              >
+                {copiedCode ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -550,99 +579,12 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       )}
 
       {/* UPDATE STATUS MODAL */}
-      {updateModalOpen && (
-        <div className="update-modal-backdrop" onClick={() => setUpdateModalOpen(false)}>
-          <div className="update-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="update-modal-header">
-              <div className="update-icon-circle">
-                {checkingUpdate ? (
-                  <RefreshCw size={24} className="animate-spin text-emerald-400" />
-                ) : updateInfo?.updateAvailable ? (
-                  <Sparkles size={24} className="text-emerald-400" />
-                ) : (
-                  <CheckCircle2 size={24} className="text-blue-400" />
-                )}
-              </div>
-              <h3 className="update-modal-title font-extrabold">
-                {checkingUpdate
-                  ? 'Checking GitHub Releases...'
-                  : updateInfo?.updateAvailable
-                  ? 'Update Available'
-                  : 'Up to Date'}
-              </h3>
-              <p className="update-modal-subtitle">
-                {checkingUpdate
-                  ? 'Connecting to GitHub to find the latest DayByDay build...'
-                  : updateInfo?.updateAvailable
-                  ? 'A newer build of DayByDay is available for download.'
-                  : `You're on the latest build (${updateInfo?.currentVersion || 'v1.1.0'}).`}
-              </p>
-            </div>
-
-            {!checkingUpdate && updateInfo && (
-              <div className="update-details-box">
-                <div className="update-detail-row">
-                  <span className="detail-label">Release</span>
-                  <span className="detail-value font-mono font-bold">
-                    {updateInfo.releaseName || 'Latest Release'}
-                  </span>
-                </div>
-                {updateInfo.formattedDate && (
-                  <div className="update-detail-row">
-                    <span className="detail-label">Published</span>
-                    <span className="detail-value">{updateInfo.formattedDate}</span>
-                  </div>
-                )}
-                {updateInfo.apkSize && (
-                  <div className="update-detail-row">
-                    <span className="detail-label">Package Size</span>
-                    <span className="detail-value font-mono">{updateInfo.apkSize}</span>
-                  </div>
-                )}
-                <div className="update-detail-row">
-                  <span className="detail-label">Compatibility</span>
-                  <span className="detail-value text-emerald-400 font-medium">
-                    In-place update (data & habits preserved)
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="update-modal-actions">
-              {updateInfo?.updateAvailable && (
-                <button
-                  className="update-action-btn primary font-bold"
-                  onClick={() => {
-                    openExternalUrl(updateInfo.directApkUrl || DIRECT_APK_URL);
-                    setUpdateModalOpen(false);
-                  }}
-                >
-                  <Download size={16} />
-                  <span>Download Latest APK</span>
-                </button>
-              )}
-
-              <button
-                className="update-action-btn secondary font-medium"
-                onClick={() => {
-                  openExternalUrl(updateInfo?.releasePageUrl || RELEASES_PAGE_URL);
-                  setUpdateModalOpen(false);
-                }}
-              >
-                <ExternalLink size={16} />
-                <span>Open Releases Page</span>
-              </button>
-
-              <button
-                className="update-action-btn close font-medium"
-                onClick={() => setUpdateModalOpen(false)}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <UpdateModal
+        isOpen={updateModalOpen}
+        onClose={() => setUpdateModalOpen(false)}
+        updateInfo={updateInfo}
+        isChecking={checkingUpdate}
+      />
       {/* AVATAR OPTIONS ACTION MODAL */}
       {avatarModalOpen && (
         <div className="modal-backdrop" onClick={() => setAvatarModalOpen(false)}>

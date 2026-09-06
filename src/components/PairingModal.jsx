@@ -11,7 +11,7 @@ export const PairingModal = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const myCode = user?.secretCode || pod?.code || 'DAY-1000';
+  const myCode = user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000';
 
   const handleCopy = async () => {
     try {
