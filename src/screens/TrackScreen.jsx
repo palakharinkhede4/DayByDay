@@ -118,8 +118,17 @@ export const TrackScreen = () => {
         <div className="tracked-partner-card">
           <div className="partner-card-header">
             <div className="partner-identity">
-              <div className="partner-avatar-circle font-bold">
-                {trackedPartner.avatar || (trackedPartner.displayName || trackedPartner.username)[0].toUpperCase()}
+              <div className="partner-avatar-circle font-bold" style={{ overflow: 'hidden' }}>
+                {trackedPartner.profilePicture ? (
+                  <img
+                    src={trackedPartner.profilePicture}
+                    alt={trackedPartner.displayName || trackedPartner.username}
+                    className="partner-avatar-img"
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  trackedPartner.avatar || (trackedPartner.displayName || trackedPartner.username)[0].toUpperCase()
+                )}
               </div>
               <div>
                 <div className="partner-name-row">

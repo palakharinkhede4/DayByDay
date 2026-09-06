@@ -162,8 +162,16 @@ export const TogetherScreen = () => {
             <div className="group-members-grid">
               {(groupPod.members || []).map((m, idx) => (
                 <div key={m.id || idx} className="group-member-card">
-                  <div className="member-avatar font-bold">
-                    {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
+                  <div className="member-avatar font-bold" style={{ overflow: 'hidden' }}>
+                    {m.profilePicture ? (
+                      <img
+                        src={m.profilePicture}
+                        alt={m.displayName || m.username}
+                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()
+                    )}
                   </div>
                   <div className="member-info">
                     <div className="member-name font-bold">

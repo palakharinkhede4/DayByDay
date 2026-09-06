@@ -10,6 +10,9 @@
     "SplashScreen": {
       "launchShowDuration": 1500,
       "backgroundColor": "#0d1b1e"
+    },
+    "CapacitorHttp": {
+      "enabled": true
     }
   }
 }

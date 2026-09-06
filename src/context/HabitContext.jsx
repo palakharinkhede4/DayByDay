@@ -16,6 +16,11 @@ import {
   pairPartnerRemote,
   unpairPartnerRemote,
   deleteHabitRemote,
+  createGroupPodRemote,
+  joinGroupPodRemote,
+  getGroupPodRemote,
+  updateGroupGoalRemote,
+  leaveGroupPodRemote,
   hasRemoteBackend,
   getApiBaseUrl,
 } from '../utils/api';
@@ -775,10 +780,14 @@ export const HabitProvider = ({ children }) => {
         syncUserHabitsRemote(newUser.id, habits, currentPrefs).catch(() => {});
       }
     } catch (err) {
-      console.warn('Remote sync unavailable; continuing with local-first persistent vault:', err.message);
-      if (err.message && err.message.toLowerCase().includes('already taken')) {
-        throw err;
+      console.warn('Registration notice:', err.message);
+      if (err.message && (err.message.toLowerCase().includes('already taken') || err.message.toLowerCase().includes('exists'))) {
+        throw new Error('Username is already taken. Please choose another username or sign in.');
       }
+      if (err.message && (err.message.toLowerCase().includes('network') || err.message.toLowerCase().includes('failed to fetch') || err.message.toLowerCase().includes('unreachable'))) {
+        throw new Error('Unable to connect to DayByDay Cloud. Please check your internet connection.');
+      }
+      throw err;
     }
 
     // Always store offline credential record in vault so native/offline access is instantaneous
@@ -982,33 +991,28 @@ export const HabitProvider = ({ children }) => {
     try {
       const remote = await fetchUserRemote(cleanCode);
       if (remote && remote.user) {
+        const partnerHabits = remote.habits || [];
+        const total = partnerHabits.length;
+        const completed = partnerHabits.filter(h => {
+          const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+          return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+        }).length;
+        const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+
         partnerData = {
           ...remote.user,
-          habits: remote.habits || [],
-          streak: remote.streak || 1,
-          todayPercent: remote.todayPercent || 0,
-          lastActive: 'Just now'
+          habits: partnerHabits,
+          streak: remote.streak ?? calcStreak,
+          todayPercent: remote.todayPercent ?? calcPct,
+          profilePicture: remote.preferences?.profilePicture || remote.user?.profilePicture || null,
+          lastActive: 'Active today'
         };
       }
     } catch { }
 
     if (!partnerData) {
-      // Create a clean tracked profile for this code
-      const namePart = cleanCode.split('-')[0] || 'Partner';
-      partnerData = {
-        username: namePart.toLowerCase(),
-        displayName: namePart,
-        secretCode: cleanCode,
-        avatar: '',
-        todayPercent: 0,
-        streak: 0,
-        lastActive: 'Active today',
-        habits: [
-          { id: 'steps', name: 'Steps', target: 10000, user1: 0, unit: 'steps' },
-          { id: 'water', name: 'Water', target: 8, user1: 0, unit: 'glasses' },
-          { id: 'sleep', name: 'Sleep', target: 8, user1: 0, unit: 'hours' },
-        ]
-      };
+      throw new Error(`User with secret code "${cleanCode}" not found. Verify the code and try again.`);
     }
 
     setTrackedPartner(partnerData);
@@ -1026,32 +1030,44 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Group Pod (up to 10 users)
-  const createGroupPod = (name) => {
+  const createGroupPod = async (name) => {
     sound.complete();
     const cleanName = (name || 'Focus Group').trim();
     const podCode = `POD-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newPod = {
-      id: `gpod_${Date.now().toString(36)}`,
-      name: cleanName,
-      code: podCode,
-      createdAt: new Date().toISOString(),
-      maxMembers: 10,
-      members: [
-        {
-          id: user?.id || 'usr_me',
-          username: user?.username || 'you',
-          displayName: user?.displayName || 'You',
-          avatar: user?.avatar || '',
-          role: 'Owner',
-          todayPercent: currentPercent,
-          streak: pod.currentStreak || 0,
-        }
-      ],
-      sharedGoals: [
-        { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
-        { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
-      ]
-    };
+    const defaultGoals = [
+      { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
+      { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
+    ];
+
+    let newPod = null;
+    try {
+      newPod = await createGroupPodRemote(user?.id, cleanName, podCode, defaultGoals);
+    } catch (e) {
+      console.warn('Remote group pod creation notice:', e.message);
+    }
+
+    if (!newPod) {
+      newPod = {
+        id: `gpod_${Date.now().toString(36)}`,
+        name: cleanName,
+        code: podCode,
+        createdAt: new Date().toISOString(),
+        maxMembers: 10,
+        members: [
+          {
+            id: user?.id || 'usr_me',
+            username: user?.username || 'you',
+            displayName: user?.displayName || 'You',
+            avatar: user?.avatar || 'star',
+            profilePicture: profilePicture || null,
+            role: 'Owner',
+            todayPercent: currentPercent,
+            streak: pod.currentStreak || 0,
+          }
+        ],
+        sharedGoals: defaultGoals
+      };
+    }
 
     setGroupPod(newPod);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(newPod));
@@ -1060,47 +1076,23 @@ export const HabitProvider = ({ children }) => {
     return newPod;
   };
 
-  const joinGroupPod = (code) => {
+  const joinGroupPod = async (code) => {
     sound.complete();
     const cleanCode = (code || '').trim().toUpperCase();
     if (!cleanCode.startsWith('POD-')) throw new Error('Invalid Pod Code format. Must start with POD-');
 
-    // Create or join pod
-    let existing = null;
-    const saved = localStorage.getItem('daybyday_group_pod');
-    if (saved) {
-      try { existing = JSON.parse(saved); } catch { }
+    let podToJoin = null;
+    try {
+      podToJoin = await joinGroupPodRemote(user?.id, cleanCode);
+    } catch (e) {
+      console.warn('Remote join pod notice:', e.message);
+      if (e.message && (e.message.includes('capacity') || e.message.includes('not found') || e.message.includes('Invalid'))) {
+        throw e;
+      }
     }
 
-    const podToJoin = (existing && existing.code === cleanCode) ? existing : {
-      id: `gpod_${cleanCode.toLowerCase()}`,
-      name: 'Accountability Pod',
-      code: cleanCode,
-      createdAt: new Date().toISOString(),
-      maxMembers: 10,
-      members: [
-        { id: 'usr_leader', username: 'alex', displayName: 'Alex', avatar: '', role: 'Owner', todayPercent: 70, streak: 5 }
-      ],
-      sharedGoals: [
-        { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
-        { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
-      ]
-    };
-
-    if (podToJoin.members.length >= 10 && !podToJoin.members.some(m => m.username === user?.username)) {
-      throw new Error('This pod has reached the maximum capacity of 10 members.');
-    }
-
-    if (!podToJoin.members.some(m => m.username === user?.username)) {
-      podToJoin.members.push({
-        id: user?.id || 'usr_me',
-        username: user?.username || 'you',
-        displayName: user?.displayName || 'You',
-        avatar: user?.avatar || '',
-        role: 'Member',
-        todayPercent: currentPercent,
-        streak: pod.currentStreak || 0,
-      });
+    if (!podToJoin) {
+      throw new Error(`Group pod "${cleanCode}" not found. Please verify the code.`);
     }
 
     setGroupPod(podToJoin);
@@ -1110,8 +1102,11 @@ export const HabitProvider = ({ children }) => {
     return podToJoin;
   };
 
-  const leaveGroupPod = () => {
+  const leaveGroupPod = async () => {
     sound.tap();
+    if (groupPod?.code && user?.id) {
+      leaveGroupPodRemote(groupPod.code, user.id).catch(() => {});
+    }
     setGroupPod(null);
     localStorage.removeItem('daybyday_group_pod');
     triggerIslandNotification('Left group pod', 'user');
@@ -1136,7 +1131,7 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification('Shared goal added!', 'target');
   };
 
-  const updateSharedGoalProgress = (goalId, delta) => {
+  const updateSharedGoalProgress = async (goalId, delta) => {
     sound.tap();
     if (!groupPod) return;
     const updatedGoals = (groupPod.sharedGoals || []).map(g => {
@@ -1149,7 +1144,41 @@ export const HabitProvider = ({ children }) => {
     const updated = { ...groupPod, sharedGoals: updatedGoals };
     setGroupPod(updated);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
+
+    if (groupPod.code) {
+      updateGroupGoalRemote(groupPod.code, goalId, delta).catch(() => {});
+    }
   };
+
+  // Live sync of Group Pod roster & progress every 5 seconds when in a group
+  useEffect(() => {
+    if (!groupPod?.code) return;
+    let isMounted = true;
+
+    const refreshPod = async () => {
+      try {
+        const remote = await getGroupPodRemote(groupPod.code);
+        if (remote && isMounted) {
+          setGroupPod((prev) => {
+            if (!prev) return remote;
+            return {
+              ...prev,
+              members: remote.members || prev.members,
+              sharedGoals: remote.sharedGoals || prev.sharedGoals,
+            };
+          });
+          localStorage.setItem('daybyday_group_pod', JSON.stringify(remote));
+        }
+      } catch { }
+    };
+
+    refreshPod();
+    const interval = setInterval(refreshPod, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [groupPod?.code]);
 
 
   // Pair with Partner via Secret Code

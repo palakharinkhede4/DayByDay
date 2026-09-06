@@ -46,9 +46,14 @@ function generateSecretCode(username) {
 
 export default async function handler(req, res) {
   // CORS Headers for Web & Native Apps
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  if (origin !== '*') {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE, PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Vary', 'Origin');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -108,13 +113,24 @@ export default async function handler(req, res) {
           }
         }
 
+        const formattedHabits = habits.map(formatHabitFromRow);
+        const totalHabits = formattedHabits.length;
+        const completedCount = formattedHabits.filter(h => {
+          const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+          return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+        }).length;
+        const todayPercent = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
+        const streak = formattedHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+
         return res.status(200).json({
           user: sanitizeUser(user),
-          habits: habits.map(formatHabitFromRow),
+          habits: formattedHabits,
           preferences: user.preferences || {},
           partner,
           podCode,
-          isSolo: !partner
+          isSolo: !partner,
+          todayPercent,
+          streak,
         });
       }
 
@@ -126,13 +142,23 @@ export default async function handler(req, res) {
       }
 
       const habits = memoryDb.getUserHabits(user.id);
+      const totalHabits = habits.length;
+      const completedCount = habits.filter(h => {
+        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+        return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+      }).length;
+      const todayPercent = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
+      const streak = habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+
       return res.status(200).json({
         user: sanitizeUser(user),
         habits,
         preferences: user.preferences || {},
         partner: null,
         podCode: null,
-        isSolo: true
+        isSolo: true,
+        todayPercent,
+        streak,
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -520,7 +546,7 @@ export default async function handler(req, res) {
           return res.status(200).json({
             success: true,
             podCode,
-            partner: { ...sanitizeUser(partner), habits: partnerHabits }
+            partner: { ...sanitizeUser(partner), habits: partnerHabits.map(formatHabitFromRow) }
           });
         }
 
@@ -542,6 +568,373 @@ export default async function handler(req, res) {
         await sql`UPDATE daybyday_pairings SET status = 'closed' WHERE user1_id = ${userId} OR user2_id = ${userId}`;
       }
       return res.status(200).json({ success: true, isSolo: true });
+    }
+
+    // ACTION: CREATE GROUP POD (Up to 10 members)
+    if (action === 'create_group_pod') {
+      const { userId, name, podCode, sharedGoals } = req.body;
+      const cleanName = (name || 'Focus Group').trim();
+      const cleanCode = (podCode || `POD-${Math.floor(1000 + Math.random() * 9000)}`).trim().toUpperCase();
+      const id = `gpod_${Date.now().toString(36)}`;
+
+      try {
+        let ownerMember = {
+          id: userId || 'usr_owner',
+          username: 'owner',
+          displayName: 'Owner',
+          avatar: 'star',
+          profilePicture: null,
+          role: 'Owner',
+          todayPercent: 0,
+          streak: 0,
+        };
+
+        if (sql && userId) {
+          const uRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${userId}`;
+          if (uRows.length > 0) {
+            const u = uRows[0];
+            const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId}`;
+            const formatted = habits.map(formatHabitFromRow);
+            const total = formatted.length;
+            const completed = formatted.filter(h => {
+              const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+              return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+            }).length;
+            ownerMember = {
+              id: u.id,
+              username: u.username,
+              displayName: u.display_name || u.username,
+              avatar: u.avatar || 'star',
+              profilePicture: u.preferences?.profilePicture || null,
+              role: 'Owner',
+              todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+              streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
+            };
+          }
+        } else if (userId) {
+          const u = memoryDb.getUser(userId);
+          if (u) {
+            ownerMember = {
+              id: u.id,
+              username: u.username,
+              displayName: u.displayName || u.username,
+              avatar: u.avatar || 'star',
+              profilePicture: u.preferences?.profilePicture || null,
+              role: 'Owner',
+              todayPercent: 0,
+              streak: 0,
+            };
+          }
+        }
+
+        const goals = Array.isArray(sharedGoals) && sharedGoals.length > 0 ? sharedGoals : [
+          { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
+          { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
+        ];
+
+        const podRecord = {
+          id,
+          name: cleanName,
+          code: cleanCode,
+          members: [ownerMember],
+          sharedGoals: goals,
+          createdAt: new Date().toISOString(),
+          maxMembers: 10,
+        };
+
+        if (sql) {
+          await sql`
+            INSERT INTO daybyday_group_pods (id, name, code, members, shared_goals, created_at, updated_at)
+            VALUES (${id}, ${cleanName}, ${cleanCode}, ${JSON.stringify(podRecord.members)}::jsonb, ${JSON.stringify(goals)}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (code) DO UPDATE SET
+              name = EXCLUDED.name,
+              members = EXCLUDED.members,
+              shared_goals = EXCLUDED.shared_goals,
+              updated_at = CURRENT_TIMESTAMP
+          `;
+        }
+        memoryDb.saveGroupPod(podRecord);
+
+        return res.status(200).json({ success: true, pod: podRecord });
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to create group pod: ' + err.message });
+      }
+    }
+
+    // ACTION: JOIN GROUP POD
+    if (action === 'join_group_pod') {
+      const { userId, podCode } = req.body;
+      const cleanCode = (podCode || '').trim().toUpperCase();
+      if (!cleanCode) {
+        return res.status(400).json({ error: 'Pod code is required' });
+      }
+
+      try {
+        let pod = null;
+        if (sql) {
+          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (rows.length > 0) {
+            const r = rows[0];
+            pod = {
+              id: r.id,
+              name: r.name,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+              createdAt: r.created_at,
+              maxMembers: 10,
+            };
+          }
+        } else {
+          pod = memoryDb.getGroupPod(cleanCode);
+        }
+
+        if (!pod) {
+          return res.status(404).json({ error: `Group pod ${cleanCode} not found. Check the code and try again.` });
+        }
+
+        // Fetch joining user's live profile & completion
+        let memberObj = {
+          id: userId || `usr_${Date.now().toString(36)}`,
+          username: 'member',
+          displayName: 'Member',
+          avatar: 'star',
+          profilePicture: null,
+          role: 'Member',
+          todayPercent: 0,
+          streak: 0,
+        };
+
+        if (sql && userId) {
+          const uRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${userId}`;
+          if (uRows.length > 0) {
+            const u = uRows[0];
+            const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId}`;
+            const formatted = habits.map(formatHabitFromRow);
+            const total = formatted.length;
+            const completed = formatted.filter(h => {
+              const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+              return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+            }).length;
+            memberObj = {
+              id: u.id,
+              username: u.username,
+              displayName: u.display_name || u.username,
+              avatar: u.avatar || 'star',
+              profilePicture: u.preferences?.profilePicture || null,
+              role: 'Member',
+              todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+              streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
+            };
+          }
+        } else if (userId) {
+          const u = memoryDb.getUser(userId);
+          if (u) {
+            memberObj = {
+              id: u.id,
+              username: u.username,
+              displayName: u.displayName || u.username,
+              avatar: u.avatar || 'star',
+              profilePicture: u.preferences?.profilePicture || null,
+              role: 'Member',
+              todayPercent: 0,
+              streak: 0,
+            };
+          }
+        }
+
+        const existingIdx = pod.members.findIndex(m => m.id === memberObj.id || m.username === memberObj.username);
+        if (existingIdx >= 0) {
+          pod.members[existingIdx] = { ...pod.members[existingIdx], ...memberObj };
+        } else {
+          if (pod.members.length >= 10) {
+            return res.status(400).json({ error: 'This group pod has reached the maximum capacity of 10 members.' });
+          }
+          pod.members.push(memberObj);
+        }
+
+        if (sql) {
+          await sql`
+            UPDATE daybyday_group_pods 
+            SET members = ${JSON.stringify(pod.members)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            WHERE UPPER(code) = ${cleanCode}
+          `;
+        }
+        memoryDb.saveGroupPod(pod);
+
+        return res.status(200).json({ success: true, pod });
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to join group pod: ' + err.message });
+      }
+    }
+
+    // ACTION: GET GROUP POD (Live refresh of all members' progress & photos)
+    if (action === 'get_group_pod') {
+      const { podCode } = req.body;
+      const cleanCode = (podCode || '').trim().toUpperCase();
+      if (!cleanCode) return res.status(400).json({ error: 'Pod code required' });
+
+      try {
+        let pod = null;
+        if (sql) {
+          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (rows.length > 0) {
+            const r = rows[0];
+            pod = {
+              id: r.id,
+              name: r.name,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+              createdAt: r.created_at,
+              maxMembers: 10,
+            };
+          }
+        } else {
+          pod = memoryDb.getGroupPod(cleanCode);
+        }
+
+        if (!pod) return res.status(404).json({ error: 'Pod not found' });
+
+        // Live refresh member stats and pictures from DB
+        const refreshedMembers = [];
+        for (const m of pod.members) {
+          if (!m.id) {
+            refreshedMembers.push(m);
+            continue;
+          }
+          if (sql) {
+            const uRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${m.id}`;
+            const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${m.id}`;
+            if (uRows.length > 0) {
+              const u = uRows[0];
+              const formatted = habits.map(formatHabitFromRow);
+              const total = formatted.length;
+              const completed = formatted.filter(h => {
+                const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+              }).length;
+              refreshedMembers.push({
+                ...m,
+                username: u.username,
+                displayName: u.display_name || u.username,
+                avatar: u.avatar || m.avatar || 'star',
+                profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+                streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
+              });
+              continue;
+            }
+          }
+          refreshedMembers.push(m);
+        }
+
+        pod.members = refreshedMembers;
+        if (sql) {
+          await sql`
+            UPDATE daybyday_group_pods 
+            SET members = ${JSON.stringify(refreshedMembers)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            WHERE UPPER(code) = ${cleanCode}
+          `;
+        }
+        memoryDb.saveGroupPod(pod);
+
+        return res.status(200).json({ success: true, pod });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: UPDATE GROUP SHARED GOAL
+    if (action === 'update_group_goal') {
+      const { podCode, goalId, delta } = req.body;
+      const cleanCode = (podCode || '').trim().toUpperCase();
+      if (!cleanCode || !goalId) return res.status(400).json({ error: 'Pod code and goal ID required' });
+
+      try {
+        let pod = null;
+        if (sql) {
+          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (rows.length > 0) {
+            const r = rows[0];
+            pod = {
+              id: r.id,
+              name: r.name,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+              createdAt: r.created_at,
+              maxMembers: 10,
+            };
+          }
+        } else {
+          pod = memoryDb.getGroupPod(cleanCode);
+        }
+
+        if (!pod) return res.status(404).json({ error: 'Pod not found' });
+
+        const updatedGoals = (pod.sharedGoals || []).map(g => {
+          if (g.id === goalId) {
+            const next = Math.max(0, (g.current || 0) + (Number(delta) || 0));
+            return { ...g, current: next };
+          }
+          return g;
+        });
+
+        pod.sharedGoals = updatedGoals;
+        if (sql) {
+          await sql`
+            UPDATE daybyday_group_pods 
+            SET shared_goals = ${JSON.stringify(updatedGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            WHERE UPPER(code) = ${cleanCode}
+          `;
+        }
+        memoryDb.saveGroupPod(pod);
+
+        return res.status(200).json({ success: true, pod });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: LEAVE GROUP POD
+    if (action === 'leave_group_pod') {
+      const { podCode, userId } = req.body;
+      const cleanCode = (podCode || '').trim().toUpperCase();
+      if (!cleanCode || !userId) return res.status(400).json({ error: 'Pod code and user ID required' });
+
+      try {
+        let pod = null;
+        if (sql) {
+          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (rows.length > 0) {
+            const r = rows[0];
+            pod = {
+              id: r.id,
+              name: r.name,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+            };
+          }
+        } else {
+          pod = memoryDb.getGroupPod(cleanCode);
+        }
+
+        if (pod) {
+          const remaining = pod.members.filter(m => m.id !== userId);
+          if (sql) {
+            if (remaining.length === 0) {
+              await sql`DELETE FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode}`;
+            } else {
+              await sql`UPDATE daybyday_group_pods SET members = ${JSON.stringify(remaining)}::jsonb WHERE UPPER(code) = ${cleanCode}`;
+            }
+          }
+        }
+        return res.status(200).json({ success: true });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
     }
 
     // ACTION: DELETE HABIT

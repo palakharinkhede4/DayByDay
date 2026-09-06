@@ -1,10 +1,12 @@
 // DayByDay Remote Sync Client & Offline-First API Gateway
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 export const DEFAULT_API_URL = 'https://day-by-day-palak-2599.vercel.app';
 
 export const isNativePlatform = () => {
   if (typeof window === 'undefined') return false;
   return Boolean(
+    Capacitor?.isNativePlatform?.() ||
     window.Capacitor?.isNativePlatform?.() ||
     window.location.protocol === 'capacitor:' ||
     window.location.hostname === 'localhost' ||
@@ -51,19 +53,79 @@ export const hasRemoteBackend = () => {
   return Boolean(baseUrl && baseUrl.trim());
 };
 
-// Safe JSON parser to prevent "Unexpected token <, <!doctype" fatal errors
+// Unified fetch client: Uses native Android/iOS OkHttp on mobile to completely bypass WebView CORS
+export async function apiFetch(url, options = {}) {
+  if (Capacitor?.isNativePlatform?.()) {
+    const method = (options.method || 'GET').toUpperCase();
+    let data = options.body;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch {
+        // preserve as string
+      }
+    }
+
+    try {
+      const response = await CapacitorHttp.request({
+        url,
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(options.headers || {}),
+        },
+        data: method !== 'GET' ? data : undefined,
+      });
+
+      const isOk = response.status >= 200 && response.status < 300;
+      const responseData = response.data;
+
+      return {
+        ok: isOk,
+        status: response.status,
+        statusText: String(response.status),
+        headers: {
+          get: (name) => {
+            const key = Object.keys(response.headers || {}).find(
+              (k) => k.toLowerCase() === (name || '').toLowerCase()
+            );
+            return key ? response.headers[key] : null;
+          },
+        },
+        json: async () => responseData,
+        text: async () => (typeof responseData === 'string' ? responseData : JSON.stringify(responseData)),
+      };
+    } catch (nativeErr) {
+      console.warn('Native CapacitorHttp notice, falling back to fetch:', nativeErr.message);
+    }
+  }
+
+  return fetch(url, options);
+}
+
+// Safe JSON parser to handle both native responses and standard fetch responses
 async function parseJsonSafe(res) {
-  const contentType = res.headers.get('content-type') || '';
-  const text = await res.text();
-  
-  if (text.trim().startsWith('<') || (!contentType.includes('application/json') && text.includes('<!DOCTYPE'))) {
-    throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
+  if (!res) return null;
+  if (typeof res.json === 'function') {
+    try {
+      const data = await res.json();
+      if (data && typeof data === 'object') return data;
+    } catch { }
   }
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new Error('Invalid response from cloud service');
+
+  if (typeof res.text === 'function') {
+    const text = await res.text();
+    if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
+      throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
+    }
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error('Invalid response from cloud service');
+    }
   }
+  return null;
 }
 
 export const checkApiHealth = async (url) => {
@@ -73,7 +135,7 @@ export const checkApiHealth = async (url) => {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(`${targetUrl}/api/pod?ping=true`, {
+    const res = await apiFetch(`${targetUrl}/api/pod?ping=true`, {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -92,7 +154,7 @@ export const fetchRemotePod = async (code) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/pod?code=${encodeURIComponent(code)}`);
+    const res = await apiFetch(`${baseUrl}/api/pod?code=${encodeURIComponent(code)}`);
     if (!res.ok) {
       if (res.status === 404) return { notFound: true };
       return null;
@@ -108,7 +170,7 @@ export const pushHabitUpdate = async (podCode, userId, habitId, value) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/pod`, {
+    const res = await apiFetch(`${baseUrl}/api/pod`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -131,7 +193,7 @@ export const pushFullSync = async (podCode, userId, podInfo, habits) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/pod`, {
+    const res = await apiFetch(`${baseUrl}/api/pod`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -157,7 +219,7 @@ export const registerUserRemote = async (username, password, displayName, avatar
   }
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -172,7 +234,7 @@ export const registerUserRemote = async (username, password, displayName, avatar
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data.error || 'Failed to register');
+      throw new Error(data?.error || 'Failed to register');
     }
     return data;
   } catch (err) {
@@ -187,7 +249,7 @@ export const loginUserRemote = async (username, password) => {
   }
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -198,7 +260,7 @@ export const loginUserRemote = async (username, password) => {
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data.error || 'Invalid username or password');
+      throw new Error(data?.error || 'Invalid username or password');
     }
     return data;
   } catch (err) {
@@ -210,7 +272,7 @@ export const getSecurityQuestionRemote = async (username) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -220,7 +282,7 @@ export const getSecurityQuestionRemote = async (username) => {
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data.error || 'User not found');
+      throw new Error(data?.error || 'User not found');
     }
     return data;
   } catch (err) {
@@ -232,7 +294,7 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -244,7 +306,7 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data.error || 'Failed to reset password');
+      throw new Error(data?.error || 'Failed to reset password');
     }
     return data;
   } catch (err) {
@@ -258,7 +320,7 @@ export const fetchUserRemote = async (usernameOrCode) => {
   try {
     const isCode = usernameOrCode.includes('-');
     const param = isCode ? `code=${encodeURIComponent(usernameOrCode)}` : `username=${encodeURIComponent(usernameOrCode)}`;
-    const res = await fetch(`${baseUrl}/api/user?${param}`);
+    const res = await apiFetch(`${baseUrl}/api/user?${param}`);
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch (err) {
@@ -278,7 +340,7 @@ export const syncUserHabitsRemote = async (userId, habits, preferences = null) =
     if (preferences && typeof preferences === 'object') {
       payload.preferences = preferences;
     }
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -294,7 +356,7 @@ export const syncPreferencesRemote = async (userId, preferences) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -314,7 +376,7 @@ export const pairPartnerRemote = async (userId, partnerCode) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -325,7 +387,7 @@ export const pairPartnerRemote = async (userId, partnerCode) => {
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) {
-      throw new Error(data.error || 'Partner not found');
+      throw new Error(data?.error || 'Partner not found');
     }
     return data;
   } catch (err) {
@@ -337,7 +399,7 @@ export const unpairPartnerRemote = async (userId) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -356,7 +418,7 @@ export const deleteHabitRemote = async (userId, habitId) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/user`, {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -369,5 +431,111 @@ export const deleteHabitRemote = async (userId, habitId) => {
     return await parseJsonSafe(res);
   } catch (err) {
     return null;
+  }
+};
+
+// GROUP POD ("TOGETHER") APIS
+export const createGroupPodRemote = async (userId, name, podCode, sharedGoals) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_group_pod',
+        userId,
+        name,
+        podCode,
+        sharedGoals,
+      }),
+    });
+    const data = await parseJsonSafe(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to create group pod');
+    return data?.pod || null;
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const joinGroupPodRemote = async (userId, podCode) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'join_group_pod',
+        userId,
+        podCode,
+      }),
+    });
+    const data = await parseJsonSafe(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to join group pod');
+    return data?.pod || null;
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const getGroupPodRemote = async (podCode) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_group_pod',
+        podCode,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe(res);
+    return data?.pod || null;
+  } catch {
+    return null;
+  }
+};
+
+export const updateGroupGoalRemote = async (podCode, goalId, delta) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_group_goal',
+        podCode,
+        goalId,
+        delta,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe(res);
+    return data?.pod || null;
+  } catch {
+    return null;
+  }
+};
+
+export const leaveGroupPodRemote = async (podCode, userId) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'leave_group_pod',
+        podCode,
+        userId,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 };

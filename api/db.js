@@ -112,10 +112,24 @@ export async function ensureTables() {
       );
     `;
 
+    // 4. Group Pods table (Multi-member group pods up to 10 users)
+    await sql`
+      CREATE TABLE IF NOT EXISTS daybyday_group_pods (
+        id VARCHAR(48) PRIMARY KEY,
+        name VARCHAR(64) NOT NULL,
+        code VARCHAR(24) UNIQUE NOT NULL,
+        members JSONB DEFAULT '[]'::jsonb,
+        shared_goals JSONB DEFAULT '[]'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     // Optimized indexes for fast lookups
     await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_username ON daybyday_users(LOWER(username));`;
     await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_secret ON daybyday_users(UPPER(secret_code));`;
     await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user ON daybyday_habits(user_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_group_pods_code ON daybyday_group_pods(UPPER(code));`;
 
     tablesInitialized = true;
   } catch (err) {
@@ -163,5 +177,16 @@ export const memoryDb = {
   savePairing(pairing) {
     memoryStore.pairings.set(pairing.podCode, pairing);
     return pairing;
+  },
+  getGroupPod(code) {
+    const clean = (code || '').toUpperCase().trim();
+    if (!memoryStore.groupPods) memoryStore.groupPods = new Map();
+    return memoryStore.groupPods.get(clean) || null;
+  },
+  saveGroupPod(pod) {
+    if (!memoryStore.groupPods) memoryStore.groupPods = new Map();
+    const clean = (pod.code || '').toUpperCase().trim();
+    memoryStore.groupPods.set(clean, pod);
+    return pod;
   }
 };
