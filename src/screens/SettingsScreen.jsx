@@ -10,8 +10,6 @@ import {
   Sun,
   Laptop,
   Palette,
-  Zap,
-  Target,
   Sparkles,
   Download,
   Upload,
@@ -25,6 +23,7 @@ import {
   Plus,
   Camera,
   FileText,
+  Flame,
 } from 'lucide-react';
 import {
   checkForAppUpdate,
@@ -55,12 +54,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     resetAllData,
     deleteAccountPermanently,
     logoutUser,
-    activeFocusHabit,
-    activeFocusHabitId,
-    setActiveFocusHabitId,
-    liveActivityEnabled,
-    setLiveActivityEnabled,
-    triggerIslandNotification,
     profilePicture,
     setProfilePicture,
   } = useHabits();
@@ -107,7 +100,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
         const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setProfilePicture(resizedDataUrl);
-        triggerIslandNotification('Profile picture updated', 'check');
       };
       img.src = event.target.result;
     };
@@ -386,64 +378,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 />
                 <span className="toggle-slider"></span>
               </label>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* SECTION: LIVE ACTIVITIES & DYNAMIC ISLAND */}
-      <div className="settings-group">
-        <span className="group-label">LIVE NOTIFICATIONS & FOCUS</span>
-        <div className="settings-group-content">
-          {/* Main Toggle */}
-          <div className="settings-row-item">
-            <div className="row-left">
-              <Zap size={18} className="text-amber-400" />
-              <div>
-                <span className="row-title">Live Updates & Dynamic HUD</span>
-                <span className="row-hint">Real-time status banner for active habits</span>
-              </div>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={liveActivityEnabled}
-                onChange={(e) => {
-                  setLiveActivityEnabled(e.target.checked);
-                  triggerIslandNotification(
-                    e.target.checked ? 'Live Updates Active' : 'Live Updates Paused',
-                    'zap'
-                  );
-                }}
-              />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          {/* Focus Habit Selector */}
-          {liveActivityEnabled && (
-            <div className="settings-row-item">
-              <div className="row-left">
-                <Target size={18} className="text-rose-400" />
-                <div>
-                  <span className="row-title">Active Focus Habit</span>
-                  <span className="row-hint">
-                    {activeFocusHabitId ? `Pinned: ${activeFocusHabit?.name}` : 'Auto: Next pending habit'}
-                  </span>
-                </div>
-              </div>
-              <select
-                className="focus-habit-select"
-                value={activeFocusHabitId}
-                onChange={(e) => setActiveFocusHabitId(e.target.value)}
-              >
-                <option value="">Auto (Next Pending Habit)</option>
-                {habits.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name} ({h.target} {h.unit})
-                  </option>
-                ))}
-              </select>
             </div>
           )}
         </div>

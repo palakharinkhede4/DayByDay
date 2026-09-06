@@ -13,7 +13,6 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(LiveActivityPlugin.class);
         super.onCreate(savedInstanceState);
         requestNotificationPermission();
     }

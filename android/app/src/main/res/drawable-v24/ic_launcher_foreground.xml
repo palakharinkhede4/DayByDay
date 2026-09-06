@@ -8,39 +8,78 @@
     <!-- Outer Momentum Ring Track (72dp safe zone) -->
     <path
         android:pathData="M34,70 C24,58 24,42 34,31 C45,20 63,20 74,31 C84,42 84,58 74,70 C68,76 61,78 54,78"
-        android:strokeWidth="5.5"
+        android:strokeWidth="5"
         android:strokeLineCap="round"
         android:strokeColor="#00E599" />
 
-    <!-- Momentum Flame Core -->
+    <!-- Momentum Ring Node Accent -->
     <path
-        android:pathData="M54,32 C54,32 64,43 64,53 C64,58.8 59.5,63.5 54,63.5 C48.5,63.5 44,58.8 44,53 C44,45 50.5,39 54,32 Z">
+        android:pathData="M74,31m-3,0a3,3 0 1,0 6,0a3,3 0 1,0 -6,0"
+        android:fillColor="#00E599" />
+    <path
+        android:pathData="M74,31m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Left Trophy Handle -->
+    <path
+        android:pathData="M38,43 C28,43 28,57 38,57"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeColor="#F59E0B" />
+
+    <!-- Right Trophy Handle -->
+    <path
+        android:pathData="M70,43 C80,43 80,57 70,57"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeColor="#F59E0B" />
+
+    <!-- Trophy Pedestal Stem & Base -->
+    <path
+        android:pathData="M51.5,61 H56.5 V68 H51.5 Z M47,68 H61 V71 H47 Z M42,71 H66 V75 H42 Z"
+        android:fillColor="#B45309" />
+
+    <!-- Trophy Main Cup Body -->
+    <path
+        android:pathData="M37,39 H71 C71,53 64,61 54,62 C44,61 37,53 37,39 Z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:startX="54"
-                android:startY="32"
-                android:endX="54"
-                android:endY="64"
+                android:startX="37"
+                android:startY="39"
+                android:endX="71"
+                android:endY="62"
                 android:type="linear">
-                <item android:color="#FFB800" android:offset="0.0" />
-                <item android:color="#FF5722" android:offset="0.45" />
-                <item android:color="#00E599" android:offset="1.0" />
+                <item android:color="#FEF08A" android:offset="0.0" />
+                <item android:color="#F59E0B" android:offset="0.6" />
+                <item android:color="#D97706" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Inner Luminous Core Spark -->
+    <!-- Trophy Top Rim -->
     <path
-        android:pathData="M54,46 C54,46 58,50 58,54 C58,56.5 56.2,58.5 54,58.5 C51.8,58.5 50,56.5 50,54 C50,51 52.5,49 54,46 Z"
-        android:fillColor="#FFFFFF" />
+        android:pathData="M37,39 C37,37.5 71,37.5 71,39 C71,40.5 37,40.5 37,39 Z"
+        android:fillColor="#FFFBEB" />
 
-    <!-- Progress Milestone Node Accent -->
+    <!-- Trophy Star Apex -->
     <path
-        android:pathData="M34,70m-3.2,0a3.2,3.2 0 1,0 6.4,0a3.2,3.2 0 1,0 -6.4,0"
-        android:fillColor="#00E599" />
+        android:pathData="M54,31 L55.5,33.5 L58,34 L55.5,34.5 L54,37 L52.5,34.5 L50,34 L52.5,33.5 Z"
+        android:fillColor="#FEF08A" />
 
-    <!-- Orbital Streak Spark Accent -->
+    <!-- ================= VICTORY TICK (CHECKMARK) ================= -->
+    <!-- Tick Emerald Outer Glow Base -->
     <path
-        android:pathData="M74,31m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
-        android:fillColor="#FFD54F" />
+        android:pathData="M45.5,50 L52,56.5 L64,43.5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="#00E599" />
+
+    <!-- Tick White Crisp Center Core -->
+    <path
+        android:pathData="M45.5,50 L52,56.5 L64,43.5"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="#FFFFFF" />
 </vector>

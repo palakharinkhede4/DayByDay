@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
-import { DynamicIslandHud } from './DynamicIslandHud';
 import {
   CheckCircle2,
   Users,
@@ -130,12 +129,6 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
         </header>
       )}
 
-      {/* MOBILE TOP STATUS BAR & DYNAMIC ISLAND */}
-      {isMobile && osMode === 'ios' && (
-        <div className="mobile-ios-island-bar">
-          <DynamicIslandHud isDesktopMockup={false} />
-        </div>
-      )}
 
       {/* MAIN CONTENT AREA */}
       <main className={`app-main-content ${isMobile ? 'mobile-main' : 'desktop-main'}`}>

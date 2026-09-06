@@ -19,7 +19,6 @@ import {
   ChevronUp,
   ChevronDown,
   FolderPlus,
-  Pin,
   SlidersHorizontal,
 } from 'lucide-react';
 
@@ -180,7 +179,6 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             onRemove={removeGoal}
             onMoveUp={() => reorderHabit(habit.id, 'up')}
             onMoveDown={() => reorderHabit(habit.id, 'down')}
-            isPinned={pinnedHabitId === habit.id}
             onOpenEdit={() => setSelectedHabitForEdit(habit)}
           />
         ))}
@@ -215,7 +213,6 @@ const ModernHabitCard = ({
   onRemove,
   onMoveUp,
   onMoveDown,
-  isPinned,
   onOpenEdit,
 }) => {
   const isBool = typeof habit.user1 === 'boolean' || habit.unit === 'check';
@@ -223,10 +220,6 @@ const ModernHabitCard = ({
   const target = Number(habit.target) || 1;
   const isDone = isBool ? Boolean(habit.user1) : val >= target;
   const percent = isBool ? (isDone ? 100 : 0) : Math.min(100, Math.round((val / target) * 100));
-
-  // Calculate percentage delta
-  const pct = Number(habit.stepPercent) || 10;
-  const delta = isBool ? 1 : Math.max(1, Math.round((target * pct) / 100));
 
   const handleToggleBool = () => {
     onUpdate(habit.id, activeUserId, !isDone, true);
@@ -254,7 +247,7 @@ const ModernHabitCard = ({
         <div
           className="habit-card-info clickable-card-info"
           onClick={onOpenEdit}
-          title="Tap to edit habit, delta %, reminders, pin, or delete"
+          title="Tap to edit habit, reminders, or delete"
         >
           <div className="habit-icon-box">
             {getHabitIcon(habit.id, habit.category)}
@@ -262,12 +255,6 @@ const ModernHabitCard = ({
           <div className="habit-details">
             <div className="habit-name-row">
               <span className="habit-title font-bold">{habit.name}</span>
-              {isPinned && (
-                <span className="habit-pinned-pill font-bold" title="Pinned to notification bar">
-                  <Pin size={10} />
-                  <span>Pinned</span>
-                </span>
-              )}
               {habit.streak > 0 && (
                 <span className="habit-streak-pill" title={`${habit.streak} day streak`}>
                   <Flame size={12} className="text-amber-500" />
@@ -348,18 +335,16 @@ const ModernHabitCard = ({
             <div className="stepper-controls">
               <button
                 className="step-btn minus"
-                onClick={() => handleStep(-delta)}
+                onClick={() => handleStep(habit.unit === 'steps' ? -1000 : -1)}
                 disabled={val <= 0}
-                aria-label={`Decrease by ${delta} ${habit.unit || ''}`}
-                title={`-${delta} ${habit.unit || ''} (${pct}%)`}
+                aria-label="Decrease habit value"
               >
                 <Minus size={14} />
               </button>
               <button
                 className="step-btn plus"
-                onClick={() => handleStep(delta)}
-                aria-label={`Increase by ${delta} ${habit.unit || ''}`}
-                title={`+${delta} ${habit.unit || ''} (${pct}%)`}
+                onClick={() => handleStep(habit.unit === 'steps' ? 1000 : 1)}
+                aria-label="Increase habit value"
               >
                 <Plus size={14} />
               </button>

@@ -6761,11 +6761,15 @@ button:active {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 1.25rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   box-shadow: var(--shadow-elevation-1);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 [data-theme-mode="light"] .insights-section-card {
@@ -6774,21 +6778,37 @@ button:active {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+@media (max-width: 640px) {
+  .insights-section-card {
+    padding: 0.85rem 0.65rem;
+    gap: 1rem;
+    border-radius: 1rem;
+  }
+}
+
 .section-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .section-card-title-group {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .section-card-title {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .section-card-tag {
@@ -6808,13 +6828,17 @@ button:active {
 
 .weekly-calendar-row {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.4rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @media (max-width: 640px) {
   .weekly-calendar-row {
-    gap: 0.35rem;
+    gap: 0.2rem;
   }
 }
 
@@ -6822,12 +6846,25 @@ button:active {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.85rem 0.35rem;
-  border-radius: 14px;
+  gap: 0.45rem;
+  padding: 0.65rem 0.15rem;
+  border-radius: 12px;
   background: var(--bg-surface-container);
   border: 1px solid var(--border-subtle);
   transition: all 0.2s;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .calendar-day-col {
+    padding: 0.45rem 0.1rem;
+    gap: 0.3rem;
+    border-radius: 10px;
+  }
 }
 
 [data-theme-mode="light"] .calendar-day-col {
@@ -6845,14 +6882,26 @@ button:active {
 }
 
 .cal-day-letter {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .cal-day-letter {
+    font-size: 0.66rem;
+  }
 }
 
 .cal-indicator-circle {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
+  max-width: 100%;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -6860,6 +6909,18 @@ button:active {
   background: rgba(148, 163, 184, 0.14);
   color: var(--text-tertiary);
   transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .cal-indicator-circle {
+    width: 24px;
+    height: 24px;
+  }
+  .cal-indicator-circle svg {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 [data-theme-mode="light"] .cal-indicator-circle {
@@ -6873,17 +6934,28 @@ button:active {
 }
 
 .empty-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--text-tertiary);
   opacity: 0.5;
 }
 
 .cal-date-num {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .cal-date-num {
+    font-size: 0.68rem;
+  }
 }
 
 .insights-habits-list {
@@ -7434,10 +7506,12 @@ button:active {
 
 .calendar-grid-header {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   text-align: center;
   padding: 0.25rem 0;
   border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cal-header-cell {
@@ -7445,12 +7519,17 @@ button:active {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-grid-cells {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cal-day-cell {

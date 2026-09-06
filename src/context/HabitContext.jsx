@@ -22,12 +22,6 @@ import {
   recoverSessionFromVault,
   clearVaultSession,
 } from '../utils/storageVault';
-import {
-  startOrUpdateLiveActivity,
-  stopLiveActivity,
-  isLiveActivitySupported,
-  requestLiveActivityPermission,
-} from '../utils/liveActivityEngine';
 
 const HabitContext = createContext(null);
 
@@ -342,31 +336,10 @@ export const HabitProvider = ({ children }) => {
   // Dynamic Island status
   const [islandMessage, setIslandMessage] = useState(null);
 
-  // Pinned Habit for Live Notification / Dynamic Island
-  const [pinnedHabitId, setPinnedHabitIdState] = useState(() => {
-    return localStorage.getItem('daybyday_pinned_habit_id') || null;
-  });
-
-  const pinHabitForLiveTracking = (id) => {
-    sound.tap();
-    setPinnedHabitIdState(id);
-    if (id) {
-      localStorage.setItem('daybyday_pinned_habit_id', id);
-      triggerIslandNotification('Habit pinned to notification bar', 'check');
-    } else {
-      localStorage.removeItem('daybyday_pinned_habit_id');
-      stopLiveActivity();
-      triggerIslandNotification('Habit unpinned', 'x');
-    }
-  };
-
-  const unpinHabitForLiveTracking = () => {
-    sound.tap();
-    setPinnedHabitIdState(null);
-    localStorage.removeItem('daybyday_pinned_habit_id');
-    stopLiveActivity();
-    triggerIslandNotification('Habit unpinned from notification', 'x');
-  };
+  // Pinned Habit & Live Notifications removed per user request
+  const pinnedHabitId = null;
+  const pinHabitForLiveTracking = () => {};
+  const unpinHabitForLiveTracking = () => {};
 
   // Live Activity & Focus Habit State
   const [activeFocusHabitId, setActiveFocusHabitIdState] = useState(() => {
@@ -1408,28 +1381,6 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Live Activity & Ongoing Notification ONLY when a habit is explicitly pinned
-  useEffect(() => {
-    if (!liveActivityEnabled || !pinnedHabitId || !activeFocusHabit) {
-      stopLiveActivity();
-      return;
-    }
-
-    const val = activeFocusHabit.user1;
-    const isDone = typeof val === 'boolean' ? val : (val || 0) >= activeFocusHabit.target;
-
-    startOrUpdateLiveActivity({
-      habit: activeFocusHabit,
-      userValue: val,
-      targetValue: activeFocusHabit.target,
-      unit: activeFocusHabit.unit,
-      streak: activeFocusHabit.streak || 1,
-      partner: partner,
-      partnerPercent: partnerPercent,
-      podSyncPercent: currentPercent,
-      isCompleted: isDone,
-    });
-  }, [activeFocusHabit, pinnedHabitId, liveActivityEnabled, partner, partnerPercent, currentPercent]);
 
   return (
     <HabitContext.Provider
@@ -1470,8 +1421,8 @@ export const HabitProvider = ({ children }) => {
         quickIncrementFocusHabit,
         toggleFocusHabitCompleted,
         partnerPercent,
-        isLiveActivitySupported,
-        requestLiveActivityPermission,
+        isLiveActivitySupported: () => false,
+        requestLiveActivityPermission: async () => false,
         updateHabit,
         editHabit,
         updateBeyondGoal,

@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
 import {
   X,
-  Pin,
   Bell,
   Trash2,
   Check,
-  Percent,
   Target,
   Clock,
   Sparkles,
@@ -23,36 +21,17 @@ const DAYS_OF_WEEK = [
   { key: 'Sun', label: 'S' },
 ];
 
-const DELTA_PERCENT_PRESETS = [5, 10, 20, 25, 50];
-
 export const HabitDetailModal = ({ habit, onClose }) => {
-  const {
-    editHabit,
-    removeGoal,
-    pinnedHabitId,
-    pinHabitForLiveTracking,
-    unpinHabitForLiveTracking,
-  } = useHabits();
+  const { editHabit, removeGoal } = useHabits();
 
   if (!habit) return null;
 
-  const isPinned = pinnedHabitId === habit.id;
   const isBool = typeof habit.user1 === 'boolean' || habit.unit === 'check';
 
   // Form state
   const [name, setName] = useState(habit.name || '');
   const [target, setTarget] = useState(habit.target || 1);
   const [unit, setUnit] = useState(habit.unit || 'times');
-  const [stepPercent, setStepPercent] = useState(habit.stepPercent || 10);
-  const [isCustomPercent, setIsCustomPercent] = useState(
-    !DELTA_PERCENT_PRESETS.includes(habit.stepPercent || 10)
-  );
-  const [customPercentVal, setCustomPercentVal] = useState(
-    String(habit.stepPercent || 10)
-  );
-
-  // Pin state
-  const [pinned, setPinned] = useState(isPinned);
 
   // Reminder state
   const [reminderEnabled, setReminderEnabled] = useState(
@@ -83,41 +62,19 @@ export const HabitDetailModal = ({ habit, onClose }) => {
     );
   };
 
-  const handleSelectPercentPreset = (pct) => {
-    setIsCustomPercent(false);
-    setStepPercent(pct);
-  };
-
-  const handleCustomPercentChange = (val) => {
-    setCustomPercentVal(val);
-    const num = Math.max(1, Math.min(100, Number(val) || 1));
-    setStepPercent(num);
-  };
-
   const handleSave = (e) => {
     e?.preventDefault();
 
     const numericTarget = Math.max(1, Number(target) || 1);
-    const finalPercent = isCustomPercent
-      ? Math.max(1, Math.min(100, Number(customPercentVal) || 10))
-      : stepPercent;
 
     editHabit(habit.id, {
       name: name.trim() || habit.name,
       target: numericTarget,
       unit: unit.trim() || habit.unit,
-      stepPercent: finalPercent,
       reminderEnabled,
       reminderTime: reminderEnabled ? reminderTime : null,
       reminderDays: reminderEnabled ? reminderDays : null,
     });
-
-    // Handle pin state
-    if (pinned && !isPinned) {
-      pinHabitForLiveTracking(habit.id);
-    } else if (!pinned && isPinned) {
-      unpinHabitForLiveTracking();
-    }
 
     onClose();
   };
@@ -126,12 +83,6 @@ export const HabitDetailModal = ({ habit, onClose }) => {
     removeGoal(habit.id);
     onClose();
   };
-
-  // Calculated delta preview
-  const calculatedDelta = Math.max(
-    1,
-    Math.round(((Number(target) || 1) * stepPercent) / 100)
-  );
 
   return (
     <div className="habit-modal-backdrop" onClick={onClose}>
@@ -146,7 +97,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
           <div className="habit-modal-title-group">
             <h2 className="habit-modal-title font-extrabold">Habit Settings</h2>
             <span className="habit-modal-subtitle">
-              Configure targets, notifications, and controls
+              Configure name, daily goal, reminders, and options
             </span>
           </div>
           <button
@@ -200,88 +151,7 @@ export const HabitDetailModal = ({ habit, onClose }) => {
             </div>
           )}
 
-          {/* Section 3: Stepper Delta in Percentages */}
-          {!isBool && (
-            <div className="habit-modal-field">
-              <div className="habit-modal-label-row">
-                <label className="habit-modal-label font-bold">
-                  Stepper Delta (% of Target)
-                </label>
-                <span className="delta-preview-badge font-mono font-bold">
-                  ±{calculatedDelta} {unit} ({stepPercent}%)
-                </span>
-              </div>
-              <div className="percent-pills-row">
-                {DELTA_PERCENT_PRESETS.map((pct) => (
-                  <button
-                    key={pct}
-                    type="button"
-                    className={`percent-pill-btn font-bold ${
-                      !isCustomPercent && stepPercent === pct ? 'active' : ''
-                    }`}
-                    onClick={() => handleSelectPercentPreset(pct)}
-                  >
-                    {pct}%
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`percent-pill-btn font-bold ${
-                    isCustomPercent ? 'active' : ''
-                  }`}
-                  onClick={() => setIsCustomPercent(true)}
-                >
-                  Custom
-                </button>
-              </div>
-
-              {isCustomPercent && (
-                <div className="custom-percent-input-wrap">
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    className="habit-modal-input custom-pct-input font-mono"
-                    value={customPercentVal}
-                    onChange={(e) => handleCustomPercentChange(e.target.value)}
-                    placeholder="Enter %"
-                  />
-                  <span className="custom-pct-symbol font-bold">%</span>
-                </div>
-              )}
-              <p className="habit-field-hint">
-                Each tap on the + or - button will adjust progress by this percentage.
-              </p>
-            </div>
-          )}
-
-          {/* Section 4: Pin to Notification / Dynamic Island Toggle */}
-          <div className="habit-setting-card">
-            <div className="setting-card-left">
-              <div className="setting-icon-box pin-icon-box">
-                <Pin size={18} className="text-emerald-400" />
-              </div>
-              <div>
-                <span className="setting-card-title font-bold">
-                  Pin this habit on notification
-                </span>
-                <p className="setting-card-desc">
-                  This habit will be pinned in the Android notification bar and Dynamic
-                  Island for live tracking on the go.
-                </p>
-              </div>
-            </div>
-            <label className="habit-toggle-switch">
-              <input
-                type="checkbox"
-                checked={pinned}
-                onChange={(e) => setPinned(e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          {/* Section 5: Daily Reminder Settings */}
+          {/* Section 3: Daily Reminder Settings */}
           <div className="habit-setting-card column-layout">
             <div className="setting-card-header">
               <div className="setting-card-left">
@@ -344,25 +214,27 @@ export const HabitDetailModal = ({ habit, onClose }) => {
             )}
           </div>
 
-          {/* Section 6: Danger Zone / Delete Habit */}
+          {/* Section 4: Danger Zone / Delete Habit */}
           <div className="habit-danger-section">
             {!showDeleteConfirm ? (
               <button
                 type="button"
-                className="habit-delete-trigger-btn font-bold"
+                className="habit-delete-trigger-btn font-semibold"
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 <Trash2 size={16} />
-                <span>Delete This Habit</span>
+                <span>Delete Habit</span>
               </button>
             ) : (
               <div className="delete-confirm-card">
                 <div className="confirm-text-group">
-                  <AlertTriangle size={18} className="text-red-400" />
-                  <span className="font-bold text-red-400">Permanently Delete Habit?</span>
+                  <AlertTriangle size={18} className="text-rose-500" />
+                  <span className="font-bold text-rose-400">
+                    Permanently delete this habit?
+                  </span>
                 </div>
                 <p className="confirm-subtext">
-                  This will remove "{habit.name}" and all associated progress logs.
+                  This will remove the habit and all its logged history. This cannot be undone.
                 </p>
                 <div className="confirm-btn-group">
                   <button
@@ -384,17 +256,20 @@ export const HabitDetailModal = ({ habit, onClose }) => {
             )}
           </div>
 
-          {/* Footer Save Action */}
+          {/* Modal Footer */}
           <div className="habit-modal-footer">
             <button
               type="button"
-              className="habit-footer-btn cancel font-medium"
+              className="habit-footer-btn cancel font-semibold"
               onClick={onClose}
             >
               Cancel
             </button>
-            <button type="submit" className="habit-footer-btn save font-bold">
-              <Check size={16} />
+            <button
+              type="submit"
+              className="habit-footer-btn save font-bold"
+            >
+              <Check size={16} strokeWidth={2.6} />
               <span>Save Changes</span>
             </button>
           </div>
