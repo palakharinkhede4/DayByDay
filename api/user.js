@@ -1014,17 +1014,32 @@ export default async function handler(req, res) {
           let upgradedUsers = 0;
           let upgradedPods = 0;
           let upgradedPairs = 0;
+          const userSummary = [];
+
+          // Detect duplicate codes across users
+          const codeCounts = {};
+          for (const u of allUsers) {
+            const c = (u.secret_code || '').toUpperCase();
+            codeCounts[c] = (codeCounts[c] || 0) + 1;
+          }
 
           for (const u of allUsers) {
-            if (!u.secret_code || u.secret_code === 'DAY-1000' || u.secret_code === 'DBD-1000' || u.secret_code === 'DUO-1000') {
-              const newCode = generateSecretCode(u.username);
-              await sql`UPDATE daybyday_users SET secret_code = ${newCode} WHERE id = ${u.id}`;
+            const isDup = codeCounts[(u.secret_code || '').toUpperCase()] > 1;
+            const isLegacy = !u.secret_code || u.secret_code === 'DAY-1000' || u.secret_code === 'DBD-1000' || u.secret_code === 'DUO-1000';
+            const shouldUpgrade = Boolean(req.body?.force) || isLegacy || isDup;
+            let finalCode = u.secret_code;
+
+            if (shouldUpgrade) {
+              finalCode = generateSecretCode(u.username);
+              await sql`UPDATE daybyday_users SET secret_code = ${finalCode} WHERE id = ${u.id}`;
               upgradedUsers++;
             }
+            userSummary.push({ username: u.username, secretCode: finalCode });
           }
 
           for (const p of allPods) {
-            if (!p.code || p.code === 'DAY-1000' || p.code === 'DBD-1000' || p.code === 'POD-1000') {
+            const shouldUpgrade = Boolean(req.body?.force) || !p.code || p.code === 'DAY-1000' || p.code === 'DBD-1000' || p.code === 'POD-1000';
+            if (shouldUpgrade) {
               const newCode = generatePodCode(p.name);
               await sql`UPDATE daybyday_group_pods SET code = ${newCode} WHERE id = ${p.id}`;
               upgradedPods++;
@@ -1032,7 +1047,8 @@ export default async function handler(req, res) {
           }
 
           for (const pr of allPairs) {
-            if (!pr.pod_code || pr.pod_code === 'DAY-1000' || pr.pod_code === 'DBD-1000' || pr.pod_code === 'POD-1000') {
+            const shouldUpgrade = Boolean(req.body?.force) || !pr.pod_code || pr.pod_code === 'DAY-1000' || pr.pod_code === 'DBD-1000' || pr.pod_code === 'POD-1000';
+            if (shouldUpgrade) {
               const randNum = Math.floor(1000 + Math.random() * 9000);
               const newCode = `POD_${Date.now().toString(36).toUpperCase()}_${randNum}`;
               await sql`UPDATE daybyday_pairings SET pod_code = ${newCode} WHERE id = ${pr.id}`;
@@ -1042,7 +1058,8 @@ export default async function handler(req, res) {
 
           return res.status(200).json({
             success: true,
-            message: `Upgraded ${upgradedUsers} users, ${upgradedPods} group pods, and ${upgradedPairs} pairings.`,
+            message: `Processed ${allUsers.length} users, ${allPods.length} group pods, and ${allPairs.length} pairings. Upgraded ${upgradedUsers} users and ${upgradedPods} pods.`,
+            users: userSummary,
             totalUsers: allUsers.length,
             totalPods: allPods.length,
             totalPairs: allPairs.length
