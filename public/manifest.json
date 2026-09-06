@@ -1,7 +1,7 @@
 {
-  "short_name": "DuoTrack",
-  "name": "DuoTrack - Co-op Habit Tracker",
-  "description": "Shared accountability habit tracking for you and your partner",
+  "short_name": "DayByDay",
+  "name": "DayByDay - Habit Tracker",
+  "description": "Shared accountability habit tracking and daily routines",
   "icons": [
     {
       "src": "/icon.svg",

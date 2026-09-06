@@ -1,4 +1,4 @@
-package com.duotrack.habittracker;
+package com.daybyday.habittracker;
 
 import com.getcapacitor.BridgeActivity;
 

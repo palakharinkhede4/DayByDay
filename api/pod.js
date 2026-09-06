@@ -1,4 +1,4 @@
-// Vercel Serverless API for DuoTrack Real-Time Pod Synchronization
+// Vercel Serverless API for DayByDay Real-Time Pod Synchronization
 
 // In-memory pod store (persists across warm serverless invocations)
 // For permanent multi-region persistence, configure UPSTASH_REDIS_REST_URL or KV_REST_API_URL in Vercel
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
 
   // 0. HEALTH PING / STATUS CHECK
   if (req.query.ping === 'true') {
-    return res.status(200).json({ status: 'ok', time: Date.now(), message: 'DuoTrack Cloud API is active' });
+    return res.status(200).json({ status: 'ok', time: Date.now(), message: 'DayByDay Cloud API is active' });
   }
 
   // 1. GET POD STATE

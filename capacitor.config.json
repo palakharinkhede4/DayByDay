@@ -1,6 +1,6 @@
 {
-  "appId": "com.duotrack.habittracker",
-  "appName": "DuoTrack",
+  "appId": "com.daybyday.habittracker",
+  "appName": "DayByDay",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {

@@ -224,7 +224,7 @@ export const OnboardingModal = () => {
 
         <div className="auth-card-title-group">
           <h2 className="onboarding-title">
-            {mode === 'login' && 'Sign In to DuoTrack'}
+            {mode === 'login' && 'Sign In to DayByDay'}
             {mode === 'register' && 'Create Your Account'}
             {mode === 'forgot' && 'Reset Your Password'}
           </h2>

@@ -13,7 +13,7 @@ export const PairingModal = ({ isOpen, onClose }) => {
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'Join my DuoTrack Habit Pod!',
+          title: 'Join my DayByDay Habit Pod!',
           text: `Use my Pod code ${pod.code} to pair up and track habits together!`,
           url: window.location.href,
         });

@@ -53,7 +53,7 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenPairing, onOpenAddGoal
             <div className="nav-brand-group">
               <div className="brand-logo" onClick={() => onTabChange('together')}>
                 <span className="brand-flame">🔥</span>
-                <span className="brand-name font-bold">DuoTrack</span>
+                <span className="brand-name font-bold">DayByDay</span>
               </div>
               <div className={`mode-badge ${isSolo ? 'solo' : 'pod'}`} onClick={onOpenPairing} title="Click to view pairing">
                 <span className="mode-dot"></span>

@@ -48,10 +48,10 @@ export default async function handler(req, res) {
       if (sql) {
         let user = null;
         if (username) {
-          const rows = await sql`SELECT * FROM duotrack_users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
+          const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
           user = rows[0] || null;
         } else if (code) {
-          const rows = await sql`SELECT * FROM duotrack_users WHERE UPPER(secret_code) = UPPER(${code}) LIMIT 1`;
+          const rows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = UPPER(${code}) LIMIT 1`;
           user = rows[0] || null;
         }
 
@@ -60,16 +60,16 @@ export default async function handler(req, res) {
         }
 
         // Fetch user's habits
-        const habits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${user.id} ORDER BY id ASC`;
+        const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id} ORDER BY id ASC`;
 
         // Check if user has an active pairing
         const pairings = await sql`
           SELECT p.*, 
             u1.username as u1_name, u1.secret_code as u1_code,
             u2.username as u2_name, u2.secret_code as u2_code
-          FROM duotrack_pairings p
-          JOIN duotrack_users u1 ON p.user1_id = u1.id
-          JOIN duotrack_users u2 ON p.user2_id = u2.id
+          FROM daybyday_pairings p
+          JOIN daybyday_users u1 ON p.user1_id = u1.id
+          JOIN daybyday_users u2 ON p.user2_id = u2.id
           WHERE (p.user1_id = ${user.id} OR p.user2_id = ${user.id}) AND p.status = 'active'
           LIMIT 1
         `;
@@ -80,8 +80,8 @@ export default async function handler(req, res) {
           const pair = pairings[0];
           podCode = pair.pod_code;
           const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-          const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM duotrack_users WHERE id = ${partnerId}`;
-          const partnerHabits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${partnerId}`;
+          const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM daybyday_users WHERE id = ${partnerId}`;
+          const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
             partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits };
           }
@@ -150,13 +150,13 @@ export default async function handler(req, res) {
       try {
         if (sql) {
           // Check if username taken
-          const existing = await sql`SELECT id FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          const existing = await sql`SELECT id FROM daybyday_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
           if (existing.length > 0) {
             return res.status(409).json({ error: 'Username is already taken. Please choose another username or sign in.' });
           }
 
           const created = await sql`
-            INSERT INTO duotrack_users (
+            INSERT INTO daybyday_users (
               id, username, secret_code, display_name, avatar,
               password_hash, salt, security_question, security_answer_hash
             )
@@ -206,7 +206,7 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
-          const rows = await sql`SELECT * FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
           if (rows.length === 0) {
             return res.status(401).json({ error: 'Invalid username or password' });
           }
@@ -222,16 +222,16 @@ export default async function handler(req, res) {
           }
 
           // Fetch habits
-          const habits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${user.id} ORDER BY id ASC`;
+          const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id} ORDER BY id ASC`;
 
           // Check pairing
           const pairings = await sql`
             SELECT p.*, 
               u1.username as u1_name, u1.secret_code as u1_code,
               u2.username as u2_name, u2.secret_code as u2_code
-            FROM duotrack_pairings p
-            JOIN duotrack_users u1 ON p.user1_id = u1.id
-            JOIN duotrack_users u2 ON p.user2_id = u2.id
+            FROM daybyday_pairings p
+            JOIN daybyday_users u1 ON p.user1_id = u1.id
+            JOIN daybyday_users u2 ON p.user2_id = u2.id
             WHERE (p.user1_id = ${user.id} OR p.user2_id = ${user.id}) AND p.status = 'active'
             LIMIT 1
           `;
@@ -242,8 +242,8 @@ export default async function handler(req, res) {
             const pair = pairings[0];
             podCode = pair.pod_code;
             const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-            const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM duotrack_users WHERE id = ${partnerId}`;
-            const partnerHabits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${partnerId}`;
+            const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar FROM daybyday_users WHERE id = ${partnerId}`;
+            const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
             if (partnerRows.length > 0) {
               partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits };
             }
@@ -293,7 +293,7 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
-          const rows = await sql`SELECT username, security_question FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          const rows = await sql`SELECT username, security_question FROM daybyday_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
           if (rows.length === 0) {
             return res.status(404).json({ error: 'No account found with this username' });
           }
@@ -333,7 +333,7 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
-          const rows = await sql`SELECT * FROM duotrack_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
+          const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1`;
           if (rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
           }
@@ -353,7 +353,7 @@ export default async function handler(req, res) {
           const newAnswerHash = hashSecurityAnswer(securityAnswer, newSalt);
 
           await sql`
-            UPDATE duotrack_users
+            UPDATE daybyday_users
             SET password_hash = ${newPasswordHash}, salt = ${newSalt}, security_answer_hash = ${newAnswerHash}
             WHERE id = ${user.id}
           `;
@@ -392,7 +392,7 @@ export default async function handler(req, res) {
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
             await sql`
-              INSERT INTO duotrack_habits (
+              INSERT INTO daybyday_habits (
                 user_id, habit_id, name, target, unit, icon, category,
                 today_value, completed, reminder_time, reminder_days, streak, history, updated_at
               )
@@ -414,7 +414,7 @@ export default async function handler(req, res) {
                 updated_at = CURRENT_TIMESTAMP
             `;
           }
-          const savedHabits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${userId} ORDER BY id ASC`;
+          const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;
           return res.status(200).json({ success: true, habits: savedHabits });
         }
 
@@ -436,7 +436,7 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
-          const partnerRows = await sql`SELECT * FROM duotrack_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
+          const partnerRows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
           if (partnerRows.length === 0) {
             return res.status(404).json({ error: 'No partner found with this secret code' });
           }
@@ -447,15 +447,15 @@ export default async function handler(req, res) {
 
           const podCode = `POD_${Date.now().toString(36).toUpperCase()}`;
           // Deactivate old pairings
-          await sql`UPDATE duotrack_pairings SET status = 'closed' WHERE user1_id = ${userId} OR user2_id = ${userId}`;
-          await sql`UPDATE duotrack_pairings SET status = 'closed' WHERE user1_id = ${partner.id} OR user2_id = ${partner.id}`;
+          await sql`UPDATE daybyday_pairings SET status = 'closed' WHERE user1_id = ${userId} OR user2_id = ${userId}`;
+          await sql`UPDATE daybyday_pairings SET status = 'closed' WHERE user1_id = ${partner.id} OR user2_id = ${partner.id}`;
 
           await sql`
-            INSERT INTO duotrack_pairings (user1_id, user2_id, pod_code, status)
+            INSERT INTO daybyday_pairings (user1_id, user2_id, pod_code, status)
             VALUES (${userId}, ${partner.id}, ${podCode}, 'active')
           `;
 
-          const partnerHabits = await sql`SELECT * FROM duotrack_habits WHERE user_id = ${partner.id}`;
+          const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partner.id}`;
           return res.status(200).json({
             success: true,
             podCode,
@@ -478,7 +478,7 @@ export default async function handler(req, res) {
     if (action === 'unpair') {
       const { userId } = req.body;
       if (sql && userId) {
-        await sql`UPDATE duotrack_pairings SET status = 'closed' WHERE user1_id = ${userId} OR user2_id = ${userId}`;
+        await sql`UPDATE daybyday_pairings SET status = 'closed' WHERE user1_id = ${userId} OR user2_id = ${userId}`;
       }
       return res.status(200).json({ success: true, isSolo: true });
     }
@@ -487,7 +487,7 @@ export default async function handler(req, res) {
     if (action === 'delete_habit') {
       const { userId, habitId } = req.body;
       if (sql && userId && habitId) {
-        await sql`DELETE FROM duotrack_habits WHERE user_id = ${userId} AND habit_id = ${habitId}`;
+        await sql`DELETE FROM daybyday_habits WHERE user_id = ${userId} AND habit_id = ${habitId}`;
       }
       return res.status(200).json({ success: true });
     }

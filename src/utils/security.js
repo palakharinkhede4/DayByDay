@@ -1,4 +1,4 @@
-// DuoTrack Privacy & Security Engine
+// DayByDay Privacy & Security Engine
 
 /**
  * XSS Sanitizer to ensure user input (custom habit names, units, etc.)
@@ -27,7 +27,7 @@ export const sanitizeInput = (str) => {
  */
 export const exportLocalBackup = (data) => {
   const exportPayload = {
-    app: 'DuoTrack',
+    app: 'DayByDay',
     version: '2.4.0',
     exportedAt: new Date().toISOString(),
     privacyNotice: '100% Client-side local data. Zero tracking, zero telemetry.',
@@ -40,7 +40,7 @@ export const exportLocalBackup = (data) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `duotrack-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `daybyday-backup-${new Date().toISOString().split('T')[0]}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -52,12 +52,27 @@ export const exportLocalBackup = (data) => {
  */
 export const wipeLocalData = () => {
   const keys = [
+    'daybyday_user',
+    'daybyday_partner',
+    'daybyday_os',
+    'daybyday_theme',
+    'daybyday_theme_mode',
+    'daybyday_view',
+    'daybyday_habits',
+    'daybyday_pod',
+    'daybyday_beyond',
+    'daybyday_server_url',
+    // Clean up legacy keys
+    'duotrack_user',
+    'duotrack_partner',
     'duotrack_os',
     'duotrack_theme',
+    'duotrack_theme_mode',
     'duotrack_view',
     'duotrack_habits',
     'duotrack_pod',
     'duotrack_beyond',
+    'duotrack_server_url',
   ];
   keys.forEach((k) => localStorage.removeItem(k));
 };

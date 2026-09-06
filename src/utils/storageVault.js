@@ -1,12 +1,12 @@
 // Persistent Storage Vault for iOS Safari PWA, Android Native App & Web
 // Protects session and habit data across app backgrounding, OS memory pressure, and browser restarts
 
-const DB_NAME = 'duotrack_vault';
+const DB_NAME = 'daybyday_vault';
 const DB_VERSION = 1;
 const STORE_NAME = 'session_store';
 
 function openVaultDb() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
       return resolve(null);
     }
@@ -116,25 +116,25 @@ export async function persistSessionSnapshot(user, partner, habits, pod) {
     return;
   }
   try {
-    localStorage.setItem('duotrack_user', JSON.stringify(user));
-    await setVaultItem('duotrack_user', user);
+    localStorage.setItem('daybyday_user', JSON.stringify(user));
+    await setVaultItem('daybyday_user', user);
 
     if (partner) {
-      localStorage.setItem('duotrack_partner', JSON.stringify(partner));
-      await setVaultItem('duotrack_partner', partner);
+      localStorage.setItem('daybyday_partner', JSON.stringify(partner));
+      await setVaultItem('daybyday_partner', partner);
     } else {
-      localStorage.removeItem('duotrack_partner');
-      await removeVaultItem('duotrack_partner');
+      localStorage.removeItem('daybyday_partner');
+      await removeVaultItem('daybyday_partner');
     }
 
     if (habits && habits.length) {
-      localStorage.setItem('duotrack_habits', JSON.stringify(habits));
-      await setVaultItem('duotrack_habits', habits);
+      localStorage.setItem('daybyday_habits', JSON.stringify(habits));
+      await setVaultItem('daybyday_habits', habits);
     }
 
     if (pod) {
-      localStorage.setItem('duotrack_pod', JSON.stringify(pod));
-      await setVaultItem('duotrack_pod', pod);
+      localStorage.setItem('daybyday_pod', JSON.stringify(pod));
+      await setVaultItem('daybyday_pod', pod);
     }
   } catch (err) {
     console.warn('Session persistence notice:', err.message);
@@ -144,10 +144,11 @@ export async function persistSessionSnapshot(user, partner, habits, pod) {
 // Explicit session wipe: ONLY called on user-initiated sign out or data reset
 export async function clearVaultSession() {
   try {
-    localStorage.removeItem('duotrack_user');
-    localStorage.removeItem('duotrack_partner');
-    localStorage.removeItem('duotrack_habits');
-    localStorage.removeItem('duotrack_pod');
+    const keys = [
+      'daybyday_user', 'daybyday_partner', 'daybyday_habits', 'daybyday_pod',
+      'duotrack_user', 'duotrack_partner', 'duotrack_habits', 'duotrack_pod'
+    ];
+    keys.forEach((k) => localStorage.removeItem(k));
     await clearVault();
   } catch (err) {
     console.warn('Session clear notice:', err.message);
@@ -157,19 +158,22 @@ export async function clearVaultSession() {
 // Restore session from IndexedDB if localStorage was cleared by OS or browser
 export async function recoverSessionFromVault() {
   try {
-    const vaultUser = await getVaultItem('duotrack_user');
+    let vaultUser = await getVaultItem('daybyday_user');
+    if (!vaultUser) {
+      vaultUser = await getVaultItem('duotrack_user');
+    }
     if (!vaultUser || !vaultUser.username) return null;
 
-    const vaultPartner = await getVaultItem('duotrack_partner');
-    const vaultHabits = await getVaultItem('duotrack_habits');
-    const vaultPod = await getVaultItem('duotrack_pod');
+    let vaultPartner = await getVaultItem('daybyday_partner') || await getVaultItem('duotrack_partner');
+    let vaultHabits = await getVaultItem('daybyday_habits') || await getVaultItem('duotrack_habits');
+    let vaultPod = await getVaultItem('daybyday_pod') || await getVaultItem('duotrack_pod');
 
     // Re-populate localStorage to keep future synchronous loads instantaneous
     try {
-      localStorage.setItem('duotrack_user', JSON.stringify(vaultUser));
-      if (vaultPartner) localStorage.setItem('duotrack_partner', JSON.stringify(vaultPartner));
-      if (vaultHabits) localStorage.setItem('duotrack_habits', JSON.stringify(vaultHabits));
-      if (vaultPod) localStorage.setItem('duotrack_pod', JSON.stringify(vaultPod));
+      localStorage.setItem('daybyday_user', JSON.stringify(vaultUser));
+      if (vaultPartner) localStorage.setItem('daybyday_partner', JSON.stringify(vaultPartner));
+      if (vaultHabits) localStorage.setItem('daybyday_habits', JSON.stringify(vaultHabits));
+      if (vaultPod) localStorage.setItem('daybyday_pod', JSON.stringify(vaultPod));
     } catch {
       // LocalStorage quota or restricted mode fallback
     }

@@ -1,4 +1,4 @@
-// Neon PostgreSQL Database Layer for DuoTrack
+// Neon PostgreSQL Database Layer for DayByDay
 // Storage-Optimized Architecture: Designed for <= 0.5 GB Free Tier
 // Supports 50-500+ active users for 1+ years within < 5 MB total storage footprint
 
@@ -40,9 +40,28 @@ export async function ensureTables() {
   if (!sql) return;
 
   try {
+    // 0. Smoothly migrate legacy tables if they exist
+    try {
+      await sql`
+        DO $$ BEGIN
+          IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'duotrack_users') AND NOT EXISTS (SELECT FROM pg_tables WHERE tablename = 'daybyday_users') THEN
+            ALTER TABLE duotrack_users RENAME TO daybyday_users;
+          END IF;
+          IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'duotrack_habits') AND NOT EXISTS (SELECT FROM pg_tables WHERE tablename = 'daybyday_habits') THEN
+            ALTER TABLE duotrack_habits RENAME TO daybyday_habits;
+          END IF;
+          IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'duotrack_pairings') AND NOT EXISTS (SELECT FROM pg_tables WHERE tablename = 'daybyday_pairings') THEN
+            ALTER TABLE duotrack_pairings RENAME TO daybyday_pairings;
+          END IF;
+        END $$;
+      `;
+    } catch (migErr) {
+      // Non-blocking if tables are already renamed or user lacks DDL rename rights
+    }
+
     // 1. Users table (Compact VARCHAR lengths to prevent index/row bloat)
     await sql`
-      CREATE TABLE IF NOT EXISTS duotrack_users (
+      CREATE TABLE IF NOT EXISTS daybyday_users (
         id VARCHAR(48) PRIMARY KEY,
         username VARCHAR(32) UNIQUE NOT NULL,
         secret_code VARCHAR(16) UNIQUE NOT NULL,
@@ -58,17 +77,16 @@ export async function ensureTables() {
     `;
 
     // Ensure columns exist on existing databases
-    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(128);`;
-    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);`;
-    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);`;
-    await sql`ALTER TABLE duotrack_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);`;
-
+    await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(128);`;
+    await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);`;
+    await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);`;
+    await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);`;
 
     // 2. Habits table (Compact JSONB historical map: 1 row per habit, keeping table <= 500 rows for 50 users)
     await sql`
-      CREATE TABLE IF NOT EXISTS duotrack_habits (
+      CREATE TABLE IF NOT EXISTS daybyday_habits (
         id SERIAL PRIMARY KEY,
-        user_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+        user_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
         habit_id VARCHAR(32) NOT NULL,
         name VARCHAR(64) NOT NULL,
         target NUMERIC(8, 2) NOT NULL DEFAULT 1,
@@ -88,10 +106,10 @@ export async function ensureTables() {
 
     // 3. Pairings table
     await sql`
-      CREATE TABLE IF NOT EXISTS duotrack_pairings (
+      CREATE TABLE IF NOT EXISTS daybyday_pairings (
         id SERIAL PRIMARY KEY,
-        user1_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
-        user2_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+        user1_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
+        user2_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
         pod_code VARCHAR(24) UNIQUE NOT NULL,
         status VARCHAR(16) DEFAULT 'active',
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -99,9 +117,9 @@ export async function ensureTables() {
     `;
 
     // Optimized indexes for fast lookups
-    await sql`CREATE INDEX IF NOT EXISTS idx_users_username ON duotrack_users(LOWER(username));`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_users_secret ON duotrack_users(UPPER(secret_code));`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_habits_user ON duotrack_habits(user_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_username ON daybyday_users(LOWER(username));`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_secret ON daybyday_users(UPPER(secret_code));`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user ON daybyday_habits(user_id);`;
 
     tablesInitialized = true;
   } catch (err) {

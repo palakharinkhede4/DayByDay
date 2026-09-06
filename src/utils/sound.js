@@ -1,4 +1,4 @@
-// DuoTrack High-Performance Tactile & Audio Engine (Memory-Optimized)
+// DayByDay High-Performance Tactile & Audio Engine (Memory-Optimized)
 
 class SoundEngine {
   constructor() {

@@ -1,4 +1,4 @@
-name: Build & Publish DuoTrack APK Release
+name: Build & Publish DayByDay APK Release
 
 on:
   push:
@@ -60,16 +60,16 @@ jobs:
           if [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" = "main" ]; then
             RELEASE_TAG="v1.0.0"
           fi
-          cp android/app/build/outputs/apk/debug/app-debug.apk "DuoTrack-${RELEASE_TAG}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "DayByDay-${RELEASE_TAG}.apk"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
 
       - name: Publish Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: "DuoTrack ${{ env.RELEASE_TAG }} (Android APK)"
+          name: "DayByDay ${{ env.RELEASE_TAG }} (Android APK)"
           body: |
-            ## DuoTrack Release ${{ env.RELEASE_TAG }}
+            ## DayByDay Release ${{ env.RELEASE_TAG }}
             
             ### Included in this build:
             * Real user identity and secret code accountability pairing.
@@ -79,13 +79,14 @@ jobs:
             * Neon PostgreSQL cloud storage optimization.
             * Light, Dark, and Auto system appearance modes.
             * Symmetrical widget suite for Android and iOS.
+            * Multi-layer persistent storage vault.
             
             ### Android Installation:
-            1. Download `DuoTrack-${{ env.RELEASE_TAG }}.apk` attached below.
+            1. Download `DayByDay-${{ env.RELEASE_TAG }}.apk` attached below.
             2. Open the APK on your Android device to install.
-            3. Launch DuoTrack and configure your profile.
+            3. Launch DayByDay and configure your profile.
           files: |
-            DuoTrack-*.apk
+            DayByDay-*.apk
           draft: false
           prerelease: false
         env:

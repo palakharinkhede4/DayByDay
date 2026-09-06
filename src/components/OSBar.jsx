@@ -26,7 +26,7 @@ export const OSBar = ({ onOpenPairing, onOpenAddGoal }) => {
         <div className="toolbar-section brand-section">
           <div className="app-badge">
             <span className="badge-pulse"></span>
-            <span className="badge-title">DuoTrack</span>
+            <span className="badge-title">DayByDay</span>
             <span className="badge-version">v2.4 Pro</span>
           </div>
         </div>

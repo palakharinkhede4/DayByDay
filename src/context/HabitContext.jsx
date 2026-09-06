@@ -132,7 +132,7 @@ const INITIAL_BEYOND = [
 
 function detectInitialOS() {
   if (typeof window === 'undefined') return 'ios';
-  const saved = localStorage.getItem('duotrack_os');
+  const saved = localStorage.getItem('daybyday_os') || localStorage.getItem('duotrack_os');
   if (saved) return saved;
   const ua = window.navigator.userAgent;
   if (/Android/i.test(ua)) return 'android';
@@ -168,7 +168,7 @@ export const HabitProvider = ({ children }) => {
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
     try {
-      const saved = localStorage.getItem('duotrack_user');
+      const saved = localStorage.getItem('daybyday_user') || localStorage.getItem('duotrack_user');
       if (saved) {
         return JSON.parse(saved);
       }
@@ -179,7 +179,7 @@ export const HabitProvider = ({ children }) => {
   // Flag to avoid modal flicker while querying IndexedDB Vault if localStorage was cleared
   const [isSessionRestoring, setIsSessionRestoring] = useState(() => {
     try {
-      return !localStorage.getItem('duotrack_user');
+      return !localStorage.getItem('daybyday_user') && !localStorage.getItem('duotrack_user');
     } catch {
       return false;
     }
@@ -187,7 +187,7 @@ export const HabitProvider = ({ children }) => {
 
   // 2. Partner & Solo State
   const [partner, setPartner] = useState(() => {
-    const saved = localStorage.getItem('duotrack_partner');
+    const saved = localStorage.getItem('daybyday_partner') || localStorage.getItem('duotrack_partner');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { }
     }
@@ -197,29 +197,29 @@ export const HabitProvider = ({ children }) => {
   const isSolo = !partner;
 
   // 3. Theme Mode: 'light' | 'dark' | 'auto'
-  const [themeMode, setThemeModeState] = useState(() => localStorage.getItem('duotrack_theme_mode') || 'dark');
+  const [themeMode, setThemeModeState] = useState(() => localStorage.getItem('daybyday_theme_mode') || localStorage.getItem('duotrack_theme_mode') || 'dark');
   const setThemeMode = (mode) => {
     setThemeModeState(mode);
-    localStorage.setItem('duotrack_theme_mode', mode);
+    localStorage.setItem('daybyday_theme_mode', mode);
     document.documentElement.setAttribute('data-theme-mode', mode);
   };
 
   // 4. OS Engine ('ios' | 'android')
   const [osMode, setOsMode] = useState(() => detectInitialOS());
-  const [themeColor, setThemeColor] = useState(() => localStorage.getItem('duotrack_theme') || 'emerald');
+  const [themeColor, setThemeColor] = useState(() => localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme') || 'emerald');
 
   // Active User role in current view ('user1' = You, 'user2' = Partner)
   const [activeUserId, setActiveUserId] = useState('user1');
 
   // Pod details
   const [pod, setPod] = useState(() => {
-    const saved = localStorage.getItem('duotrack_pod');
+    const saved = localStorage.getItem('daybyday_pod') || localStorage.getItem('duotrack_pod');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { }
     }
     return {
       isPaired: false,
-      code: user ? user.secretCode : 'DUO-1000',
+      code: user ? user.secretCode : 'DBD-1000',
       user1: { name: user?.displayName || 'You', email: '', initial: (user?.displayName || 'Y')[0].toUpperCase() },
       user2: { name: 'Partner', email: '', initial: 'P' },
       daysTogether: 1,
@@ -233,7 +233,7 @@ export const HabitProvider = ({ children }) => {
 
   // Habits list
   const [habits, setHabits] = useState(() => {
-    const saved = localStorage.getItem('duotrack_habits');
+    const saved = localStorage.getItem('daybyday_habits') || localStorage.getItem('duotrack_habits');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { }
     }
@@ -242,7 +242,7 @@ export const HabitProvider = ({ children }) => {
 
   // Beyond Today list
   const [beyondGoals, setBeyondGoals] = useState(() => {
-    const saved = localStorage.getItem('duotrack_beyond');
+    const saved = localStorage.getItem('daybyday_beyond') || localStorage.getItem('duotrack_beyond');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { }
     }
@@ -253,22 +253,22 @@ export const HabitProvider = ({ children }) => {
   const [islandMessage, setIslandMessage] = useState(null);
 
   // Vercel Serverless Sync States
-  const [serverUrl, setServerUrlState] = useState(() => localStorage.getItem('duotrack_server_url') || '');
+  const [serverUrl, setServerUrlState] = useState(() => localStorage.getItem('daybyday_server_url') || localStorage.getItem('duotrack_server_url') || '');
   const [syncStatus, setSyncStatus] = useState('synced');
   const [lastSyncedAt, setLastSyncedAt] = useState(() => Date.now());
 
   const setServerUrl = (url) => {
     setServerUrlState(url);
     if (url) {
-      localStorage.setItem('duotrack_server_url', url.trim());
+      localStorage.setItem('daybyday_server_url', url.trim());
     } else {
-      localStorage.removeItem('duotrack_server_url');
+      localStorage.removeItem('daybyday_server_url');
     }
   };
 
   // Sync to DOM attributes
   useEffect(() => {
-    localStorage.setItem('duotrack_os', osMode);
+    localStorage.setItem('daybyday_os', osMode);
     document.documentElement.setAttribute('data-os', osMode);
   }, [osMode]);
 
@@ -277,12 +277,12 @@ export const HabitProvider = ({ children }) => {
   }, [themeMode]);
 
   useEffect(() => {
-    localStorage.setItem('duotrack_theme', themeColor);
+    localStorage.setItem('daybyday_theme', themeColor);
     document.documentElement.setAttribute('data-theme', themeColor);
   }, [themeColor]);
 
   useEffect(() => {
-    localStorage.setItem('duotrack_beyond', JSON.stringify(beyondGoals));
+    localStorage.setItem('daybyday_beyond', JSON.stringify(beyondGoals));
   }, [beyondGoals]);
 
   // Persistent Storage Vault initialization (iOS Safari ITP protection & Android WebView recovery)
@@ -325,7 +325,7 @@ export const HabitProvider = ({ children }) => {
     const handleStorageEvent = (e) => {
       if (!e.key) return;
       try {
-        if (e.key === 'duotrack_user') {
+        if (e.key === 'daybyday_user' || e.key === 'duotrack_user') {
           if (e.newValue) {
             setUser(JSON.parse(e.newValue));
           } else {
@@ -335,18 +335,18 @@ export const HabitProvider = ({ children }) => {
             setHabits(INITIAL_HABITS);
             setBeyondGoals(INITIAL_BEYOND);
           }
-        } else if (e.key === 'duotrack_partner') {
+        } else if (e.key === 'daybyday_partner' || e.key === 'duotrack_partner') {
           setPartner(e.newValue ? JSON.parse(e.newValue) : null);
-        } else if (e.key === 'duotrack_habits') {
+        } else if (e.key === 'daybyday_habits' || e.key === 'duotrack_habits') {
           if (e.newValue) setHabits(JSON.parse(e.newValue));
-        } else if (e.key === 'duotrack_pod') {
+        } else if (e.key === 'daybyday_pod' || e.key === 'duotrack_pod') {
           if (e.newValue) setPod(JSON.parse(e.newValue));
-        } else if (e.key === 'duotrack_theme_mode') {
+        } else if (e.key === 'daybyday_theme_mode' || e.key === 'duotrack_theme_mode') {
           if (e.newValue) {
             setThemeModeState(e.newValue);
             document.documentElement.setAttribute('data-theme-mode', e.newValue);
           }
-        } else if (e.key === 'duotrack_theme') {
+        } else if (e.key === 'daybyday_theme' || e.key === 'duotrack_theme') {
           if (e.newValue) {
             setThemeColor(e.newValue);
             document.documentElement.setAttribute('data-theme', e.newValue);
@@ -433,10 +433,10 @@ export const HabitProvider = ({ children }) => {
         // 1. Browser/OS Web Notification
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
           try {
-            new Notification(`DuoTrack Reminder: ${h.name}`, {
+            new Notification(`DayByDay Reminder: ${h.name}`, {
               body: `Time to track: ${h.name} (${h.target || 1} ${h.unit || ''})`,
               icon: '/favicon.ico',
-              tag: `duotrack-reminder-${h.id}`,
+              tag: `daybyday-reminder-${h.id}`,
             });
           } catch (e) {
             console.warn('Native notification issue:', e);
@@ -485,7 +485,7 @@ export const HabitProvider = ({ children }) => {
       code: newUser.secretCode,
       user1: {
         name: newUser.displayName || newUser.username,
-        email: `${newUser.username}@duotrack.invalid`,
+        email: `${newUser.username}@daybyday.invalid`,
         initial: (newUser.displayName || newUser.username)[0].toUpperCase(),
       }
     }));
@@ -514,13 +514,13 @@ export const HabitProvider = ({ children }) => {
         isPaired: Boolean(res.partner),
         user1: {
           name: res.user.displayName || res.user.username,
-          email: `${res.user.username}@duotrack.invalid`,
+          email: `${res.user.username}@daybyday.invalid`,
           initial: (res.user.displayName || res.user.username)[0].toUpperCase(),
         },
         user2: res.partner
           ? {
               name: res.partner.displayName || res.partner.username,
-              email: `${res.partner.username}@duotrack.invalid`,
+              email: `${res.partner.username}@daybyday.invalid`,
               initial: (res.partner.displayName || res.partner.username)[0].toUpperCase(),
             }
           : prev.user2,
@@ -555,7 +555,7 @@ export const HabitProvider = ({ children }) => {
     setBeyondGoals(INITIAL_BEYOND);
     setPod({
       isPaired: false,
-      code: 'DUO-1000',
+      code: 'DBD-1000',
       user1: { name: 'You', email: '', initial: 'Y' },
       user2: { name: 'Partner', email: '', initial: 'P' },
       daysTogether: 1,
@@ -586,7 +586,7 @@ export const HabitProvider = ({ children }) => {
           code: res.podCode || cleanCode,
           user2: {
             name: res.partner.displayName || res.partner.username,
-            email: `${res.partner.username}@duotrack.invalid`,
+            email: `${res.partner.username}@daybyday.invalid`,
             initial: (res.partner.displayName || res.partner.username)[0].toUpperCase(),
           }
         }));
@@ -610,7 +610,7 @@ export const HabitProvider = ({ children }) => {
         code: cleanCode,
         user2: {
           name: partnerName,
-          email: `${partnerName.toLowerCase()}@duotrack.invalid`,
+          email: `${partnerName.toLowerCase()}@daybyday.invalid`,
           initial: partnerName[0].toUpperCase(),
         }
       }));
@@ -630,7 +630,7 @@ export const HabitProvider = ({ children }) => {
     setPod((prev) => ({
       ...prev,
       isPaired: false,
-      code: user?.secretCode || 'DUO-1000',
+      code: user?.secretCode || 'DBD-1000',
       user2: { name: 'Partner', email: '', initial: 'P' }
     }));
     triggerIslandNotification('Switched to Solo Mode', '👤');

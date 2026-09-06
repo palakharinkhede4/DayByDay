@@ -16,7 +16,7 @@ export const IOSInstallBanner = () => {
     setIsIOS(isIOSDevice);
     setIsStandalone(isStandaloneMode);
 
-    const savedDismiss = sessionStorage.getItem('duotrack_ios_banner_dismissed');
+    const savedDismiss = sessionStorage.getItem('daybyday_ios_banner_dismissed') || sessionStorage.getItem('duotrack_ios_banner_dismissed');
     if (savedDismiss) setDismissed(true);
   }, []);
 
@@ -24,7 +24,7 @@ export const IOSInstallBanner = () => {
 
   const handleDismiss = () => {
     setDismissed(true);
-    sessionStorage.setItem('duotrack_ios_banner_dismissed', 'true');
+    sessionStorage.setItem('daybyday_ios_banner_dismissed', 'true');
   };
 
   return (
@@ -33,7 +33,7 @@ export const IOSInstallBanner = () => {
         <div className="banner-left">
           <span className="banner-icon">📲</span>
           <div className="banner-texts">
-            <span className="banner-title">Install DuoTrack on iPhone</span>
+            <span className="banner-title">Install DayByDay on iPhone</span>
             <span className="banner-desc">Tap Share &rarr; <strong>"Add to Home Screen"</strong> for full-screen mode</span>
           </div>
         </div>

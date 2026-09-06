@@ -112,7 +112,7 @@ export const WidgetsScreen = () => {
               <div className="w-medium-left">
                 <div className="w-pod-badge">
                   <span className="badge-dot pulse-mint"></span>
-                  <span className="font-bold">DuoTrack Pod</span>
+                  <span className="font-bold">DayByDay Pod</span>
                 </div>
                 <div className="w-big-percent">{currentPercent}%</div>
                 <div className="w-status-sub">

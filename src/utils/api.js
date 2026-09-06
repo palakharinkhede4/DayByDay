@@ -1,8 +1,8 @@
-// DuoTrack Remote Sync Client for Vercel Cloud
+// DayByDay Remote Sync Client for Vercel Cloud
 
 export const getApiBaseUrl = () => {
   if (typeof window === 'undefined') return '';
-  const customUrl = localStorage.getItem('duotrack_server_url');
+  const customUrl = localStorage.getItem('daybyday_server_url') || localStorage.getItem('duotrack_server_url');
   if (customUrl && customUrl.trim()) {
     return customUrl.trim().replace(/\/$/, '');
   }

@@ -1,4 +1,4 @@
-# DuoTrack
+# DayByDay
 
 Production-grade, cross-platform habit tracking application designed for individuals, pairs, and accountability pods.
 
@@ -6,20 +6,20 @@ Production-grade, cross-platform habit tracking application designed for individ
 [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Neon Database](https://img.shields.io/badge/Neon-PostgreSQL-00E599?style=flat-square&logo=postgresql&logoColor=black)](https://neon.tech/)
 [![Capacitor](https://img.shields.io/badge/Capacitor-Android-119EFF?style=flat-square&logo=capacitor&logoColor=white)](https://capacitorjs.com/)
-[![CI/CD](https://img.shields.io/badge/GitHub%20Actions-Automated%20Builds-2088FF?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/palakharinkhede4/DuoTrack/actions)
+[![CI/CD](https://img.shields.io/badge/GitHub%20Actions-Automated%20Builds-2088FF?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/palakharinkhede4/DayByDay/actions)
 [![License](https://img.shields.io/badge/License-MIT-10B981?style=flat-square)](LICENSE)
 
 ---
 
 ## Executive Summary
 
-DuoTrack is an architectural evolution of collaborative habit tracking. It supports both solo tracking and synchronized dual-user accountability pods. Unlike traditional platforms that require mandatory logins with third-party tracking, DuoTrack uses cryptographic secret codes for instant pairing, offline-first state persistence, client-side notification dispatching, and a storage-optimized Neon PostgreSQL schema designed to operate comfortably within strict infrastructure quotas.
+DayByDay is an architectural evolution of collaborative habit tracking. It supports both solo tracking and synchronized dual-user accountability pods. Unlike traditional platforms that require mandatory logins with third-party tracking, DayByDay uses cryptographic secret codes for instant pairing, offline-first state persistence, client-side notification dispatching, and a storage-optimized Neon PostgreSQL schema designed to operate comfortably within strict infrastructure quotas.
 
 ---
 
 ## System Architecture
 
-DuoTrack consists of a progressive web frontend, native Android container, serverless API gateway, and serverless PostgreSQL database.
+DayByDay consists of a progressive web frontend, native Android container, serverless API gateway, and serverless PostgreSQL database.
 
 ```
 +-------------------------------------------------------------------------+
@@ -54,7 +54,7 @@ DuoTrack consists of a progressive web frontend, native Android container, serve
 |                                   v Connection Pooling                  |
 |                     +-------------+-------------+                       |
 |                     |  Neon PostgreSQL Engine   |                       |
-|                     |  (duotrack_users, habits) |                       |
+|                     |  (daybyday_users, habits) |                       |
 |                     +---------------------------+                       |
 +-------------------------------------------------------------------------+
 ```
@@ -63,23 +63,23 @@ DuoTrack consists of a progressive web frontend, native Android container, serve
 
 ## Database Storage Architecture & 0.5 GB Free Tier Optimization
 
-DuoTrack is engineered specifically to operate within Neon's 0.5 GB (512 MB) storage limit while guaranteeing continuous operation for 50 or more active users for over a full calendar year.
+DayByDay is engineered specifically to operate within Neon's 0.5 GB (512 MB) storage limit while guaranteeing continuous operation for 50 or more active users for over a full calendar year.
 
 ### Mathematical Storage Analysis
 
 Traditional relational models insert one row per habit completion per day (50 users x 10 habits x 365 days = 182,500 rows/year), resulting in table bloat, heavy index overhead, and rapid quota exhaustion.
 
-DuoTrack eliminates this overhead through a **Single-Row Consolidated JSONB Map Pattern**:
+DayByDay eliminates this overhead through a **Single-Row Consolidated JSONB Map Pattern**:
 
-1. **Fixed Row Allocation**: Each user habit occupies exactly one row in `duotrack_habits`. 50 users tracking 10 habits create a constant footprint of exactly 500 rows.
+1. **Fixed Row Allocation**: Each user habit occupies exactly one row in `daybyday_habits`. 50 users tracking 10 habits create a constant footprint of exactly 500 rows.
 2. **Compact Key Sizing**: Daily logs are stored within a JSONB dictionary using ISO 8601 date keys (`{"2026-09-06": 1}`).
 3. **Data Footprint per Habit/Year**:
    - 365 days x 18 bytes per key-value pair = 6,570 bytes (~6.4 KB).
    - 500 total habits x 6.4 KB = **3.2 MB total history data**.
 4. **Relational Table Overhead**:
-   - `duotrack_users` (50 rows x 180 bytes) = ~9 KB.
-   - `duotrack_pairings` (25 rows x 120 bytes) = ~3 KB.
-   - `duotrack_habits` base columns (500 rows x 220 bytes) = ~110 KB.
+   - `daybyday_users` (50 rows x 180 bytes) = ~9 KB.
+   - `daybyday_pairings` (25 rows x 120 bytes) = ~3 KB.
+   - `daybyday_habits` base columns (500 rows x 220 bytes) = ~110 KB.
    - B-tree Indexes (`idx_users_username`, `idx_users_secret`, `idx_habits_user`) = ~250 KB.
 5. **Total Database Consumption After 1 Year**:
    - Total Space Consumed: **~3.6 MB**
@@ -90,7 +90,7 @@ DuoTrack eliminates this overhead through a **Single-Row Consolidated JSONB Map 
 
 ```sql
 -- Users Table: Unique identity and pairing secret codes
-CREATE TABLE IF NOT EXISTS duotrack_users (
+CREATE TABLE IF NOT EXISTS daybyday_users (
   id VARCHAR(48) PRIMARY KEY,
   username VARCHAR(32) UNIQUE NOT NULL,
   secret_code VARCHAR(16) UNIQUE NOT NULL,
@@ -101,9 +101,9 @@ CREATE TABLE IF NOT EXISTS duotrack_users (
 );
 
 -- Habits Table: 1 row per habit with compact JSONB historical tracking
-CREATE TABLE IF NOT EXISTS duotrack_habits (
+CREATE TABLE IF NOT EXISTS daybyday_habits (
   id SERIAL PRIMARY KEY,
-  user_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+  user_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
   habit_id VARCHAR(32) NOT NULL,
   name VARCHAR(64) NOT NULL,
   target NUMERIC(8, 2) NOT NULL DEFAULT 1,
@@ -121,19 +121,19 @@ CREATE TABLE IF NOT EXISTS duotrack_habits (
 );
 
 -- Pairings Table: Active accountability connections
-CREATE TABLE IF NOT EXISTS duotrack_pairings (
+CREATE TABLE IF NOT EXISTS daybyday_pairings (
   id SERIAL PRIMARY KEY,
-  user1_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
-  user2_id VARCHAR(48) REFERENCES duotrack_users(id) ON DELETE CASCADE,
+  user1_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
+  user2_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
   pod_code VARCHAR(24) UNIQUE NOT NULL,
   status VARCHAR(16) DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_users_username ON duotrack_users(LOWER(username));
-CREATE INDEX IF NOT EXISTS idx_users_secret ON duotrack_users(UPPER(secret_code));
-CREATE INDEX IF NOT EXISTS idx_habits_user ON duotrack_habits(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON daybyday_users(LOWER(username));
+CREATE INDEX IF NOT EXISTS idx_users_secret ON daybyday_users(UPPER(secret_code));
+CREATE INDEX IF NOT EXISTS idx_habits_user ON daybyday_habits(user_id);
 ```
 
 ---
@@ -193,8 +193,8 @@ If `DATABASE_URL` is omitted, the application automatically falls back to local 
 
 ```bash
 # Clone the repository
-git clone https://github.com/palakharinkhede4/DuoTrack.git
-cd DuoTrack
+git clone https://github.com/palakharinkhede4/DayByDay.git
+cd DayByDay
 
 # Install dependencies
 npm install
@@ -214,10 +214,10 @@ npm run build
 
 Pre-built binaries are available in the repository root and via GitHub Releases:
 
-1. Download [`DuoTrack.apk`](./DuoTrack.apk).
+1. Download [`DayByDay.apk`](./DayByDay.apk).
 2. Transfer the `.apk` file to your Android device via USB, Google Drive, or local storage.
 3. Tap the file in your device's file manager and allow installation from your file provider if prompted.
-4. Launch DuoTrack.
+4. Launch DayByDay.
 
 To build the APK from source:
 
@@ -233,13 +233,13 @@ Compiled output is generated at:
 
 ### iOS Installation (Safari Standalone PWA)
 
-Apple requires Apple Developer Program membership to sign native `.ipa` files for sideloading. DuoTrack provides full native parity through a standalone Progressive Web App configuration:
+Apple requires Apple Developer Program membership to sign native `.ipa` files for sideloading. DayByDay provides full native parity through a standalone Progressive Web App configuration:
 
 1. Open your production URL in **Safari** on iOS.
 2. Tap the **Share** button in the Safari toolbar.
 3. Scroll down the actions sheet and tap **Add to Home Screen**.
 4. Confirm by tapping **Add** in the top right corner.
-5. Launch **DuoTrack** from the home screen. The app operates in standalone mode with full viewport height, system haptics, and zero browser navigation chrome.
+5. Launch **DayByDay** from the home screen. The app operates in standalone mode with full viewport height, system haptics, and zero browser navigation chrome.
 
 ---
 
@@ -256,7 +256,7 @@ The repository includes [`.github/workflows/release.yml`](./.github/workflows/re
   ```
 * **Manual Workflow Dispatch**:
   1. Navigate to the **Actions** tab in GitHub.
-  2. Select **Build & Publish DuoTrack APK Release**.
+  2. Select **Build & Publish DayByDay APK Release**.
   3. Click **Run workflow**, specify the version tag, and confirm.
   4. The workflow will compile the project with Java 21, run Gradle build tasks, and upload the signed debug APK directly to GitHub Releases.
 
@@ -294,22 +294,22 @@ Handles live bidirectional habit value updates between paired users.
 
 ## Security and Privacy Policy
 
-* **Salted Password Hashing**: Passwords are never stored in plaintext. DuoTrack uses cryptographic PBKDF2 with SHA-256 and unique 16-byte random salts per user to resist rainbow table and brute-force attacks.
+* **Salted Password Hashing**: Passwords are never stored in plaintext. DayByDay uses cryptographic PBKDF2 with SHA-256 and unique 16-byte random salts per user to resist rainbow table and brute-force attacks.
 * **Security Question Account Recovery**: Forgotten passwords can be reset via personal security questions without relying on third-party email brokers or SMS gateways. Answers are case-insensitively hashed and salted.
 * **Account Impersonation Prevention**: Usernames are strictly guarded; duplicate registrations are rejected, and only authenticated users can access or modify their habit records.
 * **Data Sanitization**: All custom habit inputs, unit names, and profile information undergo XSS sanitization prior to database storage and DOM rendering.
-* **No Third-Party Telemetry**: DuoTrack includes zero tracking beacons, advertising libraries, or invasive analytic SDKs.
+* **No Third-Party Telemetry**: DayByDay includes zero tracking beacons, advertising libraries, or invasive analytic SDKs.
 ---
 
 ## Persistent Session Architecture and Durability
 
-DuoTrack implements a multi-layer storage vault architecture to guarantee that user sessions remain continuously active across devices until an explicit user logout is executed:
+DayByDay implements a multi-layer storage vault architecture to guarantee that user sessions remain continuously active across devices until an explicit user logout is executed:
 
-* **Dual-Layer Persistence Engine**: Active sessions are written simultaneously to both `localStorage` and an IndexedDB database (`duotrack_vault`).
-* **iOS Safari ITP and Cache Flush Protection**: Mobile Safari applies Intelligent Tracking Prevention (ITP) and purges `localStorage` on unused sites after seven days. DuoTrack requests permanent storage rights via `navigator.storage.persist()`. If `localStorage` is cleared by the operating system, DuoTrack automatically recovers the user session, habits, and paired pod state from IndexedDB upon launch, re-seeding `localStorage` with zero interruption.
+* **Dual-Layer Persistence Engine**: Active sessions are written simultaneously to both `localStorage` and an IndexedDB database (`daybyday_vault`).
+* **iOS Safari ITP and Cache Flush Protection**: Mobile Safari applies Intelligent Tracking Prevention (ITP) and purges `localStorage` on unused sites after seven days. DayByDay requests permanent storage rights via `navigator.storage.persist()`. If `localStorage` is cleared by the operating system, DayByDay automatically recovers the user session, habits, and paired pod state from IndexedDB upon launch, re-seeding `localStorage` with zero interruption.
 * **Standalone iOS PWA Support**: In standalone Add-to-Home-Screen display mode, session snapshots survive app closures and background termination.
 * **Android Native App Lifecycle**: On Android native builds, the Capacitor WebView SQLite data layer maintains persistent storage through application restarts, background task memory collection, and system reboots.
-* **Offline-First Resilience**: DuoTrack never terminates or resets an active session due to network dropouts or backend latency. Users can access, check off, and review their habits without internet access.
+* **Offline-First Resilience**: DayByDay never terminates or resets an active session due to network dropouts or backend latency. Users can access, check off, and review their habits without internet access.
 * **Multi-Tab State Synchronization**: When running across multiple tabs or browser windows, storage event listeners immediately synchronize authentication state, habit progress, and theme settings in real time.
 * **Explicit Session Termination**: Sessions and vault entries are permanently expunged only when the user explicitly triggers "Sign Out" or "Wipe Data".
 

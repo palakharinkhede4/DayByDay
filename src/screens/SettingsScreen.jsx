@@ -344,7 +344,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 <li>Copy your connection string: <code>postgres://user:password@ep-xxx.neon.tech/neondb?sslmode=require</code></li>
                 <li>Go to your project settings on <a href="https://vercel.com" target="_blank" rel="noreferrer">vercel.com</a> &rarr; <strong>Settings &rarr; Environment Variables</strong>.</li>
                 <li>Add variable: <code>DATABASE_URL</code> = your Neon connection string.</li>
-                <li>Click <strong>Save & Redeploy</strong>. DuoTrack will automatically create the tables and store all users, habits, and history permanently!</li>
+                <li>Click <strong>Save & Redeploy</strong>. DayByDay will automatically create the tables and store all users, habits, and history permanently!</li>
               </ol>
             </div>
           )}
@@ -420,7 +420,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               <div className="guide-card android-guide">
                 <h4 className="guide-title">🤖 Android Setup</h4>
                 <ol className="guide-steps">
-                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DuoTrack/raw/main/DuoTrack.apk" target="_blank" rel="noreferrer">Download DuoTrack.apk</a></li>
+                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DuoTrack/raw/main/DayByDay.apk" target="_blank" rel="noreferrer">Download DayByDay.apk</a></li>
                   <li>Or open in Chrome and tap <strong>"Install App"</strong>.</li>
                 </ol>
               </div>
