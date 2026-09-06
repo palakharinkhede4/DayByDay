@@ -1470,6 +1470,18 @@ export const HabitProvider = ({ children }) => {
 
   // Send Cheer / Encouragement with goal context
   const sendCheer = async (targetUserIdOrCode, customMessage, goalName) => {
+    // Prevent self-cheering completely!
+    const myCode = user?.secretCode || user?.secret_code;
+    const isTargetingMe =
+      (targetUserIdOrCode && user?.id && String(targetUserIdOrCode) === String(user.id)) ||
+      (targetUserIdOrCode && user?.username && String(targetUserIdOrCode).toLowerCase() === String(user.username).toLowerCase()) ||
+      (targetUserIdOrCode && myCode && String(targetUserIdOrCode).toUpperCase() === String(myCode).toUpperCase());
+
+    if (isTargetingMe) {
+      console.log('Skipping self cheer');
+      return;
+    }
+
     sound.complete();
     triggerCelebration();
 
@@ -1493,17 +1505,60 @@ export const HabitProvider = ({ children }) => {
 
   // Incoming Cheer Notification Listener (Notifies user when teammates encourage them)
   const seenCheerIdsRef = useRef(new Set());
+
+  // Load previously seen cheer IDs from localStorage on mount so force-closing the app doesn't re-trigger them
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('daybyday_seen_cheer_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id) => seenCheerIdsRef.current.add(id));
+        }
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!user?.id && !user?.username) return;
 
     let isSubscribed = true;
+    const myCode = user?.secretCode || user?.secret_code;
+
     const checkCheers = async () => {
       try {
         const targetId = user.id || user.username;
         const cheers = await fetchCheersRemote(targetId, user.username, groupPod?.code);
         if (!isSubscribed || !Array.isArray(cheers) || cheers.length === 0) return;
 
-        const unread = cheers.filter((c) => !c.is_read && !seenCheerIdsRef.current.has(c.id));
+        const unread = cheers.filter((c) => {
+          if (!c || c.is_read) return false;
+          if (seenCheerIdsRef.current.has(c.id)) return false;
+
+          // 1. NEVER notify yourself of a cheer sent by yourself!
+          const isFromMe =
+            (user?.id && String(c.from_user_id) === String(user.id)) ||
+            (user?.username && c.from_username && String(c.from_username).toLowerCase() === String(user.username).toLowerCase()) ||
+            (user?.username && c.from_name && String(c.from_name).toLowerCase() === String(user.username).toLowerCase());
+          if (isFromMe) {
+            seenCheerIdsRef.current.add(c.id);
+            return false;
+          }
+
+          // 2. If the cheer is targeted at someone else, skip it
+          const isForMe =
+            !c.to_user_id ||
+            (user?.id && String(c.to_user_id) === String(user.id)) ||
+            (user?.username && String(c.to_user_id).toLowerCase() === String(user.username).toLowerCase()) ||
+            (myCode && String(c.to_user_id).toUpperCase() === String(myCode).toUpperCase());
+          if (!isForMe) {
+            seenCheerIdsRef.current.add(c.id);
+            return false;
+          }
+
+          return true;
+        });
+
         if (unread.length > 0) {
           unread.forEach((c) => {
             seenCheerIdsRef.current.add(c.id);
@@ -1545,6 +1600,12 @@ export const HabitProvider = ({ children }) => {
               } catch {}
             }
           });
+
+          // Save seen IDs to localStorage
+          try {
+            const arr = Array.from(seenCheerIdsRef.current).slice(-300);
+            localStorage.setItem('daybyday_seen_cheer_ids', JSON.stringify(arr));
+          } catch {}
 
           sound.complete();
 
@@ -1914,25 +1975,6 @@ export const HabitProvider = ({ children }) => {
               };
             });
             localStorage.setItem('daybyday_group_pod', JSON.stringify(remote));
-          }
-        } catch {}
-      }
-
-      // 2. Incoming cheers check
-      if (user?.id) {
-        try {
-          const cheers = await fetchCheersRemote(user.id, groupPod?.code);
-          if (Array.isArray(cheers) && cheers.length > 0) {
-            for (const c of cheers) {
-              const cheerKey = `${c.id}_${c.created_at}`;
-              if (!receivedCheerIdsRef.current.has(cheerKey) && c.from_username !== user.username) {
-                receivedCheerIdsRef.current.add(cheerKey);
-                sound.complete();
-                triggerCelebration();
-                triggerIslandNotification(`🔥 @${c.from_username} cheered you on!`, 'flame');
-                break;
-              }
-            }
           }
         } catch {}
       }

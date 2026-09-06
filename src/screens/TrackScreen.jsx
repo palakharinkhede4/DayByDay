@@ -97,8 +97,18 @@ export const TrackScreen = () => {
 
   const handleSendCheer = (customMessage) => {
     if (!trackedPartner) return;
-    sound.complete();
     const partnerCode = trackedPartner.secretCode || trackedPartner.secret_code || trackedPartner.username;
+    const isMe =
+      (user?.id && String(trackedPartner.id) === String(user.id)) ||
+      (user?.username && trackedPartner.username && String(trackedPartner.username).toLowerCase() === String(user.username).toLowerCase()) ||
+      (myCode && partnerCode && String(partnerCode).toUpperCase() === String(myCode).toUpperCase());
+
+    if (isMe) {
+      triggerIslandNotification?.('You cannot cheer yourself! 😅', 'info');
+      return;
+    }
+
+    sound.complete();
     const msg = customMessage || 'Keep crushing your goals! 🔥';
     sendCheer(partnerCode, msg);
     setCheerSent(true);
@@ -349,52 +359,56 @@ export const TrackScreen = () => {
             </div>
           </div>
 
-          {/* Encouragement / Cheer Feature */}
-          <div className="partner-cheer-section">
-            <div className="cheer-title-row">
-              <Rocket size={16} className="text-amber-400" />
-              <span className="cheer-title font-bold">Send Daily Encouragement</span>
-            </div>
+          {/* Encouragement / Cheer Feature (Only for other users, not oneself) */}
+          {!((user?.id && String(trackedPartner.id) === String(user.id)) ||
+             (user?.username && trackedPartner.username && String(trackedPartner.username).toLowerCase() === String(user.username).toLowerCase()) ||
+             (myCode && (trackedPartner.secretCode || trackedPartner.secret_code) && String(trackedPartner.secretCode || trackedPartner.secret_code).toUpperCase() === String(myCode).toUpperCase())) && (
+            <div className="partner-cheer-section">
+              <div className="cheer-title-row">
+                <Rocket size={16} className="text-amber-400" />
+                <span className="cheer-title font-bold">Send Daily Encouragement</span>
+              </div>
 
-            <div className="cheer-presets-row">
+              <div className="cheer-presets-row">
+                <button
+                  className="cheer-preset-chip"
+                  onClick={() => handleSendCheer('Keep crushing your streak! 🔥')}
+                >
+                  🔥 Keep Crushing It
+                </button>
+                <button
+                  className="cheer-preset-chip"
+                  onClick={() => handleSendCheer('Proud of your consistency! 💪')}
+                >
+                  💪 Proud of You
+                </button>
+                <button
+                  className="cheer-preset-chip"
+                  onClick={() => handleSendCheer('Almost there, finish strong! ⚡')}
+                >
+                  ⚡ Finish Strong
+                </button>
+              </div>
+
               <button
-                className="cheer-preset-chip"
-                onClick={() => handleSendCheer('Keep crushing your streak! 🔥')}
+                className={`partner-nudge-btn cheer-btn ${cheerSent ? 'sent' : ''}`}
+                onClick={() => handleSendCheer()}
               >
-                🔥 Keep Crushing It
-              </button>
-              <button
-                className="cheer-preset-chip"
-                onClick={() => handleSendCheer('Proud of your consistency! 💪')}
-              >
-                💪 Proud of You
-              </button>
-              <button
-                className="cheer-preset-chip"
-                onClick={() => handleSendCheer('Almost there, finish strong! ⚡')}
-              >
-                ⚡ Finish Strong
+                {cheerSent ? (
+                  <>
+                    <Check size={18} />
+                    <span className="font-bold">Cheer Sent! 🎉</span>
+                  </>
+                ) : (
+                  <>
+                    <Flame size={18} className="text-amber-300" />
+                    <span className="font-bold">Cheer On @{trackedPartner.displayName || trackedPartner.username}</span>
+                    <Rocket size={16} />
+                  </>
+                )}
               </button>
             </div>
-
-            <button
-              className={`partner-nudge-btn cheer-btn ${cheerSent ? 'sent' : ''}`}
-              onClick={() => handleSendCheer()}
-            >
-              {cheerSent ? (
-                <>
-                  <Check size={18} />
-                  <span className="font-bold">Cheer Sent! 🎉</span>
-                </>
-              ) : (
-                <>
-                  <Flame size={18} className="text-amber-300" />
-                  <span className="font-bold">Cheer On @{trackedPartner.displayName || trackedPartner.username}</span>
-                  <Rocket size={16} />
-                </>
-              )}
-            </button>
-          </div>
+          )}
         </div>
       )}
     </div>

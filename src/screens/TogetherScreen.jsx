@@ -355,6 +355,14 @@ export const TogetherScreen = () => {
   };
 
   const handleCheerMember = (member, goalName) => {
+    if (!member) return;
+    const isMe = (user?.id && String(user.id) === String(member.id)) ||
+                 (user?.username && member.username && String(user.username).toLowerCase() === String(member.username).toLowerCase());
+    if (isMe) {
+      triggerIslandNotification?.('You cannot cheer yourself! 😅', 'info');
+      return;
+    }
+
     const code = member.secretCode || member.secret_code || member.username;
     const msg = goalName ? `Cheering you on for ${goalName}! Keep crushing it! 🔥` : 'Crushing it in the pod! 🔥';
     sendCheer(code, msg, goalName);

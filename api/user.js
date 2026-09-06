@@ -1361,6 +1361,13 @@ export default async function handler(req, res) {
           }
         }
 
+        if (
+          (fromUserId && recipientId && String(fromUserId) === String(recipientId)) ||
+          (fromUsername && recipientUsername && String(fromUsername).toLowerCase() === String(recipientUsername).toLowerCase())
+        ) {
+          return res.status(200).json({ success: true, message: 'Self cheer skipped' });
+        }
+
         if (sql) {
           await sql`
             INSERT INTO daybyday_cheers (
@@ -1395,6 +1402,7 @@ export default async function handler(req, res) {
     if (action === 'get_cheers') {
       const { userId, username, podCode } = req.body;
       const targetId = userId || username;
+      const cleanUsername = (username || userId || '').trim();
 
       try {
         let cheers = [];
@@ -1402,24 +1410,48 @@ export default async function handler(req, res) {
           if (targetId && podCode) {
             cheers = await sql`
               SELECT * FROM daybyday_cheers
-              WHERE (to_user_id = ${targetId} OR to_user_id = ${username || targetId} OR pod_code = ${podCode})
+              WHERE (
+                to_user_id = ${targetId} 
+                OR to_user_id = ${cleanUsername} 
+                OR LOWER(to_user_id) = LOWER(${cleanUsername})
+                OR (to_user_id IS NULL AND pod_code = ${podCode})
+              )
+              AND (from_user_id IS NULL OR from_user_id != ${targetId})
+              AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername}))
+              AND is_read = false
               ORDER BY created_at DESC LIMIT 20
             `;
           } else if (targetId) {
             cheers = await sql`
               SELECT * FROM daybyday_cheers
-              WHERE to_user_id = ${targetId} OR to_user_id = ${username || targetId}
+              WHERE (
+                to_user_id = ${targetId} 
+                OR to_user_id = ${cleanUsername} 
+                OR LOWER(to_user_id) = LOWER(${cleanUsername})
+              )
+              AND (from_user_id IS NULL OR from_user_id != ${targetId})
+              AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername}))
+              AND is_read = false
               ORDER BY created_at DESC LIMIT 20
             `;
           } else if (podCode) {
             cheers = await sql`
               SELECT * FROM daybyday_cheers
-              WHERE pod_code = ${podCode}
+              WHERE pod_code = ${podCode} 
+                AND (from_user_id IS NULL OR from_user_id != ${targetId})
+                AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername}))
+                AND is_read = false
               ORDER BY created_at DESC LIMIT 20
             `;
           }
         } else {
-          cheers = memoryDb.getCheersForUser(targetId, podCode);
+          cheers = memoryDb.getCheersForUser(targetId, podCode) || [];
+          cheers = cheers.filter(
+            (c) =>
+              !c.is_read &&
+              c.from_user_id !== targetId &&
+              c.from_username?.toLowerCase() !== cleanUsername.toLowerCase()
+          );
         }
 
         return res.status(200).json({ success: true, cheers: cheers || [] });
@@ -1430,14 +1462,25 @@ export default async function handler(req, res) {
 
     // ACTION: MARK CHEERS READ
     if (action === 'mark_cheers_read') {
-      const { userId, username } = req.body;
+      const { userId, username, podCode } = req.body;
       const targetId = userId || username;
+      const cleanUsername = (username || userId || '').trim();
       try {
         if (sql && targetId) {
           await sql`
             UPDATE daybyday_cheers
             SET is_read = true
-            WHERE to_user_id = ${targetId} OR to_user_id = ${username || targetId}
+            WHERE to_user_id = ${targetId} 
+               OR to_user_id = ${cleanUsername}
+               OR LOWER(to_user_id) = LOWER(${cleanUsername})
+               OR (to_user_id IS NULL AND pod_code = ${podCode || null})
+          `;
+          // Also cleanup any lingering self-cheers in DB
+          await sql`
+            UPDATE daybyday_cheers
+            SET is_read = true
+            WHERE from_user_id = to_user_id 
+               OR LOWER(from_username) = LOWER(to_user_id)
           `;
         }
         return res.status(200).json({ success: true });
