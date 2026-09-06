@@ -212,9 +212,9 @@ npm run build
 
 ### Android Installation (Native APK)
 
-Pre-built binaries are available in the repository root and via GitHub Releases:
+Pre-built binaries are available via GitHub Releases:
 
-1. Download [`DayByDay.apk`](./DayByDay.apk).
+1. Download the latest compiled package from [GitHub Releases](https://github.com/palakharinkhede4/DayByDay/releases/latest).
 2. Transfer the `.apk` file to your Android device via USB, Google Drive, or local storage.
 3. Tap the file in your device's file manager and allow installation from your file provider if prompted.
 4. Launch DayByDay.

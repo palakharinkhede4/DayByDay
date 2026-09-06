@@ -501,7 +501,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               <div className="guide-card android-guide">
                 <h4 className="guide-title">🤖 Android Setup</h4>
                 <ol className="guide-steps">
-                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DayByDay/raw/main/DayByDay.apk" target="_blank" rel="noreferrer">Download DayByDay.apk</a></li>
+                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DayByDay/releases/latest" target="_blank" rel="noreferrer">Download DayByDay APK (Latest Release)</a></li>
                   <li>Or open in Chrome and tap <strong>"Install App"</strong>.</li>
                 </ol>
               </div>

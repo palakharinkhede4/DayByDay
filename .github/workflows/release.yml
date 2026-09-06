@@ -4,14 +4,11 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version_tag:
-        description: 'Release version tag (e.g. v1.0.0)'
+        description: 'Release version tag override (e.g. v1.0.0)'
         required: false
-        default: 'v1.0.0'
 
 permissions:
   contents: write
@@ -24,6 +21,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java 21 (Microsoft OpenJDK)
         uses: actions/setup-java@v4
@@ -56,32 +55,26 @@ jobs:
           ./gradlew assembleDebug --no-daemon
           cd ..
 
-      - name: Prepare APK Artifacts & Version Tag
+      - name: Prepare Single Versioned APK Artifact
         run: |
           if [ -n "${{ github.event.inputs.version_tag }}" ]; then
             RELEASE_TAG="${{ github.event.inputs.version_tag }}"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            RELEASE_TAG="${{ github.ref_name }}"
           else
             PKG_VER=$(node -p "require('./package.json').version")
             RELEASE_TAG="v${PKG_VER}"
           fi
           
-          # Copy to root directory for upload
-          cp android/app/build/outputs/apk/debug/app-debug.apk "DayByDay.apk"
+          # Output ONLY the single versioned APK
           cp android/app/build/outputs/apk/debug/app-debug.apk "DayByDay-${RELEASE_TAG}.apk"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
 
-      - name: Upload Build Artifacts to Actions Summary
-        uses: actions/upload-artifact@v4
-        with:
-          name: DayByDay-Android-APK
-          path: |
-            DayByDay.apk
-            DayByDay-*.apk
-          retention-days: 30
+      - name: Delete Pre-Existing Release If Exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete "${RELEASE_TAG}" --yes --cleanup-tag || true
 
-      - name: Publish Release to GitHub
+      - name: Publish Clean Release with Single APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -104,11 +97,10 @@ jobs:
             * Multi-layer persistent storage vault with offline resilience.
             
             ### Android Installation:
-            1. Download `DayByDay.apk` or `DayByDay-${{ env.RELEASE_TAG }}.apk` attached below.
+            1. Download `DayByDay-${{ env.RELEASE_TAG }}.apk` attached below.
             2. Open the APK on your Android device to install.
             3. Launch DayByDay.
           files: |
-            DayByDay.apk
             DayByDay-*.apk
           draft: false
           prerelease: false
