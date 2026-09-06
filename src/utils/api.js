@@ -96,3 +96,100 @@ export const pushFullSync = async (podCode, userId, podInfo, habits) => {
     return null;
   }
 };
+
+// USER ACCOUNTS & PAIRING APIs
+export const registerUserRemote = async (username, displayName, avatar) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_user',
+        username,
+        displayName,
+        avatar,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to register');
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn('User register fallback to local:', err.message);
+    return null;
+  }
+};
+
+export const fetchUserRemote = async (usernameOrCode) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const isCode = usernameOrCode.includes('-');
+    const param = isCode ? `code=${encodeURIComponent(usernameOrCode)}` : `username=${encodeURIComponent(usernameOrCode)}`;
+    const res = await fetch(`${baseUrl}/api/user?${param}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+};
+
+export const syncUserHabitsRemote = async (userId, habits) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'sync_habits',
+        userId,
+        habits,
+      }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+};
+
+export const pairPartnerRemote = async (userId, partnerCode) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'pair',
+        userId,
+        partnerCode,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Partner not found');
+    }
+    return await res.json();
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const unpairPartnerRemote = async (userId) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'unpair',
+        userId,
+      }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+};

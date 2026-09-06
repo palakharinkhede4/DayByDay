@@ -4,12 +4,18 @@ import { checkApiHealth } from '../utils/api';
 
 export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const {
+    user,
+    partner,
+    isSolo,
+    pairWithPartner,
+    unpairPartner,
     pod,
     themeColor,
     setThemeColor,
+    themeMode,
+    setThemeMode,
     osMode,
     setOsMode,
-    leavePod,
     habits,
     removeGoal,
     exportData,
@@ -18,19 +24,45 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     serverUrl,
     setServerUrl,
     syncStatus,
-    lastSyncedAt,
     syncWithCloud,
   } = useHabits();
 
+  const [copiedCode, setCopiedCode] = useState(false);
   const [gentleNotifications, setGentleNotifications] = useState(true);
   const [editingGoals, setEditingGoals] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [showNeonGuide, setShowNeonGuide] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showVercelGuide, setShowVercelGuide] = useState(false);
+  const [partnerCodeInput, setPartnerCodeInput] = useState('');
+  const [pairingLoading, setPairingLoading] = useState(false);
+  const [pairingError, setPairingError] = useState(null);
+
   const [customServerUrl, setCustomServerUrl] = useState(serverUrl || '');
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState(null);
+
+  const handleCopyCode = () => {
+    const code = user?.secretCode || pod.code;
+    navigator.clipboard.writeText(code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handlePairSubmit = async (e) => {
+    e.preventDefault();
+    if (!partnerCodeInput.trim()) return;
+    setPairingLoading(true);
+    setPairingError(null);
+    try {
+      await pairWithPartner(partnerCodeInput.trim().toUpperCase());
+      setPartnerCodeInput('');
+    } catch (err) {
+      setPairingError(err.message || 'Could not pair with this code');
+    } finally {
+      setPairingLoading(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
@@ -61,38 +93,52 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       {/* USER PROFILE CARD */}
       <div className="profile-card">
         <div className="profile-avatar-circle">
-          <span>{pod.user1.initial}</span>
+          <span>{user?.avatar || '🌱'}</span>
         </div>
         <div className="profile-info">
-          <h2 className="profile-name font-bold">{pod.user1.name}</h2>
-          <span className="profile-email">{pod.user1.email}</span>
+          <h2 className="profile-name font-bold">
+            {user ? (user.displayName || `@${user.username}`) : 'Anonymous User'}
+          </h2>
+          <span className="profile-email">
+            {user ? `@${user.username}` : 'No username set'}
+          </span>
         </div>
-        <button className="edit-profile-btn">Edit Profile ›</button>
+        {user && (
+          <button className="copy-secret-chip" onClick={handleCopyCode}>
+            <span>🔑 {user.secretCode}</span>
+            <span className="chip-copy-txt">{copiedCode ? 'Copied! ✓' : 'Copy'}</span>
+          </button>
+        )}
       </div>
 
-      {/* SECTION: POD */}
+      {/* SECTION: ACCOUNTABILITY / PARTNER */}
       <div className="settings-group">
-        <span className="group-label">POD</span>
+        <span className="group-label">ACCOUNTABILITY & PAIRING</span>
         <div className="settings-group-content">
-          {pod.isPaired ? (
+          {!isSolo ? (
             <>
               <div className="settings-row-item">
                 <div className="row-left">
                   <span className="row-icon">👥</span>
-                  <span className="row-title">Paired with</span>
+                  <div>
+                    <span className="row-title">Paired Partner</span>
+                    <span className="row-hint">Tracking together in a shared Pod</span>
+                  </div>
                 </div>
-                <span className="row-value font-bold">{pod.user2.name}</span>
+                <span className="row-value font-bold">@{partner?.username || 'partner'}</span>
               </div>
 
-              <div className="settings-row-item clickable" onClick={onOpenPairing}>
+              <div className="settings-row-item">
                 <div className="row-left">
                   <span className="row-icon">🔑</span>
                   <div>
-                    <span className="row-title">Pod Code: <strong>{pod.code}</strong></span>
-                    <span className="row-hint">Share this code to sync habits with your partner</span>
+                    <span className="row-title">Your Secret Code</span>
+                    <span className="row-hint">Share with others to let them track your progress</span>
                   </div>
                 </div>
-                <span className="row-arrow">›</span>
+                <button className="mini-copy-btn" onClick={handleCopyCode}>
+                  {user?.secretCode} {copiedCode ? '✓' : '📋'}
+                </button>
               </div>
 
               <div
@@ -101,122 +147,55 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               >
                 <div className="row-left">
                   <span className="row-icon">🚪</span>
-                  <span className="row-title danger-text">Leave Pod</span>
+                  <span className="row-title danger-text">Switch to Solo Tracking</span>
                 </div>
                 <span className="row-arrow danger-text">›</span>
               </div>
             </>
           ) : (
-            <div className="settings-row-item clickable highlight-row" onClick={onOpenPairing}>
-              <div className="row-left">
-                <span className="row-icon">🤝</span>
-                <span className="row-title">Pair with a Partner</span>
+            <div className="solo-pairing-box">
+              <div className="solo-info-row">
+                <span className="row-icon">👤</span>
+                <div>
+                  <span className="solo-title font-bold">Solo Tracking Active</span>
+                  <p className="solo-desc">
+                    You are tracking your personal habits independently. Want a partner or friend to keep an eye on you?
+                  </p>
+                </div>
               </div>
-              <span className="row-arrow">›</span>
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* SECTION: VERCEL CLOUD SYNC */}
-      <div className="settings-group">
-        <span className="group-label">CLOUD SYNC (VERCEL SERVERLESS)</span>
-        <div className="settings-group-content cloud-sync-container">
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">☁️</span>
-              <div>
-                <span className="row-title">Sync Status</span>
-                <span className="row-hint">
-                  {syncStatus === 'synced'
-                    ? 'Connected & live syncing every 4s'
-                    : syncStatus === 'syncing'
-                    ? 'Syncing changes...'
-                    : 'Local-only offline storage'}
-                </span>
+              <div className="my-code-banner">
+                <span className="code-label">Your Secret Sharing Code:</span>
+                <div className="code-row-copy">
+                  <span className="my-secret-val font-bold">{user?.secretCode || 'DUO-1000'}</span>
+                  <button className="code-copy-btn" onClick={handleCopyCode}>
+                    {copiedCode ? 'Copied! ✓' : 'Share Code 🔗'}
+                  </button>
+                </div>
+                <span className="code-sub">Anyone with this code can connect to view or sync your progress.</span>
               </div>
-            </div>
-            <div className={`sync-status-badge ${syncStatus}`}>
-              <span className="status-indicator-dot"></span>
-              <span>{syncStatus === 'synced' ? 'Active' : syncStatus === 'syncing' ? 'Syncing' : 'Offline'}</span>
-            </div>
-          </div>
 
-          {/* Connected URL / Input */}
-          <div className="cloud-url-box">
-            <label className="cloud-url-label">
-              <span>Vercel Cloud URL</span>
-              <button
-                type="button"
-                className="guide-mini-toggle"
-                onClick={() => setShowVercelGuide((p) => !p)}
-              >
-                {showVercelGuide ? 'Hide Guide' : 'How to get URL? ℹ️'}
-              </button>
-            </label>
-            <div className="cloud-input-row">
-              <input
-                type="url"
-                value={customServerUrl}
-                onChange={(e) => setCustomServerUrl(e.target.value)}
-                placeholder="https://your-duotrack.vercel.app"
-                className="cloud-url-input"
-              />
-              <button
-                type="button"
-                className="cloud-action-btn test"
-                disabled={testingConnection}
-                onClick={handleTestConnection}
-              >
-                {testingConnection ? 'Testing...' : 'Test & Save'}
-              </button>
-            </div>
-
-            {connectionTestResult && (
-              <div className={`test-feedback-box ${connectionTestResult.ok ? 'success' : 'warn'}`}>
-                <span>{connectionTestResult.ok ? '✓' : '⚠️'}</span>
-                <span>
-                  {connectionTestResult.message}
-                  {connectionTestResult.ok && ` (${connectionTestResult.latency}ms)`}
-                </span>
-              </div>
-            )}
-
-            <div className="cloud-btn-row">
-              <button
-                type="button"
-                className="sync-now-btn"
-                onClick={() => syncWithCloud()}
-              >
-                <span className="sync-icon">⟳</span>
-                <span>Sync Now</span>
-              </button>
-            </div>
-          </div>
-
-          {showVercelGuide && (
-            <div className="vercel-deploy-guide">
-              <h4 className="deploy-guide-title">🚀 How Vercel Powers Multi-Device Sync & iOS:</h4>
-              <p className="deploy-guide-text">
-                Vercel serves <strong>both</strong> the iOS Web App and the live Serverless API (<code>/api/pod</code>) with zero server maintenance.
-              </p>
-              <ol className="deploy-guide-steps">
-                <li>
-                  <strong>Deploy Project:</strong> Run <code>npx vercel</code> in terminal, or push this repository to GitHub and click <strong>"Import"</strong> on <a href="https://vercel.com" target="_blank" rel="noreferrer">vercel.com</a>.
-                </li>
-                <li>
-                  <strong>Get URL:</strong> Vercel gives you a free HTTPS link (e.g. <code>https://duotrack.vercel.app</code>).
-                </li>
-                <li>
-                  <strong>For iOS Friend:</strong> Send them the Vercel link. They open it in Safari &rarr; tap Share &rarr; <strong>"Add to Home Screen"</strong>. Done!
-                </li>
-                <li>
-                  <strong>For Android Phone:</strong> Paste your Vercel URL in the field above and tap <strong>"Test & Save"</strong>.
-                </li>
-                <li>
-                  <strong>Real-time Sync:</strong> Both devices share Pod Code <strong>{pod.code}</strong>. When either of you updates a habit, both phones sync within 4 seconds!
-                </li>
-              </ol>
+              <form onSubmit={handlePairSubmit} className="pair-partner-form">
+                <label className="pair-form-label">Enter a Friend's Secret Code:</label>
+                <div className="pair-input-group">
+                  <input
+                    type="text"
+                    placeholder="e.g. ALEX-4821"
+                    value={partnerCodeInput}
+                    onChange={(e) => setPartnerCodeInput(e.target.value.toUpperCase())}
+                    maxLength={12}
+                    className="pair-code-input font-bold"
+                  />
+                  <button
+                    type="submit"
+                    disabled={pairingLoading || partnerCodeInput.trim().length < 4}
+                    className="pair-submit-btn"
+                  >
+                    {pairingLoading ? 'Connecting...' : 'Connect'}
+                  </button>
+                </div>
+                {pairingError && <span className="pair-error-text">⚠️ {pairingError}</span>}
+              </form>
             </div>
           )}
         </div>
@@ -225,33 +204,150 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       {/* LEAVE POD CONFIRMATION MODAL */}
       {showLeaveConfirm && (
         <div className="inline-confirm-card">
-          <p className="confirm-title">Are you sure you want to leave this Pod?</p>
+          <p className="confirm-title">Return to Solo Mode?</p>
           <p className="confirm-desc">
-            You will disconnect from {pod.user2.name}. You can pair back anytime with code {pod.code}.
+            You will disconnect from @{partner?.username}. You can pair back anytime by entering their secret code.
           </p>
           <div className="confirm-btn-row">
-            <button
-              className="confirm-btn cancel"
-              onClick={() => setShowLeaveConfirm(false)}
-            >
+            <button className="confirm-btn cancel" onClick={() => setShowLeaveConfirm(false)}>
               Cancel
             </button>
             <button
               className="confirm-btn danger"
               onClick={() => {
-                leavePod();
+                unpairPartner();
                 setShowLeaveConfirm(false);
               }}
             >
-              Leave Pod
+              Confirm Solo Mode
             </button>
           </div>
         </div>
       )}
 
+      {/* SECTION: APPEARANCE & THEMES */}
+      <div className="settings-group">
+        <span className="group-label">APPEARANCE & THEME</span>
+        <div className="settings-group-content">
+          {/* THEME MODE: LIGHT / DARK / AUTO */}
+          <div className="settings-row-item">
+            <div className="row-left">
+              <span className="row-icon">🌓</span>
+              <div>
+                <span className="row-title">Color Mode</span>
+                <span className="row-hint">Light, Dark, or System Auto</span>
+              </div>
+            </div>
+            <div className="theme-mode-pills">
+              <button
+                className={`mode-pill-btn ${themeMode === 'light' ? 'active' : ''}`}
+                onClick={() => setThemeMode('light')}
+              >
+                ☀️ Light
+              </button>
+              <button
+                className={`mode-pill-btn ${themeMode === 'dark' ? 'active' : ''}`}
+                onClick={() => setThemeMode('dark')}
+              >
+                🌙 Dark
+              </button>
+              <button
+                className={`mode-pill-btn ${themeMode === 'auto' ? 'active' : ''}`}
+                onClick={() => setThemeMode('auto')}
+              >
+                ⚙️ Auto
+              </button>
+            </div>
+          </div>
+
+          {/* OS ENGINE TOGGLE */}
+          <div className="settings-row-item">
+            <div className="row-left">
+              <span className="row-icon">📱</span>
+              <div>
+                <span className="row-title">UI Style Engine</span>
+                <span className="row-hint">Material 3 Expressive vs iOS Liquid Glass</span>
+              </div>
+            </div>
+            <div className="os-toggle-pills">
+              <button
+                className={`os-pill-btn ${osMode === 'android' ? 'active' : ''}`}
+                onClick={() => setOsMode('android')}
+              >
+                Android M3
+              </button>
+              <button
+                className={`os-pill-btn ${osMode === 'ios' ? 'active' : ''}`}
+                onClick={() => setOsMode('ios')}
+              >
+                iOS Glass
+              </button>
+            </div>
+          </div>
+
+          {/* COLOR SWATCH ACCENTS */}
+          <div className="settings-row-item">
+            <div className="row-left">
+              <span className="row-icon">🎨</span>
+              <span className="row-title">Accent Palette</span>
+            </div>
+            <div className="color-swatch-picker">
+              {themeOptions.map((t) => (
+                <button
+                  key={t.id}
+                  className={`swatch-btn ${themeColor === t.id ? 'active' : ''}`}
+                  onClick={() => setThemeColor(t.id)}
+                  title={t.label}
+                >
+                  <span className="swatch-half" style={{ background: t.c1 }}></span>
+                  <span className="swatch-half" style={{ background: t.c2 }}></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: DATABASE & NEON DB */}
+      <div className="settings-group">
+        <span className="group-label">DATABASE & CLOUD STORAGE</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item">
+            <div className="row-left">
+              <span className="row-icon">🐘</span>
+              <div>
+                <span className="row-title">Neon PostgreSQL Database</span>
+                <span className="row-hint">
+                  {process.env.DATABASE_URL ? 'Connected to Neon DB' : 'Ready for DATABASE_URL'}
+                </span>
+              </div>
+            </div>
+            <button
+              className="guide-mini-toggle"
+              onClick={() => setShowNeonGuide((p) => !p)}
+            >
+              {showNeonGuide ? 'Hide Setup' : 'How to configure Neon? ℹ️'}
+            </button>
+          </div>
+
+          {showNeonGuide && (
+            <div className="neon-guide-box">
+              <h4 className="deploy-guide-title">🐘 How to Connect Neon PostgreSQL (Free):</h4>
+              <ol className="deploy-guide-steps">
+                <li>Create a free database at <a href="https://neon.tech" target="_blank" rel="noreferrer">neon.tech</a>.</li>
+                <li>Copy your connection string: <code>postgres://user:password@ep-xxx.neon.tech/neondb?sslmode=require</code></li>
+                <li>Go to your project settings on <a href="https://vercel.com" target="_blank" rel="noreferrer">vercel.com</a> &rarr; <strong>Settings &rarr; Environment Variables</strong>.</li>
+                <li>Add variable: <code>DATABASE_URL</code> = your Neon connection string.</li>
+                <li>Click <strong>Save & Redeploy</strong>. DuoTrack will automatically create the tables and store all users, habits, and history permanently!</li>
+              </ol>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* SECTION: GOALS */}
       <div className="settings-group">
-        <span className="group-label">GOALS</span>
+        <span className="group-label">GOALS & HABITS</span>
         <div className="settings-group-content">
           <div
             className="settings-row-item clickable"
@@ -259,7 +355,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           >
             <div className="row-left">
               <span className="row-icon">📝</span>
-              <span className="row-title">Edit Goals</span>
+              <span className="row-title">Manage Habits</span>
             </div>
             <span className="row-arrow">{editingGoals ? '⌄' : '›'}</span>
           </div>
@@ -281,171 +377,14 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 </div>
               ))}
               <button className="add-goal-mini-btn" onClick={onOpenAddGoal}>
-                + Add New Goal
+                + Add New Habit
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* SECTION: APPEARANCE & THEME */}
-      <div className="settings-group">
-        <span className="group-label">APPEARANCE</span>
-        <div className="settings-group-content">
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">🎨</span>
-              <span className="row-title">Ring Color</span>
-            </div>
-            <div className="color-swatch-picker">
-              {themeOptions.map((t) => (
-                <button
-                  key={t.id}
-                  className={`swatch-btn ${themeColor === t.id ? 'active' : ''}`}
-                  onClick={() => setThemeColor(t.id)}
-                  title={t.label}
-                >
-                  <span className="swatch-half" style={{ background: t.c1 }}></span>
-                  <span className="swatch-half" style={{ background: t.c2 }}></span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">⚡</span>
-              <span className="row-title">Operating System Engine</span>
-            </div>
-            <div className="os-toggle-pills">
-              <button
-                className={`os-pill-btn ${osMode === 'android' ? 'active' : ''}`}
-                onClick={() => setOsMode('android')}
-              >
-                Android M3
-              </button>
-              <button
-                className={`os-pill-btn ${osMode === 'ios' ? 'active' : ''}`}
-                onClick={() => setOsMode('ios')}
-              >
-                iOS Glass
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION: NOTIFICATIONS */}
-      <div className="settings-group">
-        <span className="group-label">NOTIFICATIONS</span>
-        <div className="settings-group-content">
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">🔔</span>
-              <div>
-                <span className="row-title">Gentle Reminders</span>
-                <span className="row-hint">I'll keep check-ins gentle (AM & PM)</span>
-              </div>
-            </div>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={gentleNotifications}
-                onChange={async (e) => {
-                  const val = e.target.checked;
-                  if (val) {
-                    await requestNotificationPermission();
-                  }
-                  setGentleNotifications(val);
-                }}
-              />
-              <span className="slider round"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION: PRIVACY & SECURITY */}
-      <div className="settings-group">
-        <span className="group-label">PRIVACY & OS PERMISSIONS</span>
-        <div className="settings-group-content">
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">🛡️</span>
-              <div>
-                <span className="row-title">100% Local-First & Zero Tracking</span>
-                <span className="row-hint">No ad beacons, no remote trackers, no cookies</span>
-              </div>
-            </div>
-            <span className="privacy-badge">Verified</span>
-          </div>
-
-          <div className="settings-row-item">
-            <div className="row-left">
-              <span className="row-icon">🔒</span>
-              <div>
-                <span className="row-title">Minimal OS Permissions</span>
-                <span className="row-hint">Camera, Mic, GPS, Contacts are strictly disabled</span>
-              </div>
-            </div>
-            <span className="privacy-badge safe">0 Required</span>
-          </div>
-
-          <div className="settings-row-item clickable" onClick={exportData}>
-            <div className="row-left">
-              <span className="row-icon">💾</span>
-              <div>
-                <span className="row-title">Export All Pod Data (JSON)</span>
-                <span className="row-hint">Download local encrypted backup to your device</span>
-              </div>
-            </div>
-            <span className="row-arrow">↓</span>
-          </div>
-
-          <div
-            className="settings-row-item clickable danger-row"
-            onClick={() => setShowResetConfirm(true)}
-          >
-            <div className="row-left">
-              <span className="row-icon">🗑️</span>
-              <div>
-                <span className="row-title danger-text">Wipe All Local Data</span>
-                <span className="row-hint">Permanently delete stored habits & pairing keys</span>
-              </div>
-            </div>
-            <span className="row-arrow danger-text">›</span>
-          </div>
-        </div>
-      </div>
-
-      {/* WIPE DATA CONFIRMATION MODAL */}
-      {showResetConfirm && (
-        <div className="inline-confirm-card">
-          <p className="confirm-title">Permanently Erase All Data?</p>
-          <p className="confirm-desc">
-            This will wipe your local habit data, pod code, and streaks. This cannot be undone.
-          </p>
-          <div className="confirm-btn-row">
-            <button
-              className="confirm-btn cancel"
-              onClick={() => setShowResetConfirm(false)}
-            >
-              Cancel
-            </button>
-            <button
-              className="confirm-btn danger"
-              onClick={() => {
-                resetAllData();
-                setShowResetConfirm(false);
-              }}
-            >
-              Confirm Wipe
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION: INSTALLATION (IOS & ANDROID) */}
+      {/* SECTION: INSTALLATION GUIDES */}
       <div className="settings-group">
         <span className="group-label">DEVICE INSTALLATION</span>
         <div className="settings-group-content">
@@ -463,33 +402,80 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           {showInstallGuide && (
             <div className="install-guide-box">
               <div className="guide-card ios-guide">
-                <h4 className="guide-title">🍎 iOS Installation (No Sideloading Required!)</h4>
-                <p className="guide-text">
-                  iOS does not require sideloading or an enterprise certificate for DuoTrack. It runs as a first-class <strong>Progressive Web App (PWA)</strong>:
-                </p>
+                <h4 className="guide-title">🍎 iPhone / iOS Setup (No Sideloading Required!)</h4>
                 <ol className="guide-steps">
-                  <li>Open this app URL in <strong>Safari</strong> on your iPhone.</li>
-                  <li>Tap the <strong>Share</strong> button (box with upward arrow) at the bottom.</li>
+                  <li>Open this link in <strong>Safari</strong> on iPhone.</li>
+                  <li>Tap the <strong>Share</strong> button (box with upward arrow ⎋) at the bottom.</li>
                   <li>Scroll down and tap <strong>"Add to Home Screen"</strong>.</li>
-                  <li>Tap <strong>Add</strong>. DuoTrack will launch full-screen with safe-area support, haptics, and zero browser bars!</li>
+                  <li>Tap <strong>Add</strong>. Launch from your home screen with zero browser bars!</li>
                 </ol>
-                <p className="guide-sub">
-                  <em>For App Store/TestFlight builds:</em> Run <code>npx cap add ios</code> with our included Capacitor config!
-                </p>
               </div>
 
               <div className="guide-card android-guide">
-                <h4 className="guide-title">🤖 Android Installation</h4>
+                <h4 className="guide-title">🤖 Android Setup</h4>
                 <ol className="guide-steps">
-                  <li>Open in <strong>Chrome</strong> on Android.</li>
-                  <li>Tap the <strong>Install App</strong> banner or the 3-dots menu &gt; <strong>Install DuoTrack</strong>.</li>
-                  <li>It installs as a native WebAPK with Material You theme colors and offline caching!</li>
+                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DuoTrack/raw/main/DuoTrack.apk" target="_blank" rel="noreferrer">Download DuoTrack.apk</a></li>
+                  <li>Or open in Chrome and tap <strong>"Install App"</strong>.</li>
                 </ol>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* SECTION: DATA BACKUP & WIPE */}
+      <div className="settings-group">
+        <span className="group-label">PRIVACY & DATA</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item clickable" onClick={exportData}>
+            <div className="row-left">
+              <span className="row-icon">💾</span>
+              <div>
+                <span className="row-title">Export All Data (JSON)</span>
+                <span className="row-hint">Download local encrypted backup to your device</span>
+              </div>
+            </div>
+            <span className="row-arrow">↓</span>
+          </div>
+
+          <div
+            className="settings-row-item clickable danger-row"
+            onClick={() => setShowResetConfirm(true)}
+          >
+            <div className="row-left">
+              <span className="row-icon">🗑️</span>
+              <div>
+                <span className="row-title danger-text">Wipe Data & Log Out</span>
+                <span className="row-hint">Permanently delete stored habits and credentials</span>
+              </div>
+            </div>
+            <span className="row-arrow danger-text">›</span>
+          </div>
+        </div>
+      </div>
+
+      {showResetConfirm && (
+        <div className="inline-confirm-card">
+          <p className="confirm-title">Permanently Erase All Data?</p>
+          <p className="confirm-desc">
+            This will wipe your local habits, secret codes, and log you out.
+          </p>
+          <div className="confirm-btn-row">
+            <button className="confirm-btn cancel" onClick={() => setShowResetConfirm(false)}>
+              Cancel
+            </button>
+            <button
+              className="confirm-btn danger"
+              onClick={() => {
+                resetAllData();
+                setShowResetConfirm(false);
+              }}
+            >
+              Confirm Wipe
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

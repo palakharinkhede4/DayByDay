@@ -1,16 +1,18 @@
 import React, { useMemo } from 'react';
 import { useHabits } from '../context/HabitContext';
 
-export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
+export const HeaderDial = ({ onOpenSettings, onOpenAddGoal, onOpenPairing }) => {
   const {
+    user,
+    partner,
+    isSolo,
     pod,
     habits,
     currentPercent,
     inSyncGoalsCount,
-    osMode,
   } = useHabits();
 
-  // Compute individual progress for User 1 (Ced) and User 2 (Joe)
+  // Compute individual progress for User (user1) and Partner (user2)
   const { u1Percent, u2Percent } = useMemo(() => {
     if (!habits.length) return { u1Percent: 0, u2Percent: 0 };
     let u1Sum = 0;
@@ -21,8 +23,8 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
         u1Sum += h.user1 ? 1 : 0;
         u2Sum += h.user2 ? 1 : 0;
       } else {
-        u1Sum += Math.min(1, h.user1 / h.target);
-        u2Sum += Math.min(1, h.user2 / h.target);
+        u1Sum += Math.min(1, (h.user1 || 0) / h.target);
+        u2Sum += Math.min(1, (h.user2 || 0) / h.target);
       }
     });
 
@@ -32,16 +34,17 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
     };
   }, [habits]);
 
-  // Generate 22 arched dots: Left 11 for User 1, Right 11 for User 2
+  // Generate 22 arched dots:
+  // - In Solo mode: all 22 dots fill based on user's own percentage
+  // - In Pod mode: Left 11 for User, Right 11 for Partner
   const dots = useMemo(() => {
     const totalDots = 22;
-    const half = totalDots / 2; // 11 each
+    const half = totalDots / 2;
     const cx = 160;
     const cy = 135;
     const rx = 112;
     const ry = 98;
 
-    // Span from 210 degrees (bottom-left) to -30 degrees (bottom-right) over top
     const startAngle = 212 * (Math.PI / 180);
     const endAngle = -32 * (Math.PI / 180);
     const angleRange = startAngle - endAngle;
@@ -53,18 +56,25 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
       const x = cx + rx * Math.cos(angle);
       const y = cy - ry * Math.sin(angle);
 
-      const isUser1Side = i < half;
       let isFilled = false;
+      let isUser1Side = true;
 
-      if (isUser1Side) {
-        // User 1 fills from bottom-left upwards to center
-        const user1ProgressIndex = Math.round((u1Percent / 100) * half);
-        isFilled = i < user1ProgressIndex;
+      if (isSolo) {
+        // Solo mode: fills continuously from left to right
+        const filledDotsCount = Math.round((u1Percent / 100) * totalDots);
+        isFilled = i < filledDotsCount;
+        isUser1Side = true;
       } else {
-        // User 2 fills from center downwards to bottom-right, or vice versa
-        const user2ProgressIndex = Math.round((u2Percent / 100) * half);
-        const indexInUser2 = i - half;
-        isFilled = indexInUser2 < user2ProgressIndex;
+        // Pod mode: split between User 1 and Partner
+        isUser1Side = i < half;
+        if (isUser1Side) {
+          const user1ProgressIndex = Math.round((u1Percent / 100) * half);
+          isFilled = i < user1ProgressIndex;
+        } else {
+          const user2ProgressIndex = Math.round((u2Percent / 100) * half);
+          const indexInUser2 = i - half;
+          isFilled = indexInUser2 < user2ProgressIndex;
+        }
       }
 
       result.push({
@@ -77,7 +87,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
     }
 
     return result;
-  }, [u1Percent, u2Percent]);
+  }, [u1Percent, u2Percent, isSolo]);
 
   // Today's formatted date
   const dateStr = useMemo(() => {
@@ -101,7 +111,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
         </button>
 
         <div className="top-right-chips">
-          <div className="streak-chip" title={`${pod.currentStreak} day streak together!`}>
+          <div className="streak-chip" title={`${pod.currentStreak} day streak!`}>
             <span className="streak-flame">🔥</span>
             <span className="streak-num">{pod.currentStreak}</span>
           </div>
@@ -140,7 +150,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
               ? dot.isUser1Side
                 ? 'var(--user1-color)'
                 : 'var(--user2-color)'
-              : 'rgba(255, 255, 255, 0.1)';
+              : 'rgba(255, 255, 255, 0.12)';
 
             const filter = dot.isFilled
               ? dot.isUser1Side
@@ -164,7 +174,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
 
         {/* Center Text Stats */}
         <div className="gauge-center-content">
-          <span className="gauge-label">GOALS REACHED TODAY</span>
+          <span className="gauge-label">{isSolo ? 'MY GOALS TODAY' : 'GOALS REACHED TODAY'}</span>
           <div className="gauge-hero-number">
             <span className="hero-digits">{currentPercent}</span>
           </div>
@@ -182,21 +192,38 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
       {/* Subheader: Today's Progress & Partner Legend */}
       <div className="progress-summary-bar">
         <div className="summary-left">
-          <h2 className="summary-title">Today's Progress</h2>
+          <h2 className="summary-title">{isSolo ? 'Daily Progress' : "Today's Progress"}</h2>
           <p className="summary-subtitle">
-            {inSyncGoalsCount} of {habits.length} goals in sync today
+            {isSolo
+              ? `${inSyncGoalsCount} of ${habits.length} habits completed today`
+              : `${inSyncGoalsCount} of ${habits.length} goals in sync today`}
           </p>
         </div>
 
         <div className="partner-legend">
           <div className="legend-item">
             <span className="legend-dot user1-dot"></span>
-            <span className="legend-name">{pod.user1.name} ({u1Percent}%)</span>
+            <span className="legend-name">
+              {user ? `@${user.username}` : 'You'} ({u1Percent}%)
+            </span>
           </div>
-          <div className="legend-item">
-            <span className="legend-dot user2-dot"></span>
-            <span className="legend-name">{pod.user2.name} ({u2Percent}%)</span>
-          </div>
+
+          {!isSolo ? (
+            <div className="legend-item">
+              <span className="legend-dot user2-dot"></span>
+              <span className="legend-name">
+                @{partner.username} ({u2Percent}%)
+              </span>
+            </div>
+          ) : (
+            <button
+              className="legend-pair-btn"
+              onClick={onOpenPairing}
+              title="Pair with accountability partner"
+            >
+              <span>+ Pair Partner</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

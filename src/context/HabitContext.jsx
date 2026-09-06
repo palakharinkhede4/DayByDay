@@ -2,7 +2,16 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import confetti from 'canvas-confetti';
 import { sound } from '../utils/sound';
 import { sanitizeInput, exportLocalBackup, wipeLocalData } from '../utils/security';
-import { fetchRemotePod, pushHabitUpdate, pushFullSync } from '../utils/api';
+import {
+  fetchRemotePod,
+  pushHabitUpdate,
+  pushFullSync,
+  registerUserRemote,
+  fetchUserRemote,
+  syncUserHabitsRemote,
+  pairPartnerRemote,
+  unpairPartnerRemote,
+} from '../utils/api';
 
 const HabitContext = createContext(null);
 
@@ -15,7 +24,7 @@ const INITIAL_HABITS = [
     target: 10000,
     unit: 'steps',
     icon: 'steps',
-    user1: 2200,
+    user1: 6200,
     user2: 7400,
   },
   {
@@ -26,9 +35,9 @@ const INITIAL_HABITS = [
     target: 8,
     unit: 'hours',
     icon: 'sleep',
-    user1: 6.0, // 6h
-    user2: 7.16, // 7h 10m
-    user1Display: '6h',
+    user1: 7.2,
+    user2: 7.16,
+    user1Display: '7h 12m',
     user2Display: '7h 10m',
   },
   {
@@ -39,7 +48,7 @@ const INITIAL_HABITS = [
     target: 10,
     unit: 'min',
     icon: 'meditation',
-    user1: 5,
+    user1: 10,
     user2: 10,
   },
   {
@@ -50,7 +59,7 @@ const INITIAL_HABITS = [
     target: 8,
     unit: 'pints',
     icon: 'water',
-    user1: 5,
+    user1: 6,
     user2: 8,
   },
   {
@@ -61,18 +70,18 @@ const INITIAL_HABITS = [
     target: 10,
     unit: 'pgs',
     icon: 'reading',
-    user1: 5,
+    user1: 8,
     user2: 3,
   },
   {
     id: 'workouts',
     name: 'Workouts',
     category: 'Daily',
-    description: 'Weekly workout count',
+    description: 'Daily active exercise',
     target: 30,
     unit: 'min',
     icon: 'workouts',
-    user1: 0,
+    user1: 30,
     user2: 32,
   },
   {
@@ -83,7 +92,7 @@ const INITIAL_HABITS = [
     target: 1,
     unit: 'done',
     icon: 'vitamins',
-    user1: false,
+    user1: true,
     user2: true,
   }
 ];
@@ -93,7 +102,7 @@ const INITIAL_BEYOND = [
     id: 'savings',
     name: 'Savings',
     category: 'Periodic',
-    user1: 150,
+    user1: 250,
     user2: 200,
     target: 500,
     unit: '$',
@@ -103,7 +112,7 @@ const INITIAL_BEYOND = [
     id: 'weight',
     name: 'Weight',
     category: 'Periodic',
-    user1: 172,
+    user1: 168,
     user2: 148,
     target: null,
     unit: 'lbs',
@@ -111,13 +120,50 @@ const INITIAL_BEYOND = [
   }
 ];
 
+function detectInitialOS() {
+  if (typeof window === 'undefined') return 'ios';
+  const saved = localStorage.getItem('duotrack_os');
+  if (saved) return saved;
+  const ua = window.navigator.userAgent;
+  if (/Android/i.test(ua)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  return 'ios';
+}
+
 export const HabitProvider = ({ children }) => {
-  // OS & Display
-  const [osMode, setOsMode] = useState(() => localStorage.getItem('duotrack_os') || 'ios');
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('duotrack_view') || 'frame');
+  // 1. User Identity (Unique @username and Secret Code)
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('duotrack_user');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return null; // Triggers OnboardingModal if null
+  });
+
+  // 2. Partner & Solo State
+  const [partner, setPartner] = useState(() => {
+    const saved = localStorage.getItem('duotrack_partner');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return null;
+  });
+
+  const isSolo = !partner;
+
+  // 3. Theme Mode: 'light' | 'dark' | 'auto'
+  const [themeMode, setThemeModeState] = useState(() => localStorage.getItem('duotrack_theme_mode') || 'dark');
+  const setThemeMode = (mode) => {
+    setThemeModeState(mode);
+    localStorage.setItem('duotrack_theme_mode', mode);
+    document.documentElement.setAttribute('data-theme-mode', mode);
+  };
+
+  // 4. OS Engine ('ios' | 'android')
+  const [osMode, setOsMode] = useState(() => detectInitialOS());
   const [themeColor, setThemeColor] = useState(() => localStorage.getItem('duotrack_theme') || 'emerald');
 
-  // Active User ('user1' = Ced, 'user2' = Joe)
+  // Active User role in current view ('user1' = You, 'user2' = Partner)
   const [activeUserId, setActiveUserId] = useState('user1');
 
   // Pod details
@@ -127,16 +173,16 @@ export const HabitProvider = ({ children }) => {
       try { return JSON.parse(saved); } catch (e) { }
     }
     return {
-      isPaired: true,
-      code: 'ZAU8PP',
-      user1: { name: 'Ced', email: 'ced@example.invalid', initial: 'C' },
-      user2: { name: 'Joe', email: 'joe@example.invalid', initial: 'J' },
-      daysTogether: 12,
-      currentStreak: 12,
-      bestStreak: 18,
-      podHealth: 86,
+      isPaired: false,
+      code: user ? user.secretCode : 'DUO-1000',
+      user1: { name: user?.displayName || 'You', email: '', initial: (user?.displayName || 'Y')[0].toUpperCase() },
+      user2: { name: 'Partner', email: '', initial: 'P' },
+      daysTogether: 1,
+      currentStreak: 1,
+      bestStreak: 1,
+      podHealth: 90,
       healthStatus: 'THRIVING',
-      yesterdayPercent: 87
+      yesterdayPercent: 85
     };
   });
 
@@ -161,9 +207,9 @@ export const HabitProvider = ({ children }) => {
   // Dynamic Island status
   const [islandMessage, setIslandMessage] = useState(null);
 
-  // Vercel / Remote Server URL (configured by user or defaults to current deployment origin)
+  // Vercel Serverless Sync States
   const [serverUrl, setServerUrlState] = useState(() => localStorage.getItem('duotrack_server_url') || '');
-  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'offline'
+  const [syncStatus, setSyncStatus] = useState('synced');
   const [lastSyncedAt, setLastSyncedAt] = useState(() => Date.now());
 
   const setServerUrl = (url) => {
@@ -175,20 +221,20 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Sync to localStorage
+  // Sync to DOM attributes and localStorage
   useEffect(() => {
     localStorage.setItem('duotrack_os', osMode);
     document.documentElement.setAttribute('data-os', osMode);
   }, [osMode]);
 
   useEffect(() => {
+    document.documentElement.setAttribute('data-theme-mode', themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
     localStorage.setItem('duotrack_theme', themeColor);
     document.documentElement.setAttribute('data-theme', themeColor);
   }, [themeColor]);
-
-  useEffect(() => {
-    localStorage.setItem('duotrack_view', viewMode);
-  }, [viewMode]);
 
   useEffect(() => {
     localStorage.setItem('duotrack_habits', JSON.stringify(habits));
@@ -199,42 +245,32 @@ export const HabitProvider = ({ children }) => {
   }, [pod]);
 
   useEffect(() => {
+    if (user) {
+      localStorage.setItem('duotrack_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('duotrack_user');
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (partner) {
+      localStorage.setItem('duotrack_partner', JSON.stringify(partner));
+    } else {
+      localStorage.removeItem('duotrack_partner');
+    }
+  }, [partner]);
+
+  useEffect(() => {
     localStorage.setItem('duotrack_beyond', JSON.stringify(beyondGoals));
   }, [beyondGoals]);
 
-  // Force manual sync with Vercel Cloud
-  const syncWithCloud = async () => {
-    if (!pod.code) return;
-    setSyncStatus('syncing');
-    try {
-      const remoteData = await fetchRemotePod(pod.code);
-      if (remoteData && !remoteData.notFound && remoteData.habits) {
-        setHabits(remoteData.habits);
-        setSyncStatus('synced');
-        setLastSyncedAt(Date.now());
-        triggerIslandNotification('Synced with Cloud!', '☁️');
-      } else if (remoteData && remoteData.notFound) {
-        // Seed remote
-        await pushFullSync(pod.code, activeUserId, pod, habits);
-        setSyncStatus('synced');
-        setLastSyncedAt(Date.now());
-        triggerIslandNotification('Pod initialized on Cloud!', '🚀');
-      } else {
-        setSyncStatus('offline');
-      }
-    } catch {
-      setSyncStatus('offline');
-    }
-  };
-
-  // LIVE CLOUD SYNCHRONIZATION: Poll remote Vercel API every 4 seconds when pod is paired
+  // LIVE CLOUD SYNCHRONIZATION: Poll remote Vercel API every 4 seconds when paired
   useEffect(() => {
     if (!pod.isPaired || !pod.code) return;
 
     let lastKnownTimestamp = 0;
 
     const syncInterval = setInterval(async () => {
-      // Pause polling if document is hidden to conserve battery & network
       if (document.hidden) return;
 
       const remoteData = await fetchRemotePod(pod.code);
@@ -245,7 +281,6 @@ export const HabitProvider = ({ children }) => {
         if (remoteData.lastUpdated && remoteData.lastUpdated > lastKnownTimestamp) {
           lastKnownTimestamp = remoteData.lastUpdated;
 
-          // If updated by partner, update local state
           if (remoteData.lastUpdatedBy && remoteData.lastUpdatedBy !== activeUserId) {
             if (remoteData.habits && remoteData.habits.length) {
               setHabits(remoteData.habits);
@@ -257,7 +292,6 @@ export const HabitProvider = ({ children }) => {
           }
         }
       } else if (remoteData && remoteData.notFound) {
-        // Auto-seed server if wiped or cold start
         pushFullSync(pod.code, activeUserId, pod, habits);
         setSyncStatus('synced');
       }
@@ -274,10 +308,125 @@ export const HabitProvider = ({ children }) => {
     }, 4500);
   };
 
+  // Register New User (Calls Neon DB backend or falls back to local)
+  const registerUser = async (username, displayName = '', avatar = '🌱') => {
+    sound.complete();
+    const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    const cleanDisplay = displayName || cleanUsername;
+    const prefix = cleanUsername.slice(0, 3).toUpperCase();
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const localSecretCode = `${prefix}-${rand}`;
+
+    let newUser = {
+      id: `usr_${cleanUsername}_${Date.now().toString(36)}`,
+      username: cleanUsername,
+      displayName: cleanDisplay,
+      secretCode: localSecretCode,
+      avatar,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      const res = await registerUserRemote(cleanUsername, cleanDisplay, avatar);
+      if (res && res.user) {
+        newUser = res.user;
+        if (res.habits && res.habits.length) {
+          // Restore user's previous habits
+          setHabits(res.habits);
+        }
+      }
+    } catch {
+      // Local fallback preserves user experience
+    }
+
+    setUser(newUser);
+    setPod((prev) => ({
+      ...prev,
+      code: newUser.secretCode,
+      user1: {
+        name: newUser.displayName || newUser.username,
+        email: `${newUser.username}@duotrack.invalid`,
+        initial: (newUser.displayName || newUser.username)[0].toUpperCase(),
+      }
+    }));
+
+    // Trigger celebration
+    triggerCelebration();
+    triggerIslandNotification(`Welcome @${newUser.username}!`, '🎉');
+    return newUser;
+  };
+
+  // Pair with Partner via Secret Code
+  const pairWithPartner = async (partnerSecretCode) => {
+    if (!user) throw new Error('Please set up your profile first');
+    sound.complete();
+    const cleanCode = partnerSecretCode.trim().toUpperCase();
+
+    try {
+      const res = await pairPartnerRemote(user.id, cleanCode);
+      if (res && res.partner) {
+        setPartner(res.partner);
+        setPod((prev) => ({
+          ...prev,
+          isPaired: true,
+          code: res.podCode || cleanCode,
+          user2: {
+            name: res.partner.displayName || res.partner.username,
+            email: `${res.partner.username}@duotrack.invalid`,
+            initial: (res.partner.displayName || res.partner.username)[0].toUpperCase(),
+          }
+        }));
+        triggerCelebration();
+        triggerIslandNotification(`Paired with @${res.partner.username}!`, '🤝');
+        return res;
+      }
+    } catch (err) {
+      // Fallback local pairing if server is offline
+      const partnerName = cleanCode.split('-')[0] || 'Partner';
+      const fallbackPartner = {
+        username: partnerName.toLowerCase(),
+        displayName: partnerName,
+        secretCode: cleanCode,
+        avatar: '🤝'
+      };
+      setPartner(fallbackPartner);
+      setPod((prev) => ({
+        ...prev,
+        isPaired: true,
+        code: cleanCode,
+        user2: {
+          name: partnerName,
+          email: `${partnerName.toLowerCase()}@duotrack.invalid`,
+          initial: partnerName[0].toUpperCase(),
+        }
+      }));
+      triggerIslandNotification(`Paired with ${partnerName}!`, '🤝');
+    }
+  };
+
+  // Unpair / Go Solo
+  const unpairPartner = async () => {
+    sound.tap();
+    if (user?.id) {
+      try {
+        await unpairPartnerRemote(user.id);
+      } catch { }
+    }
+    setPartner(null);
+    setPod((prev) => ({
+      ...prev,
+      isPaired: false,
+      code: user?.secretCode || 'DUO-1000',
+      user2: { name: 'Partner', email: '', initial: 'P' }
+    }));
+    triggerIslandNotification('Switched to Solo Mode', '👤');
+  };
+
   // Calculate Overall Daily Goals Reached Percentage
   const calculateGoalsReached = () => {
     if (!habits.length) return 0;
     let totalScore = 0;
+
     habits.forEach((h) => {
       let u1Score = 0;
       let u2Score = 0;
@@ -286,28 +435,37 @@ export const HabitProvider = ({ children }) => {
         u1Score = h.user1 ? 1 : 0;
         u2Score = h.user2 ? 1 : 0;
       } else {
-        u1Score = Math.min(1, h.user1 / h.target);
-        u2Score = Math.min(1, h.user2 / h.target);
+        u1Score = Math.min(1, (h.user1 || 0) / h.target);
+        u2Score = Math.min(1, (h.user2 || 0) / h.target);
       }
 
-      totalScore += (u1Score + u2Score) / 2;
+      // If Solo, calculate 100% based on user's own goals!
+      if (isSolo) {
+        totalScore += u1Score;
+      } else {
+        totalScore += (u1Score + u2Score) / 2;
+      }
     });
 
     return Math.round((totalScore / habits.length) * 100);
   };
 
-  // Count how many goals are "in sync" (both partners met the target)
+  // Count how many goals are "in sync" (both partners met target, or solo user met target)
   const calculateInSyncCount = () => {
     let inSync = 0;
     habits.forEach((h) => {
-      let u1Done = typeof h.user1 === 'boolean' ? h.user1 : h.user1 >= h.target;
-      let u2Done = typeof h.user2 === 'boolean' ? h.user2 : h.user2 >= h.target;
-      if (u1Done && u2Done) inSync++;
+      let u1Done = typeof h.user1 === 'boolean' ? h.user1 : (h.user1 || 0) >= h.target;
+      if (isSolo) {
+        if (u1Done) inSync++;
+      } else {
+        let u2Done = typeof h.user2 === 'boolean' ? h.user2 : (h.user2 || 0) >= h.target;
+        if (u1Done && u2Done) inSync++;
+      }
     });
     return inSync;
   };
 
-  // Update Habit Value
+  // Update Habit Value (Single Habit Change)
   const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false) => {
     sound.tap();
     let computedNextValue = null;
@@ -327,7 +485,6 @@ export const HabitProvider = ({ children }) => {
 
         computedNextValue = nextValue;
 
-        // Format display for sleep if applicable
         let extra = {};
         if (h.id === 'sleep') {
           const hrs = Math.floor(nextValue);
@@ -337,7 +494,6 @@ export const HabitProvider = ({ children }) => {
 
         const updated = { ...h, [userId]: nextValue, ...extra };
 
-        // Check if just completed
         const wasDone = typeof current === 'boolean' ? current : current >= h.target;
         const nowDone = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
         if (!wasDone && nowDone) {
@@ -349,7 +505,7 @@ export const HabitProvider = ({ children }) => {
       })
     );
 
-    // Asynchronously push update to Vercel Serverless Sync API
+    // Asynchronously push update to Vercel Serverless Sync API & Neon DB
     if (pod.isPaired && pod.code && computedNextValue !== null) {
       pushHabitUpdate(pod.code, userId, habitId, computedNextValue)
         .then((res) => {
@@ -359,6 +515,11 @@ export const HabitProvider = ({ children }) => {
           }
         })
         .catch(() => {});
+    }
+
+    // Sync to user's habits in Neon DB if logged in
+    if (user?.id) {
+      syncUserHabitsRemote(user.id, habits).catch(() => {});
     }
   };
 
@@ -370,13 +531,13 @@ export const HabitProvider = ({ children }) => {
         if (g.id !== goalId) return g;
         return {
           ...g,
-          [userId]: Math.max(0, g[userId] + amount)
+          [userId]: Math.max(0, (g[userId] || 0) + amount)
         };
       })
     );
   };
 
-  // Add Custom or Preset Goal (Sanitized)
+  // Add Custom or Preset Goal
   const addGoal = (newGoal) => {
     sound.tap();
     const safeGoal = {
@@ -394,7 +555,7 @@ export const HabitProvider = ({ children }) => {
     setHabits((prev) => prev.filter((h) => h.id !== goalId));
   };
 
-  // Request Notifications safely with minimal OS permissions (explicit user consent only)
+  // Request Notifications
   const requestNotificationPermission = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'default') {
@@ -406,15 +567,19 @@ export const HabitProvider = ({ children }) => {
     return false;
   };
 
-  // Export local backup file (100% client side)
+  // Export local backup file
   const exportData = () => {
     sound.tap();
     exportLocalBackup({
+      user,
+      partner,
+      isSolo,
       pod,
       habits,
       beyondGoals,
       osMode,
       themeColor,
+      themeMode,
     });
   };
 
@@ -422,79 +587,10 @@ export const HabitProvider = ({ children }) => {
   const resetAllData = () => {
     sound.tap();
     wipeLocalData();
+    setUser(null);
+    setPartner(null);
     setHabits(INITIAL_HABITS);
     setBeyondGoals(INITIAL_BEYOND);
-    setPod({
-      isPaired: true,
-      code: 'ZAU8PP',
-      user1: { name: 'Ced', email: 'ced@example.invalid', initial: 'C' },
-      user2: { name: 'Joe', email: 'joe@example.invalid', initial: 'J' },
-      daysTogether: 12,
-      currentStreak: 12,
-      bestStreak: 18,
-      podHealth: 86,
-      healthStatus: 'THRIVING',
-      yesterdayPercent: 87
-    });
-  };
-
-  // Simulate Partner (Joe) doing an action
-  const simulatePartnerActivity = () => {
-    sound.tap();
-    const partnerId = activeUserId === 'user1' ? 'user2' : 'user1';
-    const partnerName = partnerId === 'user1' ? pod.user1.name : pod.user2.name;
-
-    // Pick a random habit that isn't fully completed
-    const eligible = habits.filter((h) => {
-      if (typeof h[partnerId] === 'boolean') return !h[partnerId];
-      return h[partnerId] < h.target;
-    });
-
-    const targetHabit = eligible.length > 0 ? eligible[Math.floor(Math.random() * eligible.length)] : habits[0];
-
-    if (!targetHabit) return;
-
-    if (typeof targetHabit[partnerId] === 'boolean') {
-      updateHabit(targetHabit.id, partnerId, true, true);
-    } else if (targetHabit.id === 'steps') {
-      updateHabit(targetHabit.id, partnerId, 1500);
-    } else if (targetHabit.id === 'water') {
-      updateHabit(targetHabit.id, partnerId, 1);
-    } else if (targetHabit.id === 'reading') {
-      updateHabit(targetHabit.id, partnerId, 5);
-    } else if (targetHabit.id === 'workouts') {
-      updateHabit(targetHabit.id, partnerId, 20);
-    } else if (targetHabit.id === 'meditation') {
-      updateHabit(targetHabit.id, partnerId, 5);
-    } else if (targetHabit.id === 'sleep') {
-      updateHabit(targetHabit.id, partnerId, 0.5);
-    }
-
-    triggerIslandNotification(`${partnerName} just logged ${targetHabit.name}!`, '🔥');
-  };
-
-  // Leave pod
-  const leavePod = () => {
-    sound.tap();
-    setPod((prev) => ({
-      ...prev,
-      isPaired: false,
-      user2: { name: 'Partner', email: '', initial: '?' }
-    }));
-  };
-
-  // Pair pod
-  const pairPod = (code = 'ZAU8PP', partnerName = 'Joe') => {
-    sound.complete();
-    const cleanCode = sanitizeInput(code).toUpperCase();
-    const cleanPartner = sanitizeInput(partnerName);
-    setPod((prev) => ({
-      ...prev,
-      isPaired: true,
-      code: cleanCode || 'ZAU8PP',
-      user2: { name: cleanPartner || 'Joe', email: `${(cleanPartner || 'joe').toLowerCase()}@example.invalid`, initial: (cleanPartner || 'J')[0].toUpperCase() }
-    }));
-    triggerIslandNotification(`Paired with ${cleanPartner || 'Joe'}!`, '🤝');
   };
 
   // Celebrate with confetti
@@ -508,17 +604,46 @@ export const HabitProvider = ({ children }) => {
     });
   };
 
-  // Memoized calculations to prevent CPU churn and memory churn
-  const currentPercent = useMemo(() => calculateGoalsReached(), [habits]);
-  const inSyncGoalsCount = useMemo(() => calculateInSyncCount(), [habits]);
+  // Force manual sync with Vercel Cloud
+  const syncWithCloud = async () => {
+    if (!pod.code) return;
+    setSyncStatus('syncing');
+    try {
+      const remoteData = await fetchRemotePod(pod.code);
+      if (remoteData && !remoteData.notFound && remoteData.habits) {
+        setHabits(remoteData.habits);
+        setSyncStatus('synced');
+        setLastSyncedAt(Date.now());
+        triggerIslandNotification('Synced with Cloud!', '☁️');
+      } else if (remoteData && remoteData.notFound) {
+        await pushFullSync(pod.code, activeUserId, pod, habits);
+        setSyncStatus('synced');
+        setLastSyncedAt(Date.now());
+        triggerIslandNotification('Pod initialized on Cloud!', '🚀');
+      } else {
+        setSyncStatus('offline');
+      }
+    } catch {
+      setSyncStatus('offline');
+    }
+  };
+
+  const currentPercent = useMemo(() => calculateGoalsReached(), [habits, isSolo]);
+  const inSyncGoalsCount = useMemo(() => calculateInSyncCount(), [habits, isSolo]);
 
   return (
     <HabitContext.Provider
       value={{
+        user,
+        registerUser,
+        partner,
+        isSolo,
+        pairWithPartner,
+        unpairPartner,
+        themeMode,
+        setThemeMode,
         osMode,
         setOsMode,
-        viewMode,
-        setViewMode,
         themeColor,
         setThemeColor,
         activeUserId,
@@ -534,9 +659,6 @@ export const HabitProvider = ({ children }) => {
         updateBeyondGoal,
         addGoal,
         removeGoal,
-        simulatePartnerActivity,
-        leavePod,
-        pairPod,
         triggerCelebration,
         requestNotificationPermission,
         exportData,

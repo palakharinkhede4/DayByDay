@@ -1,0 +1,90 @@
+name: Build & Publish DuoTrack APK Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Release version tag (e.g. v1.0.1)'
+        required: false
+        default: 'v1.0.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 (Microsoft OpenJDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'microsoft'
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install NPM Dependencies
+        run: npm ci || npm install
+
+      - name: Build Web Production Assets
+        run: npm run build
+
+      - name: Sync Web Assets to Capacitor Android
+        run: npx cap sync android
+
+      - name: Build Android Debug APK with Gradle
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug --no-daemon
+          cd ..
+
+      - name: Prepare APK Artifact
+        run: |
+          RELEASE_TAG="${{ github.event.inputs.version_tag || github.ref_name }}"
+          if [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" = "main" ]; then
+            RELEASE_TAG="v1.0.0"
+          fi
+          cp android/app/build/outputs/apk/debug/app-debug.apk "DuoTrack-${RELEASE_TAG}.apk"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+
+      - name: Publish Release to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "DuoTrack ${{ env.RELEASE_TAG }} (Android APK)"
+          body: |
+            ## 🔥 DuoTrack Release ${{ env.RELEASE_TAG }}
+            
+            ### What's New:
+            * Real User Identity & Secret Code accountability sharing.
+            * Responsive desktop web app + native edge-to-edge mobile app.
+            * Neon PostgreSQL cloud sync support.
+            * Light, Dark, and Auto system theme modes.
+            * 5 Symmetrical widgets for Android & iOS.
+            
+            ### 📱 Android Installation:
+            1. Download `DuoTrack-${{ env.RELEASE_TAG }}.apk` below.
+            2. Install and launch on your phone.
+            3. Enjoy real-time habit tracking!
+          files: |
+            DuoTrack-*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,14 +6,17 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     habits,
     beyondGoals,
     pod,
+    user,
+    partner,
+    isSolo,
     activeUserId,
     updateHabit,
     updateBeyondGoal,
   } = useHabits();
 
   const partnerId = activeUserId === 'user1' ? 'user2' : 'user1';
-  const partnerName = partnerId === 'user1' ? pod.user1.name : pod.user2.name;
-  const currentUserName = activeUserId === 'user1' ? pod.user1.name : pod.user2.name;
+  const partnerName = partner ? (partner.displayName || partner.username) : pod.user2.name;
+  const currentUserName = user ? (user.displayName || user.username) : pod.user1.name;
 
   return (
     <div className="habit-cards-section">
@@ -23,7 +26,9 @@ export const HabitCards = ({ onOpenAddGoal }) => {
           habit={habits.find((h) => h.id === 'sleep')}
           activeUserId={activeUserId}
           partnerId={partnerId}
-          pod={pod}
+          partnerName={partnerName}
+          currentUserName={currentUserName}
+          isSolo={isSolo}
           onUpdate={updateHabit}
         />
       )}
@@ -35,7 +40,9 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={habits.find((h) => h.id === 'steps')}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         )}
@@ -45,7 +52,9 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={habits.find((h) => h.id === 'meditation')}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         )}
@@ -58,7 +67,9 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={habits.find((h) => h.id === 'water')}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         )}
@@ -68,7 +79,9 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={habits.find((h) => h.id === 'reading')}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         )}
@@ -81,7 +94,9 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={habits.find((h) => h.id === 'workouts')}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         )}
@@ -91,13 +106,15 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={habits.find((h) => h.id === 'vitamins')}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         )}
       </div>
 
-      {/* 5. CUSTOM GOALS (ANY OTHERS CREATED) */}
+      {/* 5. CUSTOM GOALS */}
       {habits
         .filter(
           (h) =>
@@ -111,20 +128,20 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             habit={custom}
             activeUserId={activeUserId}
             partnerId={partnerId}
-            pod={pod}
+            partnerName={partnerName}
+            currentUserName={currentUserName}
+            isSolo={isSolo}
             onUpdate={updateHabit}
           />
         ))}
 
       {/* 6. BEYOND TODAY SECTION */}
       <div className="beyond-today-header">
-        <h3 className="section-title">Beyond Today</h3>
-        <button className="add-goal-link-btn" onClick={onOpenAddGoal}>
-          + Add Goal
-        </button>
+        <h3 className="beyond-title font-bold">Beyond Today</h3>
+        <span className="beyond-sub">Periodic & lifestyle goals</span>
       </div>
 
-      <div className="beyond-grid">
+      <div className="beyond-cards-grid">
         {beyondGoals.map((g) => (
           <div key={g.id} className="beyond-card">
             <div className="beyond-card-header">
@@ -134,7 +151,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
                 </span>
                 <span className="beyond-name">{g.name}</span>
               </div>
-              <span className="beyond-tag">Sync</span>
+              <span className="beyond-tag">{isSolo ? 'Personal' : 'Sync'}</span>
             </div>
 
             <div className="beyond-values">
@@ -143,25 +160,29 @@ export const HabitCards = ({ onOpenAddGoal }) => {
                 <span className="val-text">
                   {g.unit === '$' ? `$${g.user1}` : `${g.user1} ${g.unit}`}
                 </span>
+                <span className="val-sub">{isSolo ? 'Your balance' : currentUserName}</span>
               </div>
-              <div className="beyond-user-val">
-                <span className="user-dot user2-dot"></span>
-                <span className="val-text">
-                  {g.unit === '$' ? `$${g.user2}` : `${g.user2} ${g.unit}`}
-                </span>
-              </div>
+              {!isSolo && (
+                <div className="beyond-user-val">
+                  <span className="user-dot user2-dot"></span>
+                  <span className="val-text">
+                    {g.unit === '$' ? `$${g.user2}` : `${g.user2} ${g.unit}`}
+                  </span>
+                  <span className="val-sub">{partnerName}</span>
+                </div>
+              )}
             </div>
 
             <div className="beyond-quick-actions">
               <button
                 className="mini-stepper-btn"
-                onClick={() => updateBeyondGoal(g.id, activeUserId, g.id === 'savings' ? 25 : -1)}
+                onClick={() => updateBeyondGoal(g.id, 'user1', g.id === 'savings' ? 25 : -1)}
               >
                 {g.id === 'savings' ? '+$25' : '-1 lb'}
               </button>
               <button
                 className="mini-stepper-btn"
-                onClick={() => updateBeyondGoal(g.id, activeUserId, g.id === 'savings' ? 50 : 1)}
+                onClick={() => updateBeyondGoal(g.id, 'user1', g.id === 'savings' ? 50 : 1)}
               >
                 {g.id === 'savings' ? '+$50' : '+1 lb'}
               </button>
@@ -174,11 +195,10 @@ export const HabitCards = ({ onOpenAddGoal }) => {
 };
 
 /* --- SLEEP CARD --- */
-const SleepCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
-  const u1Val = habit.user1;
-  const u2Val = habit.user2;
+const SleepCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
+  const u1Val = habit.user1 || 0;
+  const u2Val = habit.user2 || 0;
 
-  // Render 8 segments representing sleep cycles
   const totalSegments = 8;
   const u1Segments = Math.min(8, Math.round((u1Val / habit.target) * totalSegments));
   const u2Segments = Math.min(8, Math.round((u2Val / habit.target) * totalSegments));
@@ -190,26 +210,29 @@ const SleepCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
           <span className="habit-badge-icon sleep-icon">🌙</span>
           <span className="habit-name">{habit.name}</span>
         </div>
-        <span className="habit-meta-tag">Last night</span>
+        <span className="habit-meta-tag">Target: {habit.target}h</span>
       </div>
 
       <div className="sleep-duration-row">
         <div className="sleep-user-col">
           <span className="sleep-val user1-text">{habit.user1Display || `${u1Val}h`}</span>
-          <span className="sleep-sub">{pod.user1.name}</span>
+          <span className="sleep-sub">{isSolo ? 'Last night' : currentUserName}</span>
         </div>
-        <div className="sleep-separator">
-          <span className="moon-phase">🌓</span>
-        </div>
-        <div className="sleep-user-col right">
-          <span className="sleep-val user2-text">{habit.user2Display || `${u2Val}h`}</span>
-          <span className="sleep-sub">{pod.user2.name}</span>
-        </div>
+        {!isSolo && (
+          <>
+            <div className="sleep-separator">
+              <span className="moon-phase">🌓</span>
+            </div>
+            <div className="sleep-user-col right">
+              <span className="sleep-val user2-text">{habit.user2Display || `${u2Val}h`}</span>
+              <span className="sleep-sub">{partnerName}</span>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Dual Segmented Bars */}
+      {/* Segmented Bars */}
       <div className="sleep-segments-container">
-        {/* User 1 Segment Track */}
         <div className="segment-track user1-track">
           {Array.from({ length: totalSegments }).map((_, i) => (
             <div
@@ -219,44 +242,25 @@ const SleepCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
           ))}
         </div>
 
-        {/* User 2 Segment Track */}
-        <div className="segment-track user2-track">
-          {Array.from({ length: totalSegments }).map((_, i) => (
-            <div
-              key={`u2-${i}`}
-              className={`sleep-bar-seg ${i < u2Segments ? 'filled u2-fill' : ''}`}
-            />
-          ))}
-        </div>
+        {!isSolo && (
+          <div className="segment-track user2-track">
+            {Array.from({ length: totalSegments }).map((_, i) => (
+              <div
+                key={`u2-${i}`}
+                className={`sleep-bar-seg ${i < u2Segments ? 'filled u2-fill' : ''}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Quick Stepper for Active User */}
+      {/* Quick Stepper */}
       <div className="card-quick-footer">
-        <span className="active-logging-hint">
-          Log for {activeUserId === 'user1' ? pod.user1.name : pod.user2.name}:
-        </span>
+        <span className="active-logging-hint">Log sleep:</span>
         <div className="stepper-group">
-          <button
-            className="stepper-btn"
-            onClick={() => onUpdate('sleep', activeUserId, -0.5)}
-            title="Minus 30 mins"
-          >
-            -30m
-          </button>
-          <button
-            className="stepper-btn highlight"
-            onClick={() => onUpdate('sleep', activeUserId, 0.5)}
-            title="Plus 30 mins"
-          >
-            +30m
-          </button>
-          <button
-            className="stepper-btn"
-            onClick={() => onUpdate('sleep', activeUserId, 1.0)}
-            title="Plus 1 hour"
-          >
-            +1h
-          </button>
+          <button className="stepper-btn" onClick={() => onUpdate('sleep', 'user1', -0.5)}>-30m</button>
+          <button className="stepper-btn highlight" onClick={() => onUpdate('sleep', 'user1', 0.5)}>+30m</button>
+          <button className="stepper-btn" onClick={() => onUpdate('sleep', 'user1', 1.0)}>+1h</button>
         </div>
       </div>
     </div>
@@ -264,11 +268,10 @@ const SleepCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
 };
 
 /* --- STEPS CARD --- */
-const StepsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
-  const u1Progress = Math.min(1, habit.user1 / habit.target);
-  const u2Progress = Math.min(1, habit.user2 / habit.target);
+const StepsCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
+  const u1Progress = Math.min(1, (habit.user1 || 0) / habit.target);
+  const u2Progress = Math.min(1, (habit.user2 || 0) / habit.target);
 
-  // SVG circular arc metrics
   const size = 96;
   const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;
@@ -283,11 +286,9 @@ const StepsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
         </div>
       </div>
 
-      {/* DUAL CIRCULAR PROGRESS RINGS */}
       <div className="steps-rings-container">
         <div className="dual-ring-wrap">
           <svg width={size} height={size} className="progress-ring-svg">
-            {/* Background tracks */}
             <circle
               cx={size / 2}
               cy={size / 2}
@@ -296,7 +297,6 @@ const StepsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
               strokeWidth={strokeWidth}
               fill="none"
             />
-            {/* User 1 ring (outer) */}
             <circle
               cx={size / 2}
               cy={size / 2}
@@ -310,20 +310,21 @@ const StepsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
               className="ring-circle"
               transform={`rotate(-90 ${size / 2} ${size / 2})`}
             />
-            {/* User 2 ring (inner) */}
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius - 12}
-              stroke="var(--user2-color)"
-              strokeWidth={strokeWidth - 2}
-              fill="none"
-              strokeDasharray={2 * Math.PI * (radius - 12)}
-              strokeDashoffset={2 * Math.PI * (radius - 12) * (1 - u2Progress)}
-              strokeLinecap="round"
-              className="ring-circle"
-              transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            />
+            {!isSolo && (
+              <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius - 12}
+                stroke="var(--user2-color)"
+                strokeWidth={strokeWidth - 2}
+                fill="none"
+                strokeDasharray={2 * Math.PI * (radius - 12)}
+                strokeDashoffset={2 * Math.PI * (radius - 12) * (1 - u2Progress)}
+                strokeLinecap="round"
+                className="ring-circle"
+                transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              />
+            )}
           </svg>
 
           <div className="ring-center-icon">
@@ -331,88 +332,71 @@ const StepsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
           </div>
         </div>
 
-        {/* Step counts side by side */}
         <div className="steps-count-row">
           <div className="step-val-col">
-            <span className="val-user1 font-bold">{habit.user1.toLocaleString()}</span>
-            <span className="sub-user">{pod.user1.name}</span>
+            <span className="val-user1 font-bold">{(habit.user1 || 0).toLocaleString()}</span>
+            <span className="sub-user">{isSolo ? '/ 10,000' : currentUserName}</span>
           </div>
-          <div className="step-val-col right">
-            <span className="val-user2 font-bold">{habit.user2.toLocaleString()}</span>
-            <span className="sub-user">{pod.user2.name}</span>
-          </div>
+          {!isSolo && (
+            <div className="step-val-col right">
+              <span className="val-user2 font-bold">{(habit.user2 || 0).toLocaleString()}</span>
+              <span className="sub-user">{partnerName}</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="card-stepper-row">
-        <button
-          className="card-quick-btn"
-          onClick={() => onUpdate('steps', activeUserId, 500)}
-        >
-          +500 steps
-        </button>
-        <button
-          className="card-quick-btn accent"
-          onClick={() => onUpdate('steps', activeUserId, 1500)}
-        >
-          +1.5k
-        </button>
+        <button className="card-quick-btn" onClick={() => onUpdate('steps', 'user1', 500)}>+500</button>
+        <button className="card-quick-btn highlight" onClick={() => onUpdate('steps', 'user1', 1500)}>+1.5k</button>
       </div>
     </div>
   );
 };
 
 /* --- MEDITATION CARD --- */
-const MeditationCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
+const MeditationCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
   return (
     <div className="habit-card meditation-card">
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
-          <span className="habit-badge-icon med-icon">🧘</span>
+          <span className="habit-badge-icon meditation-icon">🧘</span>
           <span className="habit-name">{habit.name}</span>
         </div>
       </div>
 
-      <div className="meditation-body">
-        <div className="meditation-pulse-ring">
-          <div className="pulse-circle wave-1"></div>
-          <div className="pulse-circle wave-2"></div>
-          <div className="pulse-center">
-            <span className="lotus-emoji">✨</span>
+      <div className="meditation-visual">
+        <div className="pulse-ring-outer">
+          <div className="pulse-ring-inner">
+            <span className="zen-lotus">✨</span>
           </div>
         </div>
 
-        <div className="med-time-display">
-          <span className="med-mins font-bold">
-            {habit[activeUserId]} min
-          </span>
-          <span className="med-target">/ {habit.target} min goal</span>
+        <div className="meditation-stats-row">
+          <div className="med-user-stat">
+            <span className="stat-min font-bold">{habit.user1 || 0}m</span>
+            <span className="stat-label">{isSolo ? '/ 10m target' : currentUserName}</span>
+          </div>
+          {!isSolo && (
+            <div className="med-user-stat right">
+              <span className="stat-min font-bold stat-partner">{habit.user2 || 0}m</span>
+              <span className="stat-label">{partnerName}</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="card-stepper-row">
-        <button
-          className="card-quick-btn"
-          onClick={() => onUpdate('meditation', activeUserId, 5)}
-        >
-          +5 min
-        </button>
-        <button
-          className="card-quick-btn accent"
-          onClick={() => onUpdate('meditation', activeUserId, 10)}
-        >
-          +10 min
-        </button>
+        <button className="card-quick-btn" onClick={() => onUpdate('meditation', 'user1', 5)}>+5m</button>
+        <button className="card-quick-btn highlight" onClick={() => onUpdate('meditation', 'user1', 10)}>+10m</button>
       </div>
     </div>
   );
 };
 
 /* --- WATER CARD --- */
-const WaterCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
-  const currentGlasses = habit[activeUserId];
-  const partnerGlasses = habit[partnerId];
-
+const WaterCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
+  const currentVal = habit.user1 || 0;
   return (
     <div className="habit-card water-card">
       <div className="habit-card-header">
@@ -420,33 +404,25 @@ const WaterCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
           <span className="habit-badge-icon water-icon">💧</span>
           <span className="habit-name">{habit.name}</span>
         </div>
-        <span className="habit-meta-tag">
-          {currentGlasses} / {habit.target} {habit.unit}
-        </span>
+        <span className="habit-target-tag">{currentVal}/{habit.target} {habit.unit}</span>
       </div>
 
       <div className="water-glasses-row">
         {Array.from({ length: habit.target }).map((_, i) => (
-          <button
+          <span
             key={i}
-            className={`water-drop-btn ${i < currentGlasses ? 'filled' : ''}`}
-            onClick={() => onUpdate('water', activeUserId, i + 1, true)}
-            title={`Set to ${i + 1} glasses`}
-          >
-            💧
-          </button>
+            className={`water-glass-dot ${i < currentVal ? 'drank' : ''}`}
+            onClick={() => onUpdate('water', 'user1', i + 1, true)}
+          />
         ))}
       </div>
 
-      <div className="card-partner-peek">
-        <span className="partner-peek-label">
-          {pod[partnerId].name} drank {partnerGlasses} pints
-        </span>
+      <div className="card-stepper-row">
         <button
-          className="card-quick-btn accent compact"
-          onClick={() => onUpdate('water', activeUserId, 1)}
+          className="card-quick-btn highlight full-width"
+          onClick={() => onUpdate('water', 'user1', 1)}
         >
-          +1 Drink
+          +1 Drink 💧
         </button>
       </div>
     </div>
@@ -454,7 +430,7 @@ const WaterCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
 };
 
 /* --- READING CARD --- */
-const ReadingCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
+const ReadingCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
   return (
     <div className="habit-card reading-card">
       <div className="habit-card-header">
@@ -462,44 +438,26 @@ const ReadingCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
           <span className="habit-badge-icon reading-icon">📖</span>
           <span className="habit-name">{habit.name}</span>
         </div>
+        <span className="habit-target-tag">{habit.user1 || 0}/{habit.target} {habit.unit}</span>
       </div>
 
-      <div className="reading-sync-row">
-        <div className="reading-stat">
-          <span className="user1-dot mini-dot"></span>
-          <span className="reading-pages val-user1">{habit.user1} pgs</span>
-          <span className="sub-user">{pod.user1.name}</span>
-        </div>
-        <div className="reading-stat right">
-          <span className="user2-dot mini-dot"></span>
-          <span className="reading-pages val-user2">{habit.user2} pgs</span>
-          <span className="sub-user">{pod.user2.name}</span>
-        </div>
+      <div className="reading-progress-bar-wrap">
+        <div
+          className="reading-fill"
+          style={{ width: `${Math.min(100, ((habit.user1 || 0) / habit.target) * 100)}%` }}
+        />
       </div>
 
       <div className="card-stepper-row">
-        <button
-          className="card-quick-btn"
-          onClick={() => onUpdate('reading', activeUserId, 2)}
-        >
-          +2 pgs
-        </button>
-        <button
-          className="card-quick-btn accent"
-          onClick={() => onUpdate('reading', activeUserId, 5)}
-        >
-          +5 pgs
-        </button>
+        <button className="card-quick-btn" onClick={() => onUpdate('reading', 'user1', 2)}>+2 pgs</button>
+        <button className="card-quick-btn highlight" onClick={() => onUpdate('reading', 'user1', 5)}>+5 pgs</button>
       </div>
     </div>
   );
 };
 
 /* --- WORKOUT CARD --- */
-const WorkoutCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
-  const currentVal = habit[activeUserId];
-  const partnerVal = habit[partnerId];
-
+const WorkoutCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
   return (
     <div className="habit-card workout-card">
       <div className="habit-card-header">
@@ -507,41 +465,20 @@ const WorkoutCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
           <span className="habit-badge-icon workout-icon">🏋️</span>
           <span className="habit-name">{habit.name}</span>
         </div>
-      </div>
-
-      <div className="workout-body">
-        <div className="workout-stat-hero">
-          <span className="hero-time font-bold">{currentVal} min</span>
-          <span className="hero-lbl">Active today</span>
-        </div>
-        <div className="partner-workout-note">
-          {pod[partnerId].name}: {partnerVal} min
-        </div>
+        <span className="habit-target-tag">{habit.user1 || 0}/{habit.target} min</span>
       </div>
 
       <div className="card-stepper-row">
-        <button
-          className="card-quick-btn"
-          onClick={() => onUpdate('workouts', activeUserId, 15)}
-        >
-          +15m
-        </button>
-        <button
-          className="card-quick-btn accent"
-          onClick={() => onUpdate('workouts', activeUserId, 30)}
-        >
-          +30m
-        </button>
+        <button className="card-quick-btn" onClick={() => onUpdate('workouts', 'user1', 15)}>+15m</button>
+        <button className="card-quick-btn highlight" onClick={() => onUpdate('workouts', 'user1', 30)}>+30m</button>
       </div>
     </div>
   );
 };
 
 /* --- VITAMINS CARD --- */
-const VitaminsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
-  const isDone = habit[activeUserId];
-  const partnerDone = habit[partnerId];
-
+const VitaminsCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
+  const isDone = Boolean(habit.user1);
   return (
     <div className="habit-card vitamins-card">
       <div className="habit-card-header">
@@ -551,71 +488,45 @@ const VitaminsCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
         </div>
       </div>
 
-      <div className="vitamins-body">
+      <div className="vitamins-action-center">
         <button
-          className={`vitamin-pill-toggle ${isDone ? 'checked' : 'pending'}`}
-          onClick={() => onUpdate('vitamins', activeUserId, !isDone, true)}
+          className={`vitamin-pill-toggle ${isDone ? 'done' : ''}`}
+          onClick={() => onUpdate('vitamins', 'user1', !isDone, true)}
         >
-          <span className="toggle-check">{isDone ? '✓' : '○'}</span>
-          <span className="toggle-text">{isDone ? 'Checked' : 'Not yet'}</span>
+          <span className="pill-check-icon">{isDone ? '✓' : '○'}</span>
+          <span>{isDone ? 'Taken Today' : 'Mark Taken'}</span>
         </button>
-
-        <div className="partner-vitamin-status">
-          <span className="partner-dot-indicator">
-            {partnerDone ? '✓' : '·'}
-          </span>
-          <span>{pod[partnerId].name}: {partnerDone ? 'Done' : 'Not yet'}</span>
-        </div>
       </div>
     </div>
   );
 };
 
-/* --- GENERIC CUSTOM GOAL CARD --- */
-const GenericHabitCard = ({ habit, activeUserId, partnerId, pod, onUpdate }) => {
-  const currentVal = habit[activeUserId];
-  const isBool = typeof currentVal === 'boolean';
-
+/* --- GENERIC CUSTOM HABIT CARD --- */
+const GenericHabitCard = ({ habit, activeUserId, partnerId, partnerName, currentUserName, isSolo, onUpdate }) => {
+  const isBool = typeof habit.user1 === 'boolean';
   return (
     <div className="habit-card generic-card">
       <div className="habit-card-header">
         <div className="habit-title-wrapper">
-          <span className="habit-badge-icon custom-icon">{habit.icon || '🎯'}</span>
+          <span className="habit-badge-icon">🎯</span>
           <span className="habit-name">{habit.name}</span>
         </div>
-        <span className="habit-meta-tag">{habit.unit}</span>
+        <span className="habit-target-tag">{isBool ? (habit.user1 ? 'Done' : 'Pending') : `${habit.user1 || 0}/${habit.target} ${habit.unit}`}</span>
       </div>
 
-      <div className="generic-body">
+      <div className="card-stepper-row">
         {isBool ? (
           <button
-            className={`vitamin-pill-toggle ${currentVal ? 'checked' : 'pending'}`}
-            onClick={() => onUpdate(habit.id, activeUserId, !currentVal, true)}
+            className={`card-quick-btn highlight full-width ${habit.user1 ? 'active' : ''}`}
+            onClick={() => onUpdate(habit.id, 'user1', !habit.user1, true)}
           >
-            <span className="toggle-check">{currentVal ? '✓' : '○'}</span>
-            <span className="toggle-text">{currentVal ? 'Completed' : 'Tap to Complete'}</span>
+            {habit.user1 ? 'Completed ✓' : 'Mark Done'}
           </button>
         ) : (
-          <div className="generic-numeric-row">
-            <div className="generic-val">
-              <span className="val-text font-bold">{currentVal}</span>
-              <span className="target-text">/ {habit.target} {habit.unit}</span>
-            </div>
-            <div className="stepper-group">
-              <button
-                className="card-quick-btn"
-                onClick={() => onUpdate(habit.id, activeUserId, 1)}
-              >
-                +1
-              </button>
-              <button
-                className="card-quick-btn accent"
-                onClick={() => onUpdate(habit.id, activeUserId, 5)}
-              >
-                +5
-              </button>
-            </div>
-          </div>
+          <>
+            <button className="card-quick-btn" onClick={() => onUpdate(habit.id, 'user1', 1)}>+1</button>
+            <button className="card-quick-btn highlight" onClick={() => onUpdate(habit.id, 'user1', 5)}>+5</button>
+          </>
         )}
       </div>
     </div>

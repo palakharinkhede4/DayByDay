@@ -17,6 +17,10 @@
       "destination": "/api/pod.js"
     },
     {
+      "source": "/api/user",
+      "destination": "/api/user.js"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

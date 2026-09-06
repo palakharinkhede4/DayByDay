@@ -1,14 +1,15 @@
 /* =========================================================
    DUOTRACK DESIGN SYSTEM: ANDROID M3 EXPRESSIVE & IOS LIQUID GLASS
+   LIGHT / DARK / AUTO THEME MODES
    ========================================================= */
 
 :root {
   /* Shared Base Tokens */
-  --user1-color: #10B981;       /* Ced - Mint Teal */
+  --user1-color: #10B981;       /* Mint Teal */
   --user1-glow: rgba(16, 185, 129, 0.45);
   --user1-light: #6EE7B7;
   
-  --user2-color: #F43F5E;       /* Joe - Playful Coral */
+  --user2-color: #F43F5E;       /* Playful Coral */
   --user2-glow: rgba(244, 63, 94, 0.45);
   --user2-light: #FDA4AF;
 
@@ -24,7 +25,7 @@
 }
 
 /* ==========================================
-   VARIANT 1: ANDROID 15/16 MATERIAL 3 EXPRESSIVE
+   VARIANT 1: ANDROID 15/16 MATERIAL 3 EXPRESSIVE (DARK DEFAULT)
    ========================================== */
 [data-os="android"] {
   --font-family: 'Roboto Flex', 'Outfit', -apple-system, sans-serif;
@@ -70,7 +71,7 @@
 }
 
 /* ==========================================
-   VARIANT 2: IOS 18+ LIQUID GLASS / CUPERTINO
+   VARIANT 2: IOS 18+ LIQUID GLASS / CUPERTINO (DARK DEFAULT)
    ========================================== */
 [data-os="ios"] {
   --font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -113,6 +114,54 @@
   --card-backdrop: blur(24px) saturate(180%);
   --nav-blur: blur(28px) saturate(200%);
   --os-name: "iOS 18+ · Liquid Glass";
+}
+
+/* ==========================================
+   LIGHT THEME MODE (Overrides for Light & Auto)
+   ========================================== */
+[data-theme-mode="light"],
+[data-theme-mode="auto"] {
+  @media (prefers-color-scheme: light) {
+    --bg-app: #F8FAFC;
+    --bg-surface: #FFFFFF;
+    --bg-surface-container: #F1F5F9;
+    --bg-surface-high: #E2E8F0;
+    --bg-surface-highest: #CBD5E1;
+    --bg-tonal: rgba(16, 185, 129, 0.1);
+
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-tertiary: #64748B;
+    --text-inverse: #F8FAFC;
+
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --border-focus: #10B981;
+
+    --shadow-elevation-1: 0 2px 6px rgba(0, 0, 0, 0.04);
+    --shadow-elevation-2: 0 8px 24px rgba(0, 0, 0, 0.07);
+    --shadow-elevation-3: 0 16px 36px rgba(0, 0, 0, 0.1);
+  }
+}
+
+[data-theme-mode="light"] {
+  --bg-app: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-container: #F1F5F9;
+  --bg-surface-high: #E2E8F0;
+  --bg-surface-highest: #CBD5E1;
+  --bg-tonal: rgba(16, 185, 129, 0.1);
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-tertiary: #64748B;
+  --text-inverse: #F8FAFC;
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-focus: #10B981;
+
+  --shadow-elevation-1: 0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-elevation-2: 0 8px 24px rgba(0, 0, 0, 0.07);
+  --shadow-elevation-3: 0 16px 36px rgba(0, 0, 0, 0.1);
 }
 
 /* Ring Palette Themes */

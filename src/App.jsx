@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { HabitProvider, useHabits } from './context/HabitContext';
-import { OSBar } from './components/OSBar';
-import { PhoneFrame } from './components/PhoneFrame';
+import { HabitProvider } from './context/HabitContext';
+import { AppLayout } from './components/AppLayout';
 import { TogetherScreen } from './screens/TogetherScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
@@ -9,6 +8,8 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNavBar } from './components/BottomNavBar';
 import { PairingModal } from './components/PairingModal';
 import { AddGoalModal } from './components/AddGoalModal';
+import { OnboardingModal } from './components/OnboardingModal';
+import { IOSInstallBanner } from './components/IOSInstallBanner';
 
 const MainAppContent = () => {
   const [activeTab, setActiveTab] = useState('together');
@@ -17,18 +18,21 @@ const MainAppContent = () => {
 
   return (
     <div className="app-root">
-      {/* Top Desktop Controls Toolbar */}
-      <OSBar
+      {/* Smart iOS Install Banner (shows only on iOS Safari) */}
+      <IOSInstallBanner />
+
+      {/* Main Responsive Application Layout */}
+      <AppLayout
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         onOpenPairing={() => setIsPairingOpen(true)}
         onOpenAddGoal={() => setIsAddGoalOpen(true)}
-      />
-
-      {/* Phone Mockup Frame or Fullscreen Device */}
-      <PhoneFrame>
+      >
         {activeTab === 'together' && (
           <TogetherScreen
             onOpenSettings={() => setActiveTab('settings')}
             onOpenAddGoal={() => setIsAddGoalOpen(true)}
+            onOpenPairing={() => setIsPairingOpen(true)}
           />
         )}
 
@@ -43,14 +47,16 @@ const MainAppContent = () => {
           />
         )}
 
-        {/* Dynamic Navigation Bar (Android M3 vs iOS Cupertino) */}
+        {/* Mobile Bottom Navigation Bar (Hidden on Desktop via CSS) */}
         <BottomNavBar
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-      </PhoneFrame>
+      </AppLayout>
 
       {/* Modals */}
+      <OnboardingModal />
+
       <PairingModal
         isOpen={isPairingOpen}
         onClose={() => setIsPairingOpen(false)}
