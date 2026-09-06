@@ -214,7 +214,7 @@ npm run build
 
 Pre-built binaries are available via GitHub Releases:
 
-1. Download the latest compiled package from [GitHub Releases](https://github.com/palakharinkhede4/DayByDay/releases/latest).
+1. Download [`DayByDay.apk`](https://github.com/palakharinkhede4/DayByDay/releases/download/latest/DayByDay.apk) directly, or visit [GitHub Releases](https://github.com/palakharinkhede4/DayByDay/releases/latest).
 2. Transfer the `.apk` file to your Android device via USB, Google Drive, or local storage.
 3. Tap the file in your device's file manager and allow installation from your file provider if prompted.
 4. Launch DayByDay.
@@ -269,18 +269,14 @@ DayByDay incorporates native support for Apple ActivityKit (iOS 16.1+) and Andro
 
 The repository includes [`.github/workflows/release.yml`](./.github/workflows/release.yml) to automate APK compilation and release publishing.
 
-### Workflow Triggering
+### Continuous Deployment
 
-* **Tag-based Release**: Push a version tag to trigger an automated build:
-  ```bash
-  git tag v1.0.1
-  git push origin v1.0.1
-  ```
-* **Manual Workflow Dispatch**:
-  1. Navigate to the **Actions** tab in GitHub.
-  2. Select **Build & Publish DayByDay APK Release**.
-  3. Click **Run workflow**, specify the version tag, and confirm.
-  4. The workflow will compile the project with Java 21, run Gradle build tasks, and upload the signed debug APK directly to GitHub Releases.
+Every commit to `main` automatically triggers a GitHub Actions pipeline that:
+
+1. Compiles the web production assets.
+2. Synchronizes web assets with the Capacitor Android shell.
+3. Builds the Android APK using Gradle and Java 21.
+4. Publishes the compiled `DayByDay.apk` binary to the latest GitHub Release.
 
 ---
 
