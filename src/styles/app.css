@@ -332,7 +332,7 @@ html, body {
 }
 .battery-level {
   height: 100%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   border-radius: 1.5px;
 }
 
@@ -648,7 +648,7 @@ html, body {
 }
 
 .hud-meter-pct.done {
-  color: #10B981;
+  color: var(--primary, #1A56C4);
 }
 
 .hud-progress-track {
@@ -662,7 +662,7 @@ html, body {
 
 .hud-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%);
+  background: linear-gradient(90deg, var(--primary, #1A56C4) 0%, #06B6D4 100%);
   border-radius: 9999px;
   transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
@@ -701,7 +701,7 @@ html, body {
 }
 
 .hud-quick-btn.complete {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #022C22;
 }
 
@@ -758,7 +758,7 @@ html, body {
 .hud-live-tag {
   font-size: 0.6rem;
   font-weight: 800;
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   background: rgba(16, 185, 129, 0.15);
   padding: 1px 5px;
   border-radius: 4px;
@@ -807,9 +807,9 @@ html, body {
 }
 
 .switcher-pill.active {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #022C22;
-  border-color: #10B981;
+  border-color: var(--primary, #1A56C4);
 }
 
 /* Settings UI: Toggle Switch & Focus Select */
@@ -852,7 +852,7 @@ html, body {
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background-color: #10B981;
+  background-color: var(--primary, #1A56C4);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
@@ -996,8 +996,8 @@ html, body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #10B981;
-  box-shadow: 0 0 8px #10B981;
+  background: var(--primary, #1A56C4);
+  box-shadow: 0 0 8px var(--primary, #1A56C4);
 }
 
 .top-right-chips {
@@ -1729,7 +1729,7 @@ html, body {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #FFFFFF;
   border: none;
   display: flex;
@@ -2077,14 +2077,14 @@ html, body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
 }
 
 .w-big-percent {
   font-size: 2.2rem;
   font-weight: 900;
   letter-spacing: -0.04em;
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   line-height: 1.1;
   margin-top: 2px;
 }
@@ -2677,7 +2677,7 @@ html, body {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--primary, #10B981);
+  background: var(--primary, var(--primary, #1A56C4));
   color: var(--on-primary, #022C22);
   display: flex;
   align-items: center;
@@ -3649,7 +3649,7 @@ input:checked + .slider:before { transform: translateX(20px); }
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   animation: pulse-ring 2s infinite;
 }
 
@@ -3932,7 +3932,7 @@ input:checked + .slider:before {
   cursor: pointer;
   width: 100%;
 }
-.ios-tile-btn.active { background: #10B981; color: #022C22; }
+.ios-tile-btn.active { background: var(--primary, #1A56C4); color: #022C22; }
 .ios-tile-btn.accent { background: rgba(244, 63, 94, 0.25); color: #FDA4AF; }
 
 /* iOS Scalloped Organic Widget */
@@ -3983,7 +3983,7 @@ input:checked + .slider:before {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #022C22;
   border: none;
   font-size: 1.2rem;
@@ -5090,8 +5090,8 @@ button:active {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #10B981;
-  box-shadow: 0 0 8px #10B981;
+  background: var(--primary, #1A56C4);
+  box-shadow: 0 0 8px var(--primary, #1A56C4);
 }
 
 .top-right-chips {
@@ -5201,8 +5201,8 @@ button:active {
 }
 
 .legend-dot.green {
-  background: var(--user1-color, #00D284);
-  box-shadow: 0 0 6px var(--user1-color, #00D284);
+  background: var(--user1-color, var(--primary, #1A56C4));
+  box-shadow: 0 0 6px var(--user1-color, var(--primary, #1A56C4));
 }
 
 .legend-dot.blue {
@@ -5750,7 +5750,7 @@ button:active {
 .code-badge-label {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
-  color: #10B981;
+  color: var(--primary, #1A56C4);
 }
 
 .code-hint {
@@ -5797,7 +5797,7 @@ button:active {
 }
 
 .code-action-btn.share {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #ffffff;
   border: none;
 }
@@ -5829,7 +5829,7 @@ button:active {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #10B981, #06B6D4);
+  background: linear-gradient(135deg, var(--primary, #1A56C4), #06B6D4);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -5963,7 +5963,7 @@ button:active {
 
 .partner-row-fill {
   height: 100%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   border-radius: 9999px;
 }
 
@@ -5975,7 +5975,7 @@ button:active {
 }
 
 .partner-nudge-btn {
-  background: linear-gradient(135deg, #10B981, #06B6D4);
+  background: linear-gradient(135deg, var(--primary, #1A56C4), #06B6D4);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -6143,7 +6143,7 @@ button:active {
   height: 32px;
   border-radius: 8px;
   background: rgba(16, 185, 129, 0.15);
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6165,7 +6165,7 @@ button:active {
   padding: 0.2rem 0.6rem;
   border-radius: 6px;
   font-size: 0.85rem;
-  color: #10B981;
+  color: var(--primary, #1A56C4);
 }
 
 .group-capacity-tag {
@@ -6197,7 +6197,7 @@ button:active {
 }
 
 .group-action-btn.share {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #ffffff;
   border: none;
 }
@@ -6254,7 +6254,7 @@ button:active {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #10B981, #06B6D4);
+  background: linear-gradient(135deg, var(--primary, #1A56C4), #06B6D4);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -6316,7 +6316,7 @@ button:active {
   gap: 0.35rem;
   background: rgba(16, 185, 129, 0.12);
   border: 1px solid rgba(16, 185, 129, 0.25);
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   padding: 0.35rem 0.75rem;
   border-radius: 8px;
   font-size: 0.78rem;
@@ -6361,7 +6361,7 @@ button:active {
 }
 
 .shared-goal-save-btn {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #ffffff;
   border: none;
   border-radius: 6px;
@@ -6413,7 +6413,7 @@ button:active {
 
 .shared-goal-fill {
   height: 100%;
-  background: linear-gradient(90deg, #10B981, #06B6D4);
+  background: linear-gradient(90deg, var(--primary, #1A56C4), #06B6D4);
   border-radius: 9999px;
   transition: width 0.3s;
 }
@@ -6448,7 +6448,7 @@ button:active {
 
 .mini-step-btn.plus {
   background: rgba(16, 185, 129, 0.15);
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   border-color: rgba(16, 185, 129, 0.3);
 }
 
@@ -6532,7 +6532,7 @@ button:active {
 }
 
 .group-primary-btn {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -6575,7 +6575,7 @@ button:active {
 
 .create-pod-confirm-btn {
   flex: 1;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #ffffff;
   border: none;
   border-radius: 6px;
@@ -6634,12 +6634,12 @@ button:active {
 .code-card-val {
   font-size: 1.6rem;
   letter-spacing: 0.08em;
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   margin-top: 0.2rem;
 }
 
 .code-card-copy-btn {
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -6717,7 +6717,7 @@ button:active {
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  background: linear-gradient(135deg, var(--primary, #1A56C4) 0%, var(--accent, #7EB8F7) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6765,7 +6765,7 @@ button:active {
   height: 20px;
   border-radius: 50%;
   background: rgba(16, 185, 129, 0.2);
-  color: #10B981;
+  color: var(--primary, #1A56C4);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;
@@ -6776,7 +6776,7 @@ button:active {
 
 .ios-prompt-action-btn {
   width: 100%;
-  background: #10B981;
+  background: var(--primary, #1A56C4);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -6858,7 +6858,7 @@ button:active {
 
 .metric-icon-wrap.emerald {
   background: rgba(0, 210, 132, 0.12);
-  color: var(--primary, #00D284);
+  color: var(--primary, var(--primary, #1A56C4));
 }
 
 .metric-icon-wrap.amber {
@@ -7000,7 +7000,7 @@ button:active {
 }
 
 .calendar-day-col.today-col {
-  border-color: var(--primary, #00D284);
+  border-color: var(--primary, var(--primary, #1A56C4));
   background: rgba(0, 210, 132, 0.08);
 }
 
@@ -7055,7 +7055,7 @@ button:active {
 }
 
 .cal-indicator-circle.completed {
-  background: var(--primary, #00D284) !important;
+  background: var(--primary, var(--primary, #1A56C4)) !important;
   color: #ffffff !important;
   box-shadow: 0 0 10px var(--user1-glow, rgba(0, 210, 132, 0.4));
 }
@@ -7184,7 +7184,7 @@ button:active {
 
 .check-update-trigger-btn {
   background: rgba(0, 210, 132, 0.12);
-  color: #00D284;
+  color: var(--primary, #1A56C4);
   border: 1px solid rgba(0, 210, 132, 0.25);
   padding: 0.35rem 0.85rem;
   border-radius: 9999px;
@@ -7215,7 +7215,7 @@ button:active {
   border: 1px solid rgba(0, 210, 132, 0.25);
   border-radius: 12px;
   font-size: 0.8rem;
-  color: #00D284;
+  color: var(--primary, #1A56C4);
   animation: fadeIn 0.25s ease;
 }
 
@@ -7344,7 +7344,7 @@ button:active {
 }
 
 .update-action-btn.primary {
-  background: #00D284;
+  background: var(--primary, #1A56C4);
   color: #0B1E16;
   box-shadow: 0 4px 14px rgba(0, 210, 132, 0.35);
 }
@@ -7826,7 +7826,7 @@ button:active {
 }
 
 .inspector-status-icon.done {
-  background: #00D284;
+  background: var(--primary, #1A56C4);
   color: #022C22;
 }
 

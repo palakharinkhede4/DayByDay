@@ -43,7 +43,7 @@ class ScreenErrorBoundary extends React.Component {
             style={{
               padding: '0.6rem 1.25rem',
               borderRadius: '10px',
-              background: 'var(--primary, #00D284)',
+              background: 'var(--primary, #1A56C4)',
               color: '#ffffff',
               border: 'none',
               fontWeight: 600,

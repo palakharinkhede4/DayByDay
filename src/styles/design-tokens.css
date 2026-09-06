@@ -198,7 +198,7 @@
     --text-inverse: #F8FAFC;
 
     --border-subtle: rgba(0, 0, 0, 0.08);
-    --border-focus: #00D284;
+    --border-focus: #1A56C4;
 
     --shadow-elevation-1: 0 2px 6px rgba(0, 0, 0, 0.04);
     --shadow-elevation-2: 0 8px 24px rgba(0, 0, 0, 0.07);
@@ -207,12 +207,12 @@
 }
 
 [data-theme-mode="light"] {
-  --bg-app: #F8FAFC;
+  --bg-app: #F0F4FC;
   --bg-surface: #FFFFFF;
-  --bg-surface-container: #F1F5F9;
-  --bg-surface-high: #E2E8F0;
+  --bg-surface-container: #EEF3FC;
+  --bg-surface-high: #E2EAF8;
   --bg-surface-highest: #CBD5E1;
-  --bg-tonal: rgba(0, 210, 132, 0.1);
+  --bg-tonal: rgba(26, 86, 196, 0.08);
 
   --text-primary: #0F172A;
   --text-secondary: #475569;
@@ -220,7 +220,7 @@
   --text-inverse: #F8FAFC;
 
   --border-subtle: rgba(0, 0, 0, 0.08);
-  --border-focus: #00D284;
+  --border-focus: #1A56C4;
 
   --dial-track-color: rgba(15, 23, 42, 0.08);
   --dial-track-inner: rgba(15, 23, 42, 0.05);

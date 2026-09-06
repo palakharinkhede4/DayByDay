@@ -74,7 +74,7 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
             <defs>
               {/* Outer Ring Gradient (Emerald / Heart Points) */}
               <linearGradient id="dialOuterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="var(--user1-color, #00D284)" />
+                <stop offset="0%" stopColor="var(--user1-color, #1A56C4)" />
                 <stop offset="100%" stopColor="var(--user1-light, #69F0AE)" />
               </linearGradient>
               {/* Inner Ring Gradient (Electric Blue / Move Momentum) */}
