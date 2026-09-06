@@ -39,6 +39,7 @@ import {
   persistSessionSnapshot,
   recoverSessionFromVault,
   clearVaultSession,
+  removeVaultItem,
 } from '../utils/storageVault';
 
 const HabitContext = createContext(null);
@@ -170,6 +171,9 @@ export const HabitProvider = ({ children }) => {
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
     try {
+      if (localStorage.getItem('daybyday_signed_out') === 'true') {
+        return null;
+      }
       const saved = localStorage.getItem('daybyday_user') || localStorage.getItem('duotrack_user');
       if (saved) {
         return JSON.parse(saved);
@@ -181,6 +185,9 @@ export const HabitProvider = ({ children }) => {
   // Flag to avoid modal flicker while querying IndexedDB Vault if localStorage was cleared
   const [isSessionRestoring, setIsSessionRestoring] = useState(() => {
     try {
+      if (localStorage.getItem('daybyday_signed_out') === 'true') {
+        return false;
+      }
       return !localStorage.getItem('daybyday_user') && !localStorage.getItem('duotrack_user');
     } catch {
       return false;
@@ -543,6 +550,11 @@ export const HabitProvider = ({ children }) => {
 
     const checkVaultSession = async () => {
       try {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('daybyday_signed_out') === 'true') {
+          setIsSessionRestoring(false);
+          return;
+        }
+
         const recovered = await recoverSessionFromVault();
         if (!user) {
           if (recovered && recovered.user) {
@@ -898,6 +910,11 @@ export const HabitProvider = ({ children }) => {
       securityAnswer: (securityAnswer || '').trim().toLowerCase(),
     }));
 
+    try {
+      localStorage.removeItem('daybyday_signed_out');
+      removeVaultItem('daybyday_signed_out').catch(() => {});
+    } catch {}
+
     setUser(newUser);
     setPod((prev) => ({
       ...prev,
@@ -936,6 +953,12 @@ export const HabitProvider = ({ children }) => {
           secretCode,
           secret_code: secretCode,
         };
+
+        try {
+          localStorage.removeItem('daybyday_signed_out');
+          removeVaultItem('daybyday_signed_out').catch(() => {});
+        } catch {}
+
         setUser(loggedInUser);
 
         // 1. Restore & format habits from DB
@@ -1067,31 +1090,58 @@ export const HabitProvider = ({ children }) => {
   // Logout / Switch Account: Cleanly flush all user-specific cache and reset preferences to defaults
   const logoutUser = async () => {
     sound.tap();
+
+    // 1. Immediately mark user as explicitly signed out so page reloads NEVER auto-login
+    try {
+      localStorage.setItem('daybyday_signed_out', 'true');
+    } catch {}
+
     setUser(null);
     setPartner(null);
     setTrackedPartner(null);
+    setTrackedPartners([]);
+    setActiveTrackedCode('');
     setGroupPod(null);
     setProfilePicture(null);
     setActiveFocusHabitId('');
     setBeyondGoals([]);
 
-    // Clear user storage keys
-    localStorage.removeItem('daybyday_user');
-    localStorage.removeItem('daybyday_partner');
-    localStorage.removeItem('daybyday_tracked_partner');
-    localStorage.removeItem('daybyday_group_pod');
-    localStorage.removeItem('daybyday_profile_picture');
-    localStorage.removeItem('daybyday_active_focus_habit');
-    localStorage.removeItem('daybyday_beyond_goals');
-    localStorage.removeItem('daybyday_theme');
-    localStorage.removeItem('daybyday_theme_mode');
-    localStorage.removeItem('daybyday_custom_categories');
-    localStorage.removeItem('daybyday_habits');
+    // 2. Clear all user storage keys (both daybyday_ and legacy duotrack_)
+    const keysToRemove = [
+      'daybyday_user',
+      'daybyday_partner',
+      'daybyday_tracked_partner',
+      'daybyday_tracked_partners',
+      'daybyday_active_tracked_code',
+      'daybyday_group_pod',
+      'daybyday_profile_picture',
+      'daybyday_profile_pic',
+      'daybyday_active_focus_habit',
+      'daybyday_focus_habit_id',
+      'daybyday_beyond_goals',
+      'daybyday_beyond',
+      'daybyday_theme',
+      'daybyday_theme_mode',
+      'daybyday_custom_categories',
+      'daybyday_categories',
+      'daybyday_habits',
+      'daybyday_pod',
+      'duotrack_user',
+      'duotrack_partner',
+      'duotrack_tracked_partner',
+      'duotrack_habits',
+      'duotrack_pod',
+      'duotrack_group_pod',
+    ];
+
+    keysToRemove.forEach((k) => {
+      try { localStorage.removeItem(k); } catch {}
+    });
 
     // Wipe cached local account credentials
     Object.keys(localStorage).forEach((k) => {
       if (k.startsWith('daybyday_local_acc_') || k.startsWith('duotrack_local_acc_')) {
-        localStorage.removeItem(k);
+        try { localStorage.removeItem(k); } catch {}
       }
     });
 
@@ -1103,6 +1153,7 @@ export const HabitProvider = ({ children }) => {
     setCustomCategories(['Daily', 'Health', 'Fitness', 'Mind']);
     setHabits(INITIAL_HABITS);
 
+    // Completely clear persistent vault
     await clearVaultSession();
     triggerIslandNotification('Signed out', 'user');
   };

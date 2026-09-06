@@ -95,16 +95,18 @@ export async function removeVaultItem(key) {
 export async function clearVault() {
   try {
     const db = await openVaultDb();
-    if (!db) return;
+    if (!db) return false;
     return new Promise((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      store.clear();
+      const req = store.clear();
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => resolve(false);
     });
   } catch {
-    // Non-blocking fallback
+    return false;
   }
 }
 
@@ -115,6 +117,11 @@ export async function persistSessionSnapshot(user, partner, habits, pod, groupPo
     // Safety guard: Never wipe the vault from a snapshot effect when user is not loaded
     return;
   }
+  // Strict Safety Guard: If user explicitly signed out, NEVER re-save to vault!
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('daybyday_signed_out') === 'true') {
+    return;
+  }
+
   try {
     localStorage.setItem('daybyday_user', JSON.stringify(user));
     await setVaultItem('daybyday_user', user);
@@ -151,10 +158,21 @@ export async function clearVaultSession() {
   try {
     const keys = [
       'daybyday_user', 'daybyday_partner', 'daybyday_habits', 'daybyday_pod', 'daybyday_group_pod',
-      'duotrack_user', 'duotrack_partner', 'duotrack_habits', 'duotrack_pod'
+      'daybyday_tracked_partner', 'daybyday_tracked_partners', 'daybyday_active_tracked_code',
+      'duotrack_user', 'duotrack_partner', 'duotrack_habits', 'duotrack_pod', 'duotrack_tracked_partner'
     ];
-    keys.forEach((k) => localStorage.removeItem(k));
+    keys.forEach((k) => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+    try {
+      localStorage.setItem('daybyday_signed_out', 'true');
+    } catch {}
+
     await clearVault();
+    for (const k of keys) {
+      await removeVaultItem(k);
+    }
+    await setVaultItem('daybyday_signed_out', 'true');
   } catch (err) {
     console.warn('Session clear notice:', err.message);
   }
@@ -163,6 +181,15 @@ export async function clearVaultSession() {
 // Restore session from IndexedDB if localStorage was cleared by OS or browser
 export async function recoverSessionFromVault() {
   try {
+    // 1. If user explicitly signed out, NEVER restore past session
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('daybyday_signed_out') === 'true') {
+      return null;
+    }
+    const isSignedOutInVault = await getVaultItem('daybyday_signed_out');
+    if (isSignedOutInVault === 'true') {
+      return null;
+    }
+
     let vaultUser = await getVaultItem('daybyday_user');
     if (!vaultUser) {
       vaultUser = await getVaultItem('duotrack_user');
