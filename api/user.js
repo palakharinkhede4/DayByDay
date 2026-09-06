@@ -21,6 +21,17 @@ function sanitizeUser(u) {
   return safe;
 }
 
+// Partner view: strip the secret code so other users cannot see it
+function sanitizePartner(u) {
+  if (!u) return null;
+  const sanitized = sanitizeUser(u);
+  if (sanitized) {
+    delete sanitized.secretCode;
+    delete sanitized.secret_code;
+  }
+  return sanitized;
+}
+
 function formatHabitFromRow(row) {
   if (!row) return null;
   return {
@@ -117,10 +128,10 @@ export default async function handler(req, res) {
           const pair = pairings[0];
           podCode = pair.pod_code;
           const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-          const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
+          const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
           const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
-            partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
+            partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
           }
         }
 
@@ -312,10 +323,10 @@ export default async function handler(req, res) {
             const pair = pairings[0];
             podCode = pair.pod_code;
             const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-            const partnerRows = await sql`SELECT id, username, secret_code, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
+            const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
             const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
             if (partnerRows.length > 0) {
-              partner = { ...sanitizeUser(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
+              partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
             }
           }
 
@@ -567,7 +578,7 @@ export default async function handler(req, res) {
           return res.status(200).json({
             success: true,
             podCode,
-            partner: { ...sanitizeUser(partner), habits: partnerHabits.map(formatHabitFromRow) }
+            partner: { ...sanitizePartner(partner), habits: partnerHabits.map(formatHabitFromRow) }
           });
         }
 
