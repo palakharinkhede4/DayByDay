@@ -131,6 +131,65 @@ export async function ensureTables() {
     await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user ON daybyday_habits(user_id);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_group_pods_code ON daybyday_group_pods(UPPER(code));`;
 
+    // 5. Automatic Bulk Upgrade: Ensure 100% of all existing users have unique, distinct secret codes
+    try {
+      const usersToUpgrade = await sql`
+        SELECT id, username, secret_code 
+        FROM daybyday_users 
+        WHERE secret_code IS NULL 
+           OR secret_code = '' 
+           OR secret_code IN ('DAY-1000', 'DBD-1000', 'DUO-1000')
+           OR secret_code IN (
+             SELECT secret_code FROM daybyday_users GROUP BY secret_code HAVING COUNT(*) > 1
+           )
+      `;
+      for (const u of usersToUpgrade) {
+        const clean = (u.username || 'DBD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'DBD';
+        const randNum = Math.floor(1000 + Math.random() * 9000);
+        const randChar = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+        const newCode = `${clean}-${randNum}${randChar}`;
+        await sql`UPDATE daybyday_users SET secret_code = ${newCode} WHERE id = ${u.id}`;
+      }
+
+      // Ensure 100% of all existing group pods have unique codes
+      const podsToUpgrade = await sql`
+        SELECT id, name, code 
+        FROM daybyday_group_pods 
+        WHERE code IS NULL 
+           OR code = '' 
+           OR code IN ('DAY-1000', 'DBD-1000', 'POD-1000')
+           OR code IN (
+             SELECT code FROM daybyday_group_pods GROUP BY code HAVING COUNT(*) > 1
+           )
+      `;
+      for (const p of podsToUpgrade) {
+        const prefix = (p.name || 'POD').replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'POD';
+        const randNum = Math.floor(1000 + Math.random() * 9000);
+        const randChar = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+        const newPodCode = `${prefix}-${randNum}${randChar}`;
+        await sql`UPDATE daybyday_group_pods SET code = ${newPodCode} WHERE id = ${p.id}`;
+      }
+
+      // Ensure 100% of all active pairings have unique pod codes
+      const pairsToUpgrade = await sql`
+        SELECT id, pod_code 
+        FROM daybyday_pairings 
+        WHERE pod_code IS NULL 
+           OR pod_code = '' 
+           OR pod_code IN ('DAY-1000', 'DBD-1000', 'POD-1000')
+           OR pod_code IN (
+             SELECT pod_code FROM daybyday_pairings GROUP BY pod_code HAVING COUNT(*) > 1
+           )
+      `;
+      for (const pr of pairsToUpgrade) {
+        const randNum = Math.floor(1000 + Math.random() * 9000);
+        const newPairCode = `POD_${Date.now().toString(36).toUpperCase()}_${randNum}`;
+        await sql`UPDATE daybyday_pairings SET pod_code = ${newPairCode} WHERE id = ${pr.id}`;
+      }
+    } catch (bulkErr) {
+      console.warn('Notice upgrading existing codes:', bulkErr.message);
+    }
+
     tablesInitialized = true;
   } catch (err) {
     console.warn('Neon DB migration notice:', err.message);

@@ -1003,6 +1003,57 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Failed to delete account: ' + err.message });
       }
     }
+
+    // ACTION: UPGRADE ALL CODES (Bulk assignment for all existing users and pods)
+    if (action === 'upgrade_all_codes') {
+      try {
+        if (sql) {
+          const allUsers = await sql`SELECT id, username, secret_code FROM daybyday_users`;
+          const allPods = await sql`SELECT id, name, code FROM daybyday_group_pods`;
+          const allPairs = await sql`SELECT id, pod_code FROM daybyday_pairings WHERE status = 'active'`;
+          let upgradedUsers = 0;
+          let upgradedPods = 0;
+          let upgradedPairs = 0;
+
+          for (const u of allUsers) {
+            if (!u.secret_code || u.secret_code === 'DAY-1000' || u.secret_code === 'DBD-1000' || u.secret_code === 'DUO-1000') {
+              const newCode = generateSecretCode(u.username);
+              await sql`UPDATE daybyday_users SET secret_code = ${newCode} WHERE id = ${u.id}`;
+              upgradedUsers++;
+            }
+          }
+
+          for (const p of allPods) {
+            if (!p.code || p.code === 'DAY-1000' || p.code === 'DBD-1000' || p.code === 'POD-1000') {
+              const newCode = generatePodCode(p.name);
+              await sql`UPDATE daybyday_group_pods SET code = ${newCode} WHERE id = ${p.id}`;
+              upgradedPods++;
+            }
+          }
+
+          for (const pr of allPairs) {
+            if (!pr.pod_code || pr.pod_code === 'DAY-1000' || pr.pod_code === 'DBD-1000' || pr.pod_code === 'POD-1000') {
+              const randNum = Math.floor(1000 + Math.random() * 9000);
+              const newCode = `POD_${Date.now().toString(36).toUpperCase()}_${randNum}`;
+              await sql`UPDATE daybyday_pairings SET pod_code = ${newCode} WHERE id = ${pr.id}`;
+              upgradedPairs++;
+            }
+          }
+
+          return res.status(200).json({
+            success: true,
+            message: `Upgraded ${upgradedUsers} users, ${upgradedPods} group pods, and ${upgradedPairs} pairings.`,
+            totalUsers: allUsers.length,
+            totalPods: allPods.length,
+            totalPairs: allPairs.length
+          });
+        }
+
+        return res.status(200).json({ success: true, message: 'In-memory fallback store active' });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
