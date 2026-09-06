@@ -10,20 +10,7 @@
         android:pathData="M34,70 C24,58 24,42 34,31 C45,20 63,20 74,31 C84,42 84,58 74,70 C68,76 61,78 54,78"
         android:strokeWidth="5.5"
         android:strokeLineCap="round"
-        android:strokeColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="26"
-                android:startY="24"
-                android:endX="82"
-                android:endY="76"
-                android:type="linear">
-                <item android:color="#00E599" android:offset="0.0" />
-                <item android:color="#00C2FF" android:offset="0.6" />
-                <item android:color="#6366F1" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:strokeColor="#00E599" />
 
     <!-- Momentum Flame Core -->
     <path
