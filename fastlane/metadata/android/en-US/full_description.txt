@@ -1,0 +1,11 @@
+DayByDay is an open-source, privacy-first habit tracking application designed for individuals, pairs, and accountability pods.
+
+Features:
+* Solo & Collaborative Pod Modes: Track your personal goals independently or share a private secret code to form a synchronized accountability pod with a friend or partner.
+* Live Focus & Dynamic Island HUD: Monitor your active focus habit in real time with 1-tap quick increments and completion toggles.
+* Android Ongoing Live Status: View active habit progress directly on your Android lock screen and notification drawer with category progress bars.
+* Scheduled Reminders: Configure specific alert times and active days of the week with local notification dispatching.
+* Consecutive Streak Tracking: Keep momentum with automated consecutive day streak counts and single-row historical tracking.
+* Privacy & Security: Salted PBKDF2 password protection, security question recovery, zero third-party telemetry, and offline-first storage vault resilience.
+* Cloud Sync: Seamless sync with free Neon PostgreSQL databases or operate 100% offline.
+* Visual Customization: Light, Dark, and System Auto appearance modes with customizable color palettes.

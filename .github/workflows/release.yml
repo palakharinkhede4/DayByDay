@@ -51,28 +51,28 @@ jobs:
           ./gradlew assembleDebug --no-daemon
           cd ..
 
-      - name: Prepare Single APK
+      - name: Prepare Versioned APK
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk DayByDay.apk
+          PKG_VER=$(node -p "require('./package.json').version")
+          RELEASE_TAG="v${PKG_VER}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "DayByDay-${RELEASE_TAG}.apk"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
 
-      - name: Delete All Old Releases
+      - name: Clean Existing Release For Version If Exists
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for tag in $(gh release list --json tagName -q '.[].tagName'); do
-            echo "Deleting old release: $tag"
-            gh release delete "$tag" --yes --cleanup-tag || true
-          done
+          gh release delete "${RELEASE_TAG}" --yes --cleanup-tag || true
 
-      - name: Publish Single Latest Release
+      - name: Publish Release Matching versionName Tag
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "DayByDay (Latest Build)"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "DayByDay ${{ env.RELEASE_TAG }} (Android APK)"
           body: |
-            ## DayByDay - Latest Android Build
+            ## DayByDay Release ${{ env.RELEASE_TAG }}
             
-            Continuous build automatically compiled on every commit to `main`.
+            Open-source habit tracking with real-time accountability synchronization.
             
             ### Included in this build:
             * Apple ActivityKit & in-app Dynamic Island HUD.
@@ -87,10 +87,10 @@ jobs:
             * Multi-layer persistent storage vault with offline resilience.
             
             ### Android Installation:
-            1. Download `DayByDay.apk` attached below.
+            1. Download `DayByDay-${{ env.RELEASE_TAG }}.apk` attached below.
             2. Open the APK on your Android device to install.
             3. Launch DayByDay.
-          files: DayByDay.apk
+          files: DayByDay-*.apk
           draft: false
           prerelease: false
           make_latest: true

@@ -1,0 +1,1 @@
+Habit tracker with real-time accountability sync, live HUD, and privacy.
