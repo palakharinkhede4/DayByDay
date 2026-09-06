@@ -55,68 +55,60 @@ jobs:
           ./gradlew assembleRelease --no-daemon
           cd ..
 
-      - name: Prepare Single Unversioned APK
+      - name: Extract Version & Prepare Versioned Artifacts
+        id: versioning
         run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "APP_TAG=v${VERSION}" >> $GITHUB_OUTPUT
+          
+          # Prepare both rolling DayByDay.apk and versioned DayByDay-vX.Y.Z.apk
           cp android/app/build/outputs/apk/release/app-release.apk DayByDay.apk
-
-      - name: Purge All Deployments, Releases, and Past Workflow Runs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "=== Purging All Releases and Tags ==="
-          for tag in $(gh release list --json tagName -q '.[].tagName' || true); do
-            echo "Deleting release: $tag"
-            gh release delete "$tag" --yes --cleanup-tag || true
-          done
-
-          echo "=== Purging All GitHub Deployments ==="
-          DEPLOYMENT_IDS=$(gh api "repos/${{ github.repository }}/deployments" --paginate --jq '.[].id' || true)
-          for id in $DEPLOYMENT_IDS; do
-            echo "Deactivating deployment: $id"
-            gh api -X POST "repos/${{ github.repository }}/deployments/${id}/statuses" -f state=inactive || true
-            echo "Deleting deployment: $id"
-            gh api -X DELETE "repos/${{ github.repository }}/deployments/${id}" || true
-          done
-
-          echo "=== Purging Previous Workflow Runs ==="
-          CURRENT_RUN_ID="${{ github.run_id }}"
-          RUN_IDS=$(gh run list --json databaseId -q '.[].databaseId' || true)
-          for rid in $RUN_IDS; do
-            if [ "$rid" != "$CURRENT_RUN_ID" ]; then
-              echo "Deleting workflow run: $rid"
-              gh run delete "$rid" || true
-            fi
-          done
+          cp android/app/build/outputs/apk/release/app-release.apk "DayByDay-v${VERSION}.apk"
 
       - name: Generate Release Changelog
         run: |
-          echo "## DayByDay v1.1.0 - Latest Build" > release_body.md
+          VERSION="${{ steps.versioning.outputs.APP_VERSION }}"
+          echo "## DayByDay v${VERSION} Release" > release_body.md
           echo "" >> release_body.md
-          echo "### What's New & Recent Commits:" >> release_body.md
+          echo "### Highlights in this Build:" >> release_body.md
+          echo "* **Executive Dark Sapphire Blue Palette**: App and launcher icon upgraded with dark sapphire and glowing 24k gold trophy." >> release_body.md
+          echo "* **Interactive Progress Bar Touch Scrubbing**: Directly tap or drag along progress bars to instantly set workout minutes, steps, or reading." >> release_body.md
+          echo "* **Intuitive Long-Press Drag & Drop Reordering**: Cleanly reorder habits by holding and dragging cards." >> release_body.md
+          echo "* **Group Pod Persistence Fix**: Group pods are now securely preserved in the dual-layer IndexedDB vault across app updates." >> release_body.md
+          echo "* **Delete Custom Habit Categories**: Easily delete custom categories with automatic habit migration." >> release_body.md
+          echo "* **Avatar Action Sheet Modal**: Tapping profile avatar gives options to upload/change photo, remove photo, or cancel." >> release_body.md
+          echo "* **Responsive Track A Friend**: Fixed mobile layout to ensure buttons remain perfectly within card bounds." >> release_body.md
+          echo "* **Enhanced Hardware Haptics & Audio**: Integrated Capacitor Haptics and calibrated Web Audio synthesis." >> release_body.md
+          echo "* **Smooth Habit Loading**: Progress bars and completion rings smoothly animate into view." >> release_body.md
+          echo "" >> release_body.md
+          echo "### Recent Commits:" >> release_body.md
           git log -n 12 --pretty=format:"* %s (%h)" >> release_body.md
           echo "" >> release_body.md
           echo "" >> release_body.md
-          echo "### Highlights in this Build:" >> release_body.md
-          echo "* Android runtime notification permissions (API 33+)." >> release_body.md
-          echo "* Safe area margin fixes: zero overlap with Android status bar or iOS notch." >> release_body.md
-          echo "* High-contrast bottom tab bar navigation in both Dark and Light modes." >> release_body.md
-          echo "* Xiaomi / Poco HyperOS Super Island dynamic notification integration." >> release_body.md
-          echo "* Habit reordering controls with up/down shifting." >> release_body.md
-          echo "* Custom habit categories creation and filtering." >> release_body.md
-          echo "* Custom user profile picture upload, crop, and display." >> release_body.md
-          echo "* Version-based update checker with in-app changelog viewer." >> release_body.md
-          echo "* Independent Sign Out vs Reset & Wipe Vault." >> release_body.md
-          echo "" >> release_body.md
           echo "### Android Installation:" >> release_body.md
-          echo "1. Download \`DayByDay.apk\` attached below." >> release_body.md
-          echo "2. Open and install over your existing app (signing certificate preserved)." >> release_body.md
-          echo "3. Launch DayByDay." >> release_body.md
+          echo "1. Download \`DayByDay.apk\` (or \`DayByDay-v${VERSION}.apk\`) below." >> release_body.md
+          echo "2. Install over your existing app (in-place update certificate preserved; user data maintained)." >> release_body.md
 
-      - name: Publish Single Latest Release
+      - name: Publish Versioned Release (Preserved Permanently)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.versioning.outputs.APP_TAG }}
+          name: "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}"
+          body_path: release_body.md
+          files: |
+            DayByDay.apk
+            DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Rolling Latest Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "DayByDay v1.1.0 (Latest Build)"
+          name: "DayByDay v${{ steps.versioning.outputs.APP_VERSION }} (Latest Build)"
           body_path: release_body.md
           files: DayByDay.apk
           draft: false

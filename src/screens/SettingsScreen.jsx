@@ -66,6 +66,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
   const [changelogModalOpen, setChangelogModalOpen] = useState(false);
   const [changelogData, setChangelogData] = useState(null);
@@ -159,6 +160,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   };
 
   const themeOptions = [
+    { id: 'sapphire', label: 'Dark Sapphire & Cyan (Default)', c1: '#2563EB', c2: '#00D2FF' },
     { id: 'fit', label: 'Activity Focus (Mint & Electric Blue)', c1: '#00D284', c2: '#2979FF' },
     { id: 'emerald', label: 'Mint & Coral', c1: '#10B981', c2: '#F43F5E' },
     { id: 'ocean', label: 'Cyan & Amber', c1: '#06B6D4', c2: '#F59E0B' },
@@ -179,8 +181,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       <div className="profile-card">
         <div
           className="profile-avatar-circle clickable font-extrabold"
-          onClick={() => avatarInputRef.current?.click()}
-          title="Change profile picture"
+          onClick={() => setAvatarModalOpen(true)}
+          title="Change, modify, or remove profile picture"
         >
           {profilePicture ? (
             <img src={profilePicture} alt="Avatar" className="profile-avatar-image" />
@@ -218,34 +220,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               Sign Out
             </button>
           )}
-          {profilePicture && (
-            <button
-              className="remove-avatar-btn font-medium"
-              onClick={() => setProfilePicture(null)}
-              title="Remove profile photo"
-            >
-              Remove Photo
-            </button>
-          )}
         </div>
       </div>
-
-      {/* PROMINENT SECRET CODE CARD */}
-      {user && (
-        <div className="secret-code-settings-card">
-          <div className="code-card-left">
-            <span className="code-card-title font-bold">Your Secret Code</span>
-            <p className="code-card-hint">
-              Share this code with a partner in the Track tab or add friends to your Together pod.
-            </p>
-            <span className="code-card-val font-mono font-black">{user.secretCode}</span>
-          </div>
-          <button className="code-card-copy-btn font-bold" onClick={handleCopyCode}>
-            {copiedCode ? <Check size={16} /> : <Copy size={16} />}
-            <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
-          </button>
-        </div>
-      )}
 
       {/* SECTION: PAIRED PARTNER (Shows only when actively paired) */}
       {!isSolo && (
@@ -658,6 +634,49 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           </div>
         </div>
       )}
+      {/* AVATAR OPTIONS ACTION MODAL */}
+      {avatarModalOpen && (
+        <div className="modal-backdrop" onClick={() => setAvatarModalOpen(false)}>
+          <div className="avatar-options-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="avatar-modal-title font-bold">Profile Picture</h3>
+            <p className="avatar-modal-subtitle">Add, modify, or remove your personal avatar.</p>
+
+            <div className="avatar-modal-actions">
+              <button
+                className="avatar-action-btn primary font-bold"
+                onClick={() => {
+                  setAvatarModalOpen(false);
+                  avatarInputRef.current?.click();
+                }}
+              >
+                <Camera size={18} />
+                <span>{profilePicture ? 'Change / Upload New Photo' : 'Upload Photo'}</span>
+              </button>
+
+              {profilePicture && (
+                <button
+                  className="avatar-action-btn danger font-bold"
+                  onClick={() => {
+                    setProfilePicture(null);
+                    setAvatarModalOpen(false);
+                  }}
+                >
+                  <Trash2 size={18} />
+                  <span>Remove Current Photo</span>
+                </button>
+              )}
+
+              <button
+                className="avatar-action-btn cancel font-medium"
+                onClick={() => setAvatarModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* DEVELOPER ATTRIBUTION & ABOUT CARD */}
       <div className="developer-attribution-card">
         <div className="dev-badge-flame">
@@ -666,7 +685,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         <div className="dev-info-col">
           <div className="dev-title-row">
             <span className="dev-app-title font-extrabold">DayByDay</span>
-            <span className="dev-version-badge font-mono font-bold">v1.1.0</span>
+            <span className="dev-version-badge font-mono font-bold">v1.2.0</span>
           </div>
           <span className="dev-author-tag font-bold">
             Developed by Palak Harinkhede
@@ -677,7 +696,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           <div className="dev-meta-row font-mono">
             <span>Client-Encrypted</span>
             <span>•</span>
-            <span>Zero Emojis Policy</span>
+            <span>Secure Vault</span>
             <span>•</span>
             <span>All Rights Reserved</span>
           </div>

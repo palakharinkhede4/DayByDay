@@ -189,8 +189,11 @@ export const HabitProvider = ({ children }) => {
   };
 
   // 4. OS Engine ('ios' | 'android')
-  const [osMode, setOsMode] = useState(() => detectInitialOS());
-  const [themeColor, setThemeColor] = useState(() => localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme') || 'fit');
+  const [themeColor, setThemeColor] = useState(() => {
+    const saved = localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme');
+    if (!saved || saved === 'fit') return 'sapphire';
+    return saved;
+  });
 
   // Material 3 Dynamic Theme Toggle (Android Expressive - Off by default)
   const [useMaterial3Theme, setUseMaterial3ThemeState] = useState(() => {
@@ -232,29 +235,6 @@ export const HabitProvider = ({ children }) => {
         localStorage.removeItem('daybyday_profile_pic');
       }
     } catch {}
-  };
-
-  // Custom Categories list
-  const [customCategories, setCustomCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('daybyday_custom_categories');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return ['Daily', 'Health', 'Fitness', 'Mind', 'Work'];
-  });
-
-  const addCustomCategory = (newCat) => {
-    if (!newCat || !newCat.trim()) return;
-    const clean = newCat.trim();
-    setCustomCategories((prev) => {
-      const exists = prev.some((c) => c.toLowerCase() === clean.toLowerCase());
-      if (exists) return prev;
-      const next = [...prev, clean];
-      try {
-        localStorage.setItem('daybyday_custom_categories', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
   };
 
   // Active User role in current view ('user1' = You, 'user2' = Partner)
@@ -335,6 +315,47 @@ export const HabitProvider = ({ children }) => {
 
   // Dynamic Island status
   const [islandMessage, setIslandMessage] = useState(null);
+
+  // Custom Categories state (persisted)
+  const [customCategories, setCustomCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('daybyday_categories');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return ['Daily', 'Health', 'Fitness', 'Mind', 'Work'];
+  });
+
+  const addCustomCategory = (name) => {
+    if (!name || typeof name !== 'string') return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setCustomCategories((prev) => {
+      if (prev.some((c) => c.toLowerCase() === trimmed.toLowerCase())) return prev;
+      const next = [...prev, trimmed];
+      try { localStorage.setItem('daybyday_categories', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const deleteCustomCategory = (name) => {
+    if (!name) return;
+    setCustomCategories((prev) => {
+      const next = prev.filter((c) => c.toLowerCase() !== name.toLowerCase());
+      try { localStorage.setItem('daybyday_categories', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    // Migrate habits in the deleted category to Daily
+    setHabits((prev) => {
+      const updated = prev.map((h) => {
+        if ((h.category || '').toLowerCase() === name.toLowerCase()) {
+          return { ...h, category: 'Daily' };
+        }
+        return h;
+      });
+      try { localStorage.setItem('daybyday_habits', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
 
   // Pinned Habit & Live Notifications removed per user request
   const pinnedHabitId = null;
@@ -435,17 +456,21 @@ export const HabitProvider = ({ children }) => {
 
     const checkVaultSession = async () => {
       try {
+        const recovered = await recoverSessionFromVault();
         if (!user) {
-          const recovered = await recoverSessionFromVault();
           if (recovered && recovered.user) {
             setUser(recovered.user);
             if (recovered.partner) setPartner(recovered.partner);
             if (recovered.habits && recovered.habits.length) setHabits(recovered.habits);
             if (recovered.pod) setPod(recovered.pod);
+            if (recovered.groupPod) setGroupPod(recovered.groupPod);
           }
         } else {
-          // If user already loaded from localStorage, ensure IndexedDB vault is in sync
-          persistSessionSnapshot(user, partner, habits, pod);
+          // If user loaded from localStorage, ensure groupPod is also restored if missing locally
+          if (!groupPod && recovered?.groupPod) {
+            setGroupPod(recovered.groupPod);
+          }
+          persistSessionSnapshot(user, partner, habits, pod, groupPod || recovered?.groupPod);
         }
       } catch (err) {
         console.warn('Vault recovery check notice:', err);
@@ -460,9 +485,9 @@ export const HabitProvider = ({ children }) => {
   // Dual-layer session snapshot sync: whenever session state changes, mirror to both localStorage and IndexedDB Vault
   useEffect(() => {
     if (user) {
-      persistSessionSnapshot(user, partner, habits, pod);
+      persistSessionSnapshot(user, partner, habits, pod, groupPod);
     }
-  }, [user, partner, habits, pod]);
+  }, [user, partner, habits, pod, groupPod]);
 
   // Multi-tab real-time session and habits synchronization
   useEffect(() => {
@@ -1440,6 +1465,7 @@ export const HabitProvider = ({ children }) => {
         reorderHabit,
         customCategories,
         addCustomCategory,
+        deleteCustomCategory,
         profilePicture,
         setProfilePicture,
         trackedPartner,

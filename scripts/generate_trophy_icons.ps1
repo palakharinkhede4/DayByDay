@@ -1,4 +1,4 @@
-# DayByDay Custom Trophy & Victory Tick Icon Generator
+# DayByDay Custom Trophy & Victory Tick Icon Generator (Dark Sapphire & 24K Gold)
 Add-Type -AssemblyName System.Drawing
 
 function Draw-TrophyIcon {
@@ -21,18 +21,18 @@ function Draw-TrophyIcon {
         # Transparent background for adaptive icon foreground
         $g.Clear([System.Drawing.Color]::Transparent)
     } else {
-        # Background: Deep Obsidian
+        # Background: Deep Executive Midnight Sapphire Blue
         $g.Clear([System.Drawing.Color]::Transparent)
         $bgBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (
             (New-Object System.Drawing.PointF 0, 0),
             (New-Object System.Drawing.PointF $Size, $Size),
-            [System.Drawing.Color]::FromArgb(255, 14, 22, 38),
-            [System.Drawing.Color]::FromArgb(255, 4, 6, 12)
+            [System.Drawing.Color]::FromArgb(255, 11, 22, 54), # Deep Sapphire Blue
+            [System.Drawing.Color]::FromArgb(255, 4, 8, 20)    # Deep Midnight Navy
         )
 
         if ($Type -eq "round") {
             $g.FillEllipse($bgBrush, 2, 2, ($Size - 4), ($Size - 4))
-            $borderPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(40, 255, 255, 255)), (1.5 * $scale)
+            $borderPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(50, 59, 130, 246)), (1.5 * $scale)
             $g.DrawEllipse($borderPen, 2, 2, ($Size - 4), ($Size - 4))
         } else {
             # Squircle / Rounded rect
@@ -45,25 +45,29 @@ function Draw-TrophyIcon {
             $path.AddArc($rect.X, ($rect.Bottom - $radius), $radius, $radius, 90, 90)
             $path.CloseFigure()
             $g.FillPath($bgBrush, $path)
-            $borderPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(35, 255, 255, 255)), (1.5 * $scale)
+            $borderPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(45, 59, 130, 246)), (1.5 * $scale)
             $g.DrawPath($borderPen, $path)
         }
 
-        # Ambient Glow behind Trophy
-        $glowBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(45, 0, 229, 153))
+        # Ambient Glow behind Trophy (Electric Cyan & Royal Blue Aura)
+        $glowBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(45, 0, 210, 255))
         $glowR = 38.0 * $scale
         $g.FillEllipse($glowBrush, ($Size/2 - $glowR), ($Size/2 - $glowR), ($glowR * 2), ($glowR * 2))
+
+        $glowInner = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(35, 37, 99, 235))
+        $glowInnerR = 24.0 * $scale
+        $g.FillEllipse($glowInner, ($Size/2 - $glowInnerR), ($Size/2 - $glowInnerR), ($glowInnerR * 2), ($glowInnerR * 2))
     }
 
-    # 1. Outer Momentum Ring (Arc)
-    $arcPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 0, 229, 153)), (5.0 * $scale)
+    # 1. Outer Momentum Ring (Electric Cyan & Sapphire Arc)
+    $arcPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 0, 210, 255)), (5.0 * $scale)
     $arcPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $arcPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $ringRect = New-Object System.Drawing.RectangleF (26 * $scale), (26 * $scale), (56 * $scale), (56 * $scale)
     $g.DrawArc($arcPen, $ringRect, 50, 275)
 
     # Momentum Ring Accent Node
-    $nodeBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 0, 229, 153))
+    $nodeBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 0, 210, 255))
     $nodeR = 3.5 * $scale
     $nodeCenter = New-Object System.Drawing.PointF (62 * $scale), (29 * $scale)
     $g.FillEllipse($nodeBrush, ($nodeCenter.X - $nodeR), ($nodeCenter.Y - $nodeR), ($nodeR * 2), ($nodeR * 2))
@@ -78,8 +82,8 @@ function Draw-TrophyIcon {
     $leftHandlePath = New-Object System.Drawing.Drawing2D.GraphicsPath
     $leftHandlePath.AddBezier(
         (New-Object System.Drawing.PointF (38 * $scale), (43 * $scale)),
-        (New-Object System.Drawing.PointF (28 * $scale), (43 * $scale)),
-        (New-Object System.Drawing.PointF (28 * $scale), (57 * $scale)),
+        (New-Object System.Drawing.PointF (27 * $scale), (43 * $scale)),
+        (New-Object System.Drawing.PointF (27 * $scale), (57 * $scale)),
         (New-Object System.Drawing.PointF (38 * $scale), (57 * $scale))
     )
     $g.DrawPath($handlePen, $leftHandlePath)
@@ -88,8 +92,8 @@ function Draw-TrophyIcon {
     $rightHandlePath = New-Object System.Drawing.Drawing2D.GraphicsPath
     $rightHandlePath.AddBezier(
         (New-Object System.Drawing.PointF (70 * $scale), (43 * $scale)),
-        (New-Object System.Drawing.PointF (80 * $scale), (43 * $scale)),
-        (New-Object System.Drawing.PointF (80 * $scale), (57 * $scale)),
+        (New-Object System.Drawing.PointF (81 * $scale), (43 * $scale)),
+        (New-Object System.Drawing.PointF (81 * $scale), (57 * $scale)),
         (New-Object System.Drawing.PointF (70 * $scale), (57 * $scale))
     )
     $g.DrawPath($handlePen, $rightHandlePath)
@@ -160,9 +164,8 @@ function Draw-TrophyIcon {
     $starPath.AddPolygon($starPts)
     $g.FillPath($starBrush, $starPath)
 
-    # 5. Bold Victory Tick (Checkmark) Superimposed on Cup
-    # Emerald Background Glow for Tick
-    $tickGlowPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(120, 0, 229, 153)), (6.5 * $scale)
+    # 5. Bold Victory Tick (Checkmark) Superimposed on Cup - Electric Cyan with Glow
+    $tickGlowPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(140, 0, 210, 255)), (7.0 * $scale)
     $tickGlowPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $tickGlowPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $tickGlowPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
@@ -173,8 +176,8 @@ function Draw-TrophyIcon {
 
     $g.DrawPath($tickGlowPen, $tickPath)
 
-    # Emerald Solid Tick
-    $tickPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 0, 229, 153)), (4.5 * $scale)
+    # Electric Cyan Solid Tick
+    $tickPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 0, 210, 255)), (4.5 * $scale)
     $tickPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $tickPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $tickPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
@@ -198,7 +201,7 @@ function Draw-TrophyIcon {
     Write-Host "Generated: $OutputPath ($Size x $Size)"
 }
 
-Write-Host "Generating iOS, Android, and Web icons..."
+Write-Host "Generating Dark Sapphire & Gold Trophy icons..."
 
 # 1. iOS Universal AppIcon (1024 x 1024)
 Draw-TrophyIcon -Size 1024 -Type "square" -OutputPath "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
@@ -222,4 +225,4 @@ foreach ($d in $densities) {
     Draw-TrophyIcon -Size $d.ForeSize -Type "foreground" -OutputPath "$dir/ic_launcher_foreground.png"
 }
 
-Write-Host "All Trophy & Victory Tick icons generated successfully!"
+Write-Host "All Dark Sapphire & Gold Trophy icons generated successfully!"

@@ -5,17 +5,17 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Outer Momentum Ring Track (72dp safe zone) -->
+    <!-- Outer Momentum Ring Track (72dp safe zone) - Electric Cyan -->
     <path
         android:pathData="M34,70 C24,58 24,42 34,31 C45,20 63,20 74,31 C84,42 84,58 74,70 C68,76 61,78 54,78"
         android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:strokeColor="#00E599" />
+        android:strokeColor="#00D2FF" />
 
     <!-- Momentum Ring Node Accent -->
     <path
         android:pathData="M74,31m-3,0a3,3 0 1,0 6,0a3,3 0 1,0 -6,0"
-        android:fillColor="#00E599" />
+        android:fillColor="#00D2FF" />
     <path
         android:pathData="M74,31m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0"
         android:fillColor="#FFFFFF" />
@@ -67,13 +67,13 @@
         android:fillColor="#FEF08A" />
 
     <!-- ================= VICTORY TICK (CHECKMARK) ================= -->
-    <!-- Tick Emerald Outer Glow Base -->
+    <!-- Tick Electric Cyan Base -->
     <path
         android:pathData="M45.5,50 L52,56.5 L64,43.5"
         android:strokeWidth="5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:strokeColor="#00E599" />
+        android:strokeColor="#00D2FF" />
 
     <!-- Tick White Crisp Center Core -->
     <path
