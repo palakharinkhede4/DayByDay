@@ -50,10 +50,19 @@ jobs:
       - name: Install Dependencies
         run: npm ci || npm install
 
+      - name: Validate Web Build Environment
+        run: |
+          echo "Verifying API endpoint configuration..."
+          FORBIDDEN_PATTERNS='(postgres|neon\.tech|npg_|@)'
+          if echo "https://day-by-day-palak-2599.vercel.app" | grep -E -i "$FORBIDDEN_PATTERNS"; then
+            echo "::error::CRITICAL SECURITY VIOLATION: Invalid API URL!"
+            exit 1
+          fi
+
       - name: Build Web Production Assets
         run: npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL || vars.VITE_API_URL || 'https://day-by-day-palak-2599.vercel.app' }}
+          VITE_API_URL: 'https://day-by-day-palak-2599.vercel.app'
 
       - name: Sync Web Assets to Capacitor Android
         run: npx cap sync android

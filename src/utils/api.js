@@ -5,24 +5,45 @@ export const DEFAULT_API_URL = 'https://day-by-day-palak-2599.vercel.app';
 
 export function formatErrorMessage(err, fallback = 'An unexpected error occurred') {
   if (!err) return fallback;
+  let raw = '';
   if (typeof err === 'string') {
-    return err.trim() === '[object Object]' || !err.trim() ? fallback : err.trim();
+    raw = err;
+  } else if (err.data) {
+    if (typeof err.data === 'string') raw = err.data;
+    else if (typeof err.data.error === 'string') raw = err.data.error;
+    else if (typeof err.data.message === 'string') raw = err.data.message;
+  } else if (typeof err.error === 'string') {
+    raw = err.error;
+  } else if (err.error && typeof err.error.message === 'string') {
+    raw = err.error.message;
+  } else if (typeof err.message === 'string') {
+    raw = err.message;
+  } else {
+    try {
+      raw = JSON.stringify(err);
+    } catch {}
   }
-  if (err.data) {
-    if (typeof err.data === 'string' && err.data !== '[object Object]') return err.data;
-    if (typeof err.data.error === 'string' && err.data.error !== '[object Object]') return err.data.error;
-    if (typeof err.data.message === 'string' && err.data.message !== '[object Object]') return err.data.message;
+
+  if (!raw || raw.trim() === '[object Object]' || raw.trim() === '{}') {
+    return fallback;
   }
-  if (typeof err.error === 'string' && err.error !== '[object Object]') return err.error;
-  if (err.error && typeof err.error.message === 'string' && err.error.message !== '[object Object]') return err.error.message;
-  if (typeof err.message === 'string' && err.message !== '[object Object]' && err.message.trim()) {
-    return err.message;
+
+  // ZERO-SECRET LEAK GUARANTEE: Never display database URLs, credentials, tokens, or raw technical constructor errors to users
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('postgres') ||
+    lower.includes('neon.tech') ||
+    lower.includes('npg_') ||
+    lower.includes('failed to construct') ||
+    lower.includes('request cannot be constructed') ||
+    lower.includes('credentials') ||
+    lower.includes('password') && lower.includes('@') ||
+    raw.includes('://')
+  ) {
+    return 'Unable to connect to cloud server. Please check your internet connection.';
   }
-  try {
-    const s = JSON.stringify(err);
-    if (s && s !== '{}' && s !== '[]') return s;
-  } catch {}
-  return fallback;
+
+  return raw.trim();
 }
 
 export const isNativePlatform = () => {
@@ -38,29 +59,42 @@ export const isNativePlatform = () => {
 
 export const getApiBaseUrl = () => {
   if (typeof window === 'undefined') return DEFAULT_API_URL;
-  const customUrl = localStorage.getItem('daybyday_server_url') || localStorage.getItem('duotrack_server_url');
-  if (customUrl && customUrl.trim()) {
-    return customUrl.trim().replace(/\/$/, '');
-  }
-  if (import.meta?.env?.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
-    return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '');
-  }
-  // Native apps (Android/iOS) MUST always use DEFAULT_API_URL unless customUrl is explicitly set
+
+  // 1. Native mobile apps (Android/iOS) ALWAYS use DEFAULT_API_URL
   if (isNativePlatform()) {
     return DEFAULT_API_URL;
   }
-  // When running on public web / Vercel with same origin
+
+  // 2. Custom override from localStorage (strictly validate: MUST be http/https, never database/credentials)
+  const customUrl = localStorage.getItem('daybyday_server_url') || localStorage.getItem('duotrack_server_url');
+  if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
+    const clean = customUrl.trim().replace(/\/$/, '');
+    if ((clean.startsWith('http://') || clean.startsWith('https://')) && !clean.includes('@') && !clean.toLowerCase().includes('postgres')) {
+      return clean;
+    }
+  }
+
+  // 3. Web build environment variable (strictly validate: MUST be http/https, never database/credentials)
+  const envUrl = import.meta?.env?.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    const clean = envUrl.trim().replace(/\/$/, '');
+    if ((clean.startsWith('http://') || clean.startsWith('https://')) && !clean.includes('@') && !clean.toLowerCase().includes('postgres')) {
+      return clean;
+    }
+  }
+
+  // 4. In web browser on same domain
   if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
     return window.location.origin;
   }
-  // Default cloud API
+
   return DEFAULT_API_URL;
 };
 
 export const setApiBaseUrl = (url) => {
   if (typeof window === 'undefined') return;
   const clean = (url || '').trim().replace(/\/$/, '');
-  if (clean) {
+  if (clean && (clean.startsWith('http://') || clean.startsWith('https://')) && !clean.includes('@') && !clean.toLowerCase().includes('postgres')) {
     localStorage.setItem('daybyday_server_url', clean);
   } else {
     localStorage.removeItem('daybyday_server_url');
@@ -81,7 +115,14 @@ export const hasRemoteBackend = () => {
 
 // Unified fetch client: Uses native Android/iOS OkHttp on mobile to completely bypass WebView CORS
 export async function apiFetch(url, options = {}) {
-  if (Capacitor?.isNativePlatform?.()) {
+  // Guarantee: Ensure target URL is ALWAYS a valid HTTP/HTTPS endpoint and never a database connection string
+  let targetUrl = url;
+  if (!targetUrl || typeof targetUrl !== 'string' || !targetUrl.startsWith('http') || targetUrl.includes('@') || targetUrl.toLowerCase().includes('postgres')) {
+    const endpoint = (typeof targetUrl === 'string' && targetUrl.includes('/api/')) ? '/api/' + targetUrl.split('/api/')[1] : '/api/user';
+    targetUrl = DEFAULT_API_URL + endpoint;
+  }
+
+  if (isNativePlatform()) {
     const method = (options.method || 'GET').toUpperCase();
     let data = options.body;
     if (typeof data === 'string') {
@@ -94,7 +135,7 @@ export async function apiFetch(url, options = {}) {
 
     try {
       const response = await CapacitorHttp.request({
-        url,
+        url: targetUrl,
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +191,7 @@ export async function apiFetch(url, options = {}) {
     }
   }
 
-  return fetch(url, options);
+  return fetch(targetUrl, options);
 }
 
 // Safe JSON parser to handle both native responses and standard fetch responses
