@@ -413,11 +413,25 @@ export const syncHabitsRemote = async (userId, habits, preferences) => {
 
 export const syncUserHabitsRemote = syncHabitsRemote;
 
-export const fetchUserRemote = async (username) => {
-  if (!hasRemoteBackend() || !username) return null;
+export const fetchUserRemote = async (usernameOrCode) => {
+  if (!hasRemoteBackend() || !usernameOrCode) return null;
   const baseUrl = getApiBaseUrl();
+  const clean = String(usernameOrCode).trim().replace(/^@/, '');
   try {
-    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(username)}`);
+    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(clean)}&code=${encodeURIComponent(clean.toUpperCase())}`);
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch {
+    return null;
+  }
+};
+
+export const fetchUserByCodeRemote = async (code) => {
+  if (!hasRemoteBackend() || !code) return null;
+  const baseUrl = getApiBaseUrl();
+  const clean = String(code).trim().toUpperCase();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user?code=${encodeURIComponent(clean)}&username=${encodeURIComponent(clean)}`);
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch {
@@ -724,5 +738,26 @@ export const fetchCheersRemote = async (userId, podCode) => {
     return data?.cheers || [];
   } catch {
     return [];
+  }
+};
+
+export const getUserGroupPodRemote = async (userId, username) => {
+  if (!hasRemoteBackend() || (!userId && !username)) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_user_group_pod',
+        userId,
+        username,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe(res);
+    return data?.pod || null;
+  } catch {
+    return null;
   }
 };

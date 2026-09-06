@@ -97,11 +97,35 @@ export default async function handler(req, res) {
     try {
       if (sql) {
         let user = null;
-        if (username) {
-          const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
+        const cleanCode = (code || '').trim().toUpperCase();
+        const cleanUsername = (username || '').trim().replace(/^@/, '');
+
+        // 1. Check by explicit code if provided
+        if (cleanCode) {
+          const rows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
           user = rows[0] || null;
-        } else if (code) {
-          const rows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = UPPER(${code}) LIMIT 1`;
+        }
+
+        // 2. Check by username or secret_code if username param was supplied (handles codes passed via username parameter)
+        if (!user && cleanUsername) {
+          const rows = await sql`
+            SELECT * FROM daybyday_users 
+            WHERE LOWER(username) = LOWER(${cleanUsername}) 
+               OR UPPER(secret_code) = UPPER(${cleanUsername})
+            LIMIT 1
+          `;
+          user = rows[0] || null;
+        }
+
+        // 3. Robust fallback: try looking up either value against both columns
+        if (!user) {
+          const fallbackTerm = cleanCode || cleanUsername;
+          const rows = await sql`
+            SELECT * FROM daybyday_users 
+            WHERE UPPER(secret_code) = UPPER(${fallbackTerm})
+               OR LOWER(username) = LOWER(${fallbackTerm})
+            LIMIT 1
+          `;
           user = rows[0] || null;
         }
 
@@ -137,6 +161,32 @@ export default async function handler(req, res) {
           }
         }
 
+        // Check if user belongs to an active Together Group Pod
+        let groupPod = null;
+        try {
+          const groupRows = await sql`
+            SELECT * FROM daybyday_group_pods 
+            WHERE members::text LIKE ${'%"' + user.id + '"%'}
+               OR members::text LIKE ${'%"' + user.username + '"%'}
+            ORDER BY updated_at DESC
+            LIMIT 1
+          `;
+          if (groupRows.length > 0) {
+            const gr = groupRows[0];
+            groupPod = {
+              id: gr.id,
+              name: gr.name,
+              code: gr.code,
+              members: gr.members || [],
+              sharedGoals: gr.shared_goals || [],
+              createdAt: gr.created_at,
+              maxMembers: 10,
+            };
+          }
+        } catch (gpErr) {
+          console.warn('Notice querying user group pod:', gpErr.message);
+        }
+
         const formattedHabits = habits.map(formatHabitFromRow);
         const totalHabits = formattedHabits.length;
         const completedCount = formattedHabits.filter(h => {
@@ -152,6 +202,7 @@ export default async function handler(req, res) {
           preferences: user.preferences || {},
           partner,
           podCode,
+          groupPod,
           isSolo: !partner,
           todayPercent,
           streak,
@@ -159,7 +210,7 @@ export default async function handler(req, res) {
       }
 
       // Memory Store Fallback
-      const lookup = username || code;
+      const lookup = (code || username || '').trim().replace(/^@/, '');
       const user = memoryDb.getUser(lookup);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
@@ -332,12 +383,39 @@ export default async function handler(req, res) {
             }
           }
 
+          // Check if user belongs to an active Together Group Pod
+          let groupPod = null;
+          try {
+            const groupRows = await sql`
+              SELECT * FROM daybyday_group_pods 
+              WHERE members::text LIKE ${'%"' + user.id + '"%'}
+                 OR members::text LIKE ${'%"' + user.username + '"%'}
+              ORDER BY updated_at DESC
+              LIMIT 1
+            `;
+            if (groupRows.length > 0) {
+              const gr = groupRows[0];
+              groupPod = {
+                id: gr.id,
+                name: gr.name,
+                code: gr.code,
+                members: gr.members || [],
+                sharedGoals: gr.shared_goals || [],
+                createdAt: gr.created_at,
+                maxMembers: 10,
+              };
+            }
+          } catch (gpErr) {
+            console.warn('Notice querying user group pod on login:', gpErr.message);
+          }
+
           return res.status(200).json({
             user: sanitizeUser(user),
             habits: habits.map(formatHabitFromRow),
             preferences: user.preferences || {},
             partner,
             podCode,
+            groupPod,
             isSolo: !partner
           });
         }
@@ -861,6 +939,39 @@ export default async function handler(req, res) {
           }
         }
 
+        return res.status(200).json({ success: true, pod });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: GET USER'S CURRENT GROUP POD (BY USER ID OR USERNAME)
+    if (action === 'get_user_group_pod') {
+      const { userId, username } = req.body;
+      const cleanU = (username || '').trim().replace(/^@/, '');
+      try {
+        let pod = null;
+        if (sql) {
+          const groupRows = await sql`
+            SELECT * FROM daybyday_group_pods 
+            WHERE ( ${userId ? sql`members::text LIKE ${'%"' + userId + '"%'}` : sql`FALSE`} )
+               OR ( ${cleanU ? sql`members::text LIKE ${'%"' + cleanU + '"%'}` : sql`FALSE`} )
+            ORDER BY updated_at DESC
+            LIMIT 1
+          `;
+          if (groupRows.length > 0) {
+            const r = groupRows[0];
+            pod = {
+              id: r.id,
+              name: r.name,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+              createdAt: r.created_at,
+              maxMembers: 10,
+            };
+          }
+        }
         return res.status(200).json({ success: true, pod });
       } catch (err) {
         return res.status(500).json({ error: err.message });

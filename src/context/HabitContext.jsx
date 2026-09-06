@@ -11,6 +11,7 @@ import {
   getSecurityQuestionRemote,
   resetPasswordRemote,
   fetchUserRemote,
+  fetchUserByCodeRemote,
   syncUserHabitsRemote,
   syncPreferencesRemote,
   pairPartnerRemote,
@@ -19,6 +20,7 @@ import {
   createGroupPodRemote,
   joinGroupPodRemote,
   getGroupPodRemote,
+  getUserGroupPodRemote,
   addGroupGoalRemote,
   updateGroupGoalRemote,
   deleteGroupGoalRemote,
@@ -563,19 +565,35 @@ export const HabitProvider = ({ children }) => {
             if (recovered.habits && recovered.habits.length) setHabits(recovered.habits);
             if (recovered.pod) setPod(recovered.pod);
             if (recovered.groupPod) setGroupPod(recovered.groupPod);
+            if (recovered.trackedPartners && recovered.trackedPartners.length) {
+              setTrackedPartners(recovered.trackedPartners);
+            }
+            if (recovered.activeTrackedCode) {
+              setActiveTrackedCode(recovered.activeTrackedCode);
+            }
           }
         } else {
-          // If user loaded from localStorage, ensure groupPod is also restored if missing locally
+          // If user loaded from localStorage, ensure groupPod & trackedPartners are also restored if missing locally
           if (!groupPod && recovered?.groupPod) {
             setGroupPod(recovered.groupPod);
           }
-          persistSessionSnapshot(user, partner, habits, pod, groupPod || recovered?.groupPod);
+          if ((!trackedPartners || !trackedPartners.length) && recovered?.trackedPartners?.length) {
+            setTrackedPartners(recovered.trackedPartners);
+          }
+          if (!activeTrackedCode && recovered?.activeTrackedCode) {
+            setActiveTrackedCode(recovered.activeTrackedCode);
+          }
+          persistSessionSnapshot(
+            user, partner, habits, pod, groupPod || recovered?.groupPod,
+            (trackedPartners && trackedPartners.length) ? trackedPartners : recovered?.trackedPartners,
+            activeTrackedCode || recovered?.activeTrackedCode
+          );
         }
 
         // Automatic Cloud Sync on Startup: pull latest preferences, habits & secret code from Cloud DB
         const activeUser = user || recovered?.user;
         if (activeUser?.username) {
-          fetchUserRemote(activeUser.username).then((remoteData) => {
+          fetchUserRemote(activeUser.username).then(async (remoteData) => {
             if (remoteData && remoteData.user) {
               // Sync secret code — ensures Track screen shows the current server-side code, not a stale cache
               const freshCode = remoteData.user.secretCode || remoteData.user.secret_code;
@@ -599,6 +617,19 @@ export const HabitProvider = ({ children }) => {
               if (remoteData.podCode) {
                 setPod((prev) => ({ ...prev, code: remoteData.podCode, isPaired: Boolean(remoteData.partner) }));
               }
+              // Restore Together Group Pod from Cloud
+              if (remoteData.groupPod) {
+                setGroupPod(remoteData.groupPod);
+                localStorage.setItem('daybyday_group_pod', JSON.stringify(remoteData.groupPod));
+              } else if (!groupPod) {
+                try {
+                  const foundPod = await getUserGroupPodRemote(activeUser.id, activeUser.username);
+                  if (foundPod) {
+                    setGroupPod(foundPod);
+                    localStorage.setItem('daybyday_group_pod', JSON.stringify(foundPod));
+                  }
+                } catch {}
+              }
             }
           }).catch(() => {});
         }
@@ -615,9 +646,9 @@ export const HabitProvider = ({ children }) => {
   // Dual-layer session snapshot sync: whenever session state changes, mirror to both localStorage and IndexedDB Vault
   useEffect(() => {
     if (user) {
-      persistSessionSnapshot(user, partner, habits, pod, groupPod);
+      persistSessionSnapshot(user, partner, habits, pod, groupPod, trackedPartners, activeTrackedCode);
     }
-  }, [user, partner, habits, pod, groupPod]);
+  }, [user, partner, habits, pod, groupPod, trackedPartners, activeTrackedCode]);
 
   // Multi-tab real-time session and habits synchronization
   useEffect(() => {
@@ -815,6 +846,51 @@ export const HabitProvider = ({ children }) => {
       setBeyondGoals(prefs.beyondGoals);
       localStorage.setItem('daybyday_beyond', JSON.stringify(prefs.beyondGoals));
     }
+    if (prefs.trackedPartnerCodes && Array.isArray(prefs.trackedPartnerCodes) && prefs.trackedPartnerCodes.length) {
+      const currentCodes = trackedPartners.map((p) => (p.secretCode || p.secret_code || '').toUpperCase());
+      const missing = prefs.trackedPartnerCodes.filter((c) => c && !currentCodes.includes(c.toUpperCase()));
+      if (missing.length > 0) {
+        Promise.all(missing.map((c) => fetchUserByCodeRemote(c))).then((results) => {
+          const loaded = [];
+          results.forEach((remote, idx) => {
+            if (remote && remote.user) {
+              const partnerHabits = remote.habits || [];
+              const total = partnerHabits.length;
+              const completed = partnerHabits.filter((h) => {
+                const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+              }).length;
+              const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+              const actualCode = missing[idx].toUpperCase();
+              loaded.push({
+                ...remote.user,
+                habits: partnerHabits,
+                streak: remote.streak ?? calcStreak,
+                todayPercent: remote.todayPercent ?? calcPct,
+                profilePicture: remote.preferences?.profilePicture || remote.user?.profilePicture || null,
+                lastActive: 'Active today',
+                secretCode: actualCode,
+                secret_code: actualCode,
+              });
+            }
+          });
+          if (loaded.length > 0) {
+            setTrackedPartners((prev) => {
+              const merged = [...prev];
+              loaded.forEach((item) => {
+                if (!merged.some((p) => (p.secretCode || p.secret_code || '').toUpperCase() === item.secretCode.toUpperCase())) {
+                  merged.push(item);
+                }
+              });
+              const capped = merged.slice(0, 5);
+              localStorage.setItem('daybyday_tracked_partners', JSON.stringify(capped));
+              return capped;
+            });
+          }
+        }).catch(() => {});
+      }
+    }
   };
 
   // Automatic real-time preference sync to Cloud DB
@@ -826,6 +902,7 @@ export const HabitProvider = ({ children }) => {
     }
     if (!user?.id) return;
 
+    const trackedCodes = trackedPartners.map((p) => p.secretCode || p.secret_code).filter(Boolean);
     const currentPreferences = {
       themeColor,
       themeMode,
@@ -834,6 +911,8 @@ export const HabitProvider = ({ children }) => {
       profilePicture,
       activeFocusHabitId,
       beyondGoals,
+      trackedPartnerCodes: trackedCodes,
+      groupPodCode: groupPod?.code || null,
     };
 
     const timer = setTimeout(() => {
@@ -841,7 +920,7 @@ export const HabitProvider = ({ children }) => {
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [themeColor, themeMode, useMaterial3Theme, customCategories, profilePicture, activeFocusHabitId, beyondGoals, user?.id]);
+  }, [themeColor, themeMode, useMaterial3Theme, customCategories, profilePicture, activeFocusHabitId, beyondGoals, trackedPartners, groupPod?.code, user?.id]);
 
   // Register New User (Supports remote Neon DB backend with automatic local Storage Vault fallback)
   const registerUser = async (username, password, displayName = '', avatar = '', securityQuestion = '', securityAnswer = '') => {
@@ -977,6 +1056,18 @@ export const HabitProvider = ({ children }) => {
         if (res.partner) {
           setPartner(res.partner);
           localStorage.setItem('daybyday_partner', JSON.stringify(res.partner));
+        }
+
+        if (res.groupPod) {
+          setGroupPod(res.groupPod);
+          localStorage.setItem('daybyday_group_pod', JSON.stringify(res.groupPod));
+        } else {
+          getUserGroupPodRemote(loggedInUser.id, loggedInUser.username).then((foundPod) => {
+            if (foundPod) {
+              setGroupPod(foundPod);
+              localStorage.setItem('daybyday_group_pod', JSON.stringify(foundPod));
+            }
+          }).catch(() => {});
         }
         setPod((prev) => ({
           ...prev,
@@ -1199,7 +1290,10 @@ export const HabitProvider = ({ children }) => {
     let partnerData = null;
     let fetchError = null;
     try {
-      const remote = await fetchUserRemote(cleanCode);
+      let remote = await fetchUserByCodeRemote(cleanCode);
+      if (!remote || !remote.user) {
+        remote = await fetchUserRemote(cleanCode);
+      }
       if (remote && remote.user) {
         const partnerHabits = remote.habits || [];
         const total = partnerHabits.length;
@@ -1209,6 +1303,7 @@ export const HabitProvider = ({ children }) => {
         }).length;
         const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
         const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+        const actualCode = remote.user.secretCode || remote.user.secret_code || cleanCode;
 
         partnerData = {
           ...remote.user,
@@ -1217,8 +1312,8 @@ export const HabitProvider = ({ children }) => {
           todayPercent: remote.todayPercent ?? calcPct,
           profilePicture: remote.preferences?.profilePicture || remote.user?.profilePicture || null,
           lastActive: 'Active today',
-          secretCode: cleanCode,
-          secret_code: cleanCode,
+          secretCode: actualCode,
+          secret_code: actualCode,
         };
       } else if (remote && remote.error) {
         fetchError = remote.error;
@@ -1253,7 +1348,7 @@ export const HabitProvider = ({ children }) => {
 
     // Persist tracked partner codes to user cloud preferences
     if (user?.id) {
-      const codes = updatedList.map((p) => p.secretCode || p.secret_code);
+      const codes = updatedList.map((p) => p.secretCode || p.secret_code).filter(Boolean);
       syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: codes }).catch(() => {});
     }
 
@@ -1261,6 +1356,66 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification(`Tracking @${partnerData.username}!`, 'target');
     return partnerData;
   };
+
+  // Periodically refresh progress for all tracked friends
+  const refreshTrackedPartners = useCallback(async () => {
+    if (!trackedPartners || !trackedPartners.length) return;
+    try {
+      const refreshedList = await Promise.all(
+        trackedPartners.map(async (p) => {
+          const pCode = p.secretCode || p.secret_code;
+          if (!pCode) return p;
+          try {
+            let res = await fetchUserByCodeRemote(pCode);
+            if (!res || !res.user) res = await fetchUserRemote(pCode);
+            if (res && res.user) {
+              const partnerHabits = res.habits || [];
+              const total = partnerHabits.length;
+              const completed = partnerHabits.filter((h) => {
+                const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+              }).length;
+              const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+              return {
+                ...p,
+                ...res.user,
+                habits: partnerHabits,
+                streak: res.streak ?? calcStreak,
+                todayPercent: res.todayPercent ?? calcPct,
+                profilePicture: res.preferences?.profilePicture || res.user?.profilePicture || p.profilePicture,
+                lastActive: 'Active today',
+                secretCode: pCode,
+                secret_code: pCode,
+              };
+            }
+          } catch {}
+          return p;
+        })
+      );
+      setTrackedPartners(refreshedList);
+      localStorage.setItem('daybyday_tracked_partners', JSON.stringify(refreshedList));
+    } catch {}
+  }, [trackedPartners]);
+
+  // Auto-refresh tracked friends' progress on focus and periodically
+  useEffect(() => {
+    if (!trackedPartners || !trackedPartners.length) return;
+    refreshTrackedPartners();
+    const interval = setInterval(refreshTrackedPartners, 45000);
+    const onFocus = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        refreshTrackedPartners();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [trackedPartners.length, refreshTrackedPartners]);
 
   const untrackPartner = (codeToUntrack) => {
     sound.tap();
@@ -1377,6 +1532,9 @@ export const HabitProvider = ({ children }) => {
 
     setGroupPod(newPod);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(newPod));
+    if (user?.id) {
+      syncPreferencesRemote(user.id, { ...(user.preferences || {}), groupPodCode: newPod.code }).catch(() => {});
+    }
     triggerCelebration();
     triggerIslandNotification(`Group ${cleanName} created!`, 'users');
     return newPod;
@@ -1400,6 +1558,9 @@ export const HabitProvider = ({ children }) => {
 
     setGroupPod(podToJoin);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(podToJoin));
+    if (user?.id) {
+      syncPreferencesRemote(user.id, { ...(user.preferences || {}), groupPodCode: podToJoin.code }).catch(() => {});
+    }
     triggerCelebration();
     triggerIslandNotification(`Joined Pod ${cleanCode}!`, 'users');
     return podToJoin;
@@ -1409,6 +1570,7 @@ export const HabitProvider = ({ children }) => {
     sound.tap();
     if (groupPod?.code && user?.id) {
       leaveGroupPodRemote(groupPod.code, user.id).catch(() => {});
+      syncPreferencesRemote(user.id, { ...(user.preferences || {}), groupPodCode: null }).catch(() => {});
     }
     setGroupPod(null);
     localStorage.removeItem('daybyday_group_pod');

@@ -112,7 +112,7 @@ export async function clearVault() {
 
 // Dual-layer session backup: writes to both localStorage and IndexedDB Vault
 // Guarantees session survival across iOS Safari 7-day ITP, PWA partitioning, and Android WebView memory flushes
-export async function persistSessionSnapshot(user, partner, habits, pod, groupPod) {
+export async function persistSessionSnapshot(user, partner, habits, pod, groupPod, trackedPartners = null, activeTrackedCode = null) {
   if (!user || !user.username) {
     // Safety guard: Never wipe the vault from a snapshot effect when user is not loaded
     return;
@@ -147,6 +147,16 @@ export async function persistSessionSnapshot(user, partner, habits, pod, groupPo
     if (groupPod) {
       localStorage.setItem('daybyday_group_pod', JSON.stringify(groupPod));
       await setVaultItem('daybyday_group_pod', groupPod);
+    }
+
+    if (trackedPartners && Array.isArray(trackedPartners) && trackedPartners.length) {
+      localStorage.setItem('daybyday_tracked_partners', JSON.stringify(trackedPartners));
+      await setVaultItem('daybyday_tracked_partners', trackedPartners);
+    }
+
+    if (activeTrackedCode) {
+      localStorage.setItem('daybyday_active_tracked_code', activeTrackedCode);
+      await setVaultItem('daybyday_active_tracked_code', activeTrackedCode);
     }
   } catch (err) {
     console.warn('Session persistence notice:', err.message);
@@ -200,6 +210,8 @@ export async function recoverSessionFromVault() {
     let vaultHabits = await getVaultItem('daybyday_habits') || await getVaultItem('duotrack_habits');
     let vaultPod = await getVaultItem('daybyday_pod') || await getVaultItem('duotrack_pod');
     let vaultGroupPod = await getVaultItem('daybyday_group_pod');
+    let vaultTrackedPartners = await getVaultItem('daybyday_tracked_partners');
+    let vaultActiveTrackedCode = await getVaultItem('daybyday_active_tracked_code');
 
     // Re-populate localStorage to keep future synchronous loads instantaneous
     try {
@@ -208,6 +220,12 @@ export async function recoverSessionFromVault() {
       if (vaultHabits) localStorage.setItem('daybyday_habits', JSON.stringify(vaultHabits));
       if (vaultPod) localStorage.setItem('daybyday_pod', JSON.stringify(vaultPod));
       if (vaultGroupPod) localStorage.setItem('daybyday_group_pod', JSON.stringify(vaultGroupPod));
+      if (vaultTrackedPartners && Array.isArray(vaultTrackedPartners)) {
+        localStorage.setItem('daybyday_tracked_partners', JSON.stringify(vaultTrackedPartners));
+      }
+      if (vaultActiveTrackedCode) {
+        localStorage.setItem('daybyday_active_tracked_code', vaultActiveTrackedCode);
+      }
     } catch {
       // LocalStorage quota or restricted mode fallback
     }
@@ -218,6 +236,8 @@ export async function recoverSessionFromVault() {
       habits: vaultHabits || null,
       pod: vaultPod || null,
       groupPod: vaultGroupPod || null,
+      trackedPartners: Array.isArray(vaultTrackedPartners) ? vaultTrackedPartners : [],
+      activeTrackedCode: vaultActiveTrackedCode || '',
     };
   } catch {
     return null;
