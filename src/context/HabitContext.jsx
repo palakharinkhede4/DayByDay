@@ -22,6 +22,12 @@ import {
   recoverSessionFromVault,
   clearVaultSession,
 } from '../utils/storageVault';
+import {
+  startOrUpdateLiveActivity,
+  stopLiveActivity,
+  isLiveActivitySupported,
+  requestLiveActivityPermission,
+} from '../utils/liveActivityEngine';
 
 const HabitContext = createContext(null);
 
@@ -251,6 +257,62 @@ export const HabitProvider = ({ children }) => {
 
   // Dynamic Island status
   const [islandMessage, setIslandMessage] = useState(null);
+
+  // Live Activity & Focus Habit State
+  const [activeFocusHabitId, setActiveFocusHabitIdState] = useState(() => {
+    return localStorage.getItem('daybyday_focus_habit_id') || '';
+  });
+
+  const [liveActivityEnabled, setLiveActivityEnabledState] = useState(() => {
+    const saved = localStorage.getItem('daybyday_live_activity_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const setActiveFocusHabitId = (id) => {
+    setActiveFocusHabitIdState(id || '');
+    if (id) {
+      localStorage.setItem('daybyday_focus_habit_id', id);
+    } else {
+      localStorage.removeItem('daybyday_focus_habit_id');
+    }
+  };
+
+  const setLiveActivityEnabled = (enabled) => {
+    setLiveActivityEnabledState(Boolean(enabled));
+    localStorage.setItem('daybyday_live_activity_enabled', String(enabled));
+    if (!enabled) {
+      stopLiveActivity();
+    }
+  };
+
+  // Memoized Active Focus Habit (Uses selected ID or picks the next unfinished habit)
+  const activeFocusHabit = useMemo(() => {
+    if (!habits || habits.length === 0) return null;
+    if (activeFocusHabitId) {
+      const selected = habits.find((h) => h.id === activeFocusHabitId);
+      if (selected) return selected;
+    }
+    // Default to the first incomplete habit for the day
+    const nextIncomplete = habits.find((h) => {
+      const val = h.user1;
+      return typeof val === 'boolean' ? !val : (val || 0) < h.target;
+    });
+    return nextIncomplete || habits[0];
+  }, [habits, activeFocusHabitId]);
+
+  // Partner completion percentage memo
+  const partnerPercent = useMemo(() => {
+    if (isSolo || !habits || !habits.length) return 0;
+    let partnerScore = 0;
+    habits.forEach((h) => {
+      if (typeof h.user2 === 'boolean') {
+        partnerScore += h.user2 ? 1 : 0;
+      } else {
+        partnerScore += Math.min(1, (h.user2 || 0) / h.target);
+      }
+    });
+    return Math.round((partnerScore / habits.length) * 100);
+  }, [habits, isSolo]);
 
   // Vercel Serverless Sync States
   const [serverUrl, setServerUrlState] = useState(() => localStorage.getItem('daybyday_server_url') || localStorage.getItem('duotrack_server_url') || '');
@@ -875,6 +937,58 @@ export const HabitProvider = ({ children }) => {
   const currentPercent = useMemo(() => calculateGoalsReached(), [habits, isSolo]);
   const inSyncGoalsCount = useMemo(() => calculateInSyncCount(), [habits, isSolo]);
 
+  // Quick 1-tap increment for focus habit directly from Dynamic Island
+  const quickIncrementFocusHabit = (customAmount) => {
+    if (!activeFocusHabit) return;
+    const h = activeFocusHabit;
+    if (typeof h.user1 === 'boolean') {
+      updateHabit(h.id, activeUserId, true, true);
+    } else {
+      let increment = customAmount;
+      if (!increment) {
+        if (h.unit === 'steps') increment = 1000;
+        else if (h.unit === 'min') increment = 5;
+        else if (h.unit === 'pints') increment = 1;
+        else if (h.unit === 'pgs') increment = 5;
+        else increment = 1;
+      }
+      updateHabit(h.id, activeUserId, increment, false);
+    }
+  };
+
+  // Quick 1-tap complete for focus habit directly from Dynamic Island
+  const toggleFocusHabitCompleted = () => {
+    if (!activeFocusHabit) return;
+    const h = activeFocusHabit;
+    if (typeof h.user1 === 'boolean') {
+      updateHabit(h.id, activeUserId, !h.user1, true);
+    } else {
+      const current = h.user1 || 0;
+      const next = current >= h.target ? 0 : h.target;
+      updateHabit(h.id, activeUserId, next, true);
+    }
+  };
+
+  // Live Activity & Dynamic Island auto-synchronization
+  useEffect(() => {
+    if (!liveActivityEnabled || !activeFocusHabit) return;
+
+    const val = activeFocusHabit.user1;
+    const isDone = typeof val === 'boolean' ? val : (val || 0) >= activeFocusHabit.target;
+
+    startOrUpdateLiveActivity({
+      habit: activeFocusHabit,
+      userValue: val,
+      targetValue: activeFocusHabit.target,
+      unit: activeFocusHabit.unit,
+      streak: activeFocusHabit.streak || 1,
+      partner: partner,
+      partnerPercent: partnerPercent,
+      podSyncPercent: currentPercent,
+      isCompleted: isDone,
+    });
+  }, [activeFocusHabit, liveActivityEnabled, partner, partnerPercent, currentPercent]);
+
   return (
     <HabitContext.Provider
       value={{
@@ -904,6 +1018,16 @@ export const HabitProvider = ({ children }) => {
         inSyncGoalsCount,
         islandMessage,
         triggerIslandNotification,
+        activeFocusHabit,
+        activeFocusHabitId,
+        setActiveFocusHabitId,
+        liveActivityEnabled,
+        setLiveActivityEnabled,
+        quickIncrementFocusHabit,
+        toggleFocusHabitCompleted,
+        partnerPercent,
+        isLiveActivitySupported,
+        requestLiveActivityPermission,
         updateHabit,
         updateBeyondGoal,
         addGoal,

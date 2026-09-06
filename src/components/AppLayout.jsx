@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { DynamicIslandHud } from './DynamicIslandHud';
 
 export const AppLayout = ({ activeTab, onTabChange, onOpenPairing, onOpenAddGoal, children }) => {
   const {
@@ -135,35 +136,7 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenPairing, onOpenAddGoal
       {/* MOBILE TOP STATUS BAR & DYNAMIC ISLAND */}
       {isMobile && osMode === 'ios' && (
         <div className="mobile-ios-island-bar">
-          <div
-            className={`dynamic-island ${islandMessage || islandExpanded ? 'expanded' : ''}`}
-            onClick={() => setIslandExpanded((p) => !p)}
-          >
-            {islandMessage ? (
-              <div className="island-content-live">
-                <span className="island-icon">{islandMessage.icon}</span>
-                <span className="island-text">{islandMessage.text}</span>
-              </div>
-            ) : islandExpanded ? (
-              <div className="island-content-expanded">
-                <div className="island-row">
-                  <span className="island-title">{isSolo ? `@${user?.username || 'you'}` : `Pod: ${pod.code}`}</span>
-                  <span className="island-badge">{currentPercent}% Done</span>
-                </div>
-                <div className="island-sub">
-                  {isSolo ? 'Tracking personal goals' : `Paired with @${partner?.username || 'partner'}`}
-                </div>
-              </div>
-            ) : (
-              <div className="island-content-compact">
-                <div className="island-cam-dot"></div>
-                <div className="island-mini-status">
-                  <span className="island-mini-dot"></span>
-                  <span className="island-mini-pct">{currentPercent}%</span>
-                </div>
-              </div>
-            )}
-          </div>
+          <DynamicIslandHud isDesktopMockup={false} />
         </div>
       )}
 

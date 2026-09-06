@@ -26,6 +26,12 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     syncStatus,
     syncWithCloud,
     logoutUser,
+    activeFocusHabit,
+    activeFocusHabitId,
+    setActiveFocusHabitId,
+    liveActivityEnabled,
+    setLiveActivityEnabled,
+    triggerIslandNotification,
   } = useHabits();
 
   const [copiedCode, setCopiedCode] = useState(false);
@@ -314,6 +320,81 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         </div>
       </div>
 
+      {/* SECTION: LIVE ACTIVITIES & DYNAMIC ISLAND */}
+      <div className="settings-group">
+        <span className="group-label">LIVE ACTIVITIES & DYNAMIC ISLAND</span>
+        <div className="settings-group-content">
+          {/* Main Toggle */}
+          <div className="settings-row-item">
+            <div className="row-left">
+              <span className="row-icon">⚡</span>
+              <div>
+                <span className="row-title">Live Updates & Dynamic Island</span>
+                <span className="row-hint">
+                  ActivityKit on iOS & Ongoing Status on Android
+                </span>
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={liveActivityEnabled}
+                onChange={(e) => {
+                  setLiveActivityEnabled(e.target.checked);
+                  triggerIslandNotification(
+                    e.target.checked ? 'Live Activities Enabled!' : 'Live Activities Paused',
+                    '⚡'
+                  );
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          {/* Focus Habit Selector */}
+          {liveActivityEnabled && (
+            <div className="settings-row-item">
+              <div className="row-left">
+                <span className="row-icon">🎯</span>
+                <div>
+                  <span className="row-title">Active Focus Habit</span>
+                  <span className="row-hint">
+                    {activeFocusHabitId ? `Pinned: ${activeFocusHabit?.name}` : 'Auto: Next pending habit'}
+                  </span>
+                </div>
+              </div>
+              <select
+                className="focus-habit-select"
+                value={activeFocusHabitId}
+                onChange={(e) => setActiveFocusHabitId(e.target.value)}
+              >
+                <option value="">⚡ Auto (Next Pending Habit)</option>
+                {habits.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name} ({h.target} {h.unit})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Test Island Pulse */}
+          <div
+            className="settings-row-item clickable"
+            onClick={() => triggerIslandNotification('Dynamic Island Pulse: Streak 12d 🔥', '🎉')}
+          >
+            <div className="row-left">
+              <span className="row-icon">✨</span>
+              <div>
+                <span className="row-title">Preview Dynamic Island Animation</span>
+                <span className="row-hint">Tap to trigger an interactive Island celebration</span>
+              </div>
+            </div>
+            <span className="row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+
       {/* SECTION: DATABASE & NEON DB */}
       <div className="settings-group">
         <span className="group-label">DATABASE & CLOUD STORAGE</span>
@@ -420,7 +501,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               <div className="guide-card android-guide">
                 <h4 className="guide-title">🤖 Android Setup</h4>
                 <ol className="guide-steps">
-                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DuoTrack/raw/main/DayByDay.apk" target="_blank" rel="noreferrer">Download DayByDay.apk</a></li>
+                  <li>Download the pre-compiled APK: <a href="https://github.com/palakharinkhede4/DayByDay/raw/main/DayByDay.apk" target="_blank" rel="noreferrer">Download DayByDay.apk</a></li>
                   <li>Or open in Chrome and tap <strong>"Install App"</strong>.</li>
                 </ol>
               </div>

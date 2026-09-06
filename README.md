@@ -243,6 +243,28 @@ Apple requires Apple Developer Program membership to sign native `.ipa` files fo
 
 ---
 
+## Live Activities and Dynamic Island Integration
+
+DayByDay incorporates native support for Apple ActivityKit (iOS 16.1+) and Android Live Updates / Ongoing Status APIs:
+
+### Apple ActivityKit and Dynamic Island (iOS)
+
+* **Configuration**: `NSSupportsLiveActivities` and `NSSupportsLiveActivitiesFrequentUpdates` are enabled in `ios/App/App/Info.plist`.
+* **Dynamic Island Presentations**:
+  * **Compact Leading**: Habit category glyph and active focus tag.
+  * **Compact Trailing**: Real-time completion percentage and consecutive day streak counter.
+  * **Minimal**: Radial progress indicator.
+  * **Expanded HUD**: Fluid morphing card providing target progress, partner accountability status, one-tap quick increment actions, and an inline habit switcher.
+* **SwiftUI Widget Extension**: Provided under `ios/App/DayByDayWidgets/` (`HabitActivityAttributes.swift` and `HabitLiveActivityWidget.swift`) for Xcode WidgetKit compilation.
+
+### Android Live Updates and Ongoing Habit Tracking
+
+* **Native Plugin Architecture**: Implemented via `LiveActivityPlugin.java` with a dedicated notification channel (`daybyday_live_channel`).
+* **Ongoing Status Notifications**: Pins active habit progress to the notification drawer and lock screen with `CATEGORY_PROGRESS` and interactive pending intents.
+* **Low-Power Foreground Sync**: Background tasks stay synchronized without consuming excessive battery through priority-level throttling.
+
+---
+
 ## Automated CI/CD Pipeline
 
 The repository includes [`.github/workflows/release.yml`](./.github/workflows/release.yml) to automate APK compilation and release publishing.

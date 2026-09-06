@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { DynamicIslandHud } from './DynamicIslandHud';
 
 export const PhoneFrame = ({ children }) => {
-  const { osMode, viewMode, islandMessage, pod, currentPercent, inSyncGoalsCount } = useHabits();
-  const [islandExpanded, setIslandExpanded] = useState(false);
+  const { osMode, viewMode } = useHabits();
 
   // Check if running on a real mobile phone or native Capacitor container
   const isRealMobile = typeof window !== 'undefined' && (
@@ -35,40 +35,7 @@ export const PhoneFrame = ({ children }) => {
               <span className="status-time">10:52</span>
 
               {/* DYNAMIC ISLAND */}
-              <div
-                className={`dynamic-island ${islandMessage || islandExpanded ? 'expanded' : ''}`}
-                onClick={() => setIslandExpanded((prev) => !prev)}
-                title="Tap Dynamic Island to inspect live pod activity"
-              >
-                {islandMessage ? (
-                  <div className="island-content-live">
-                    <span className="island-icon">{islandMessage.icon}</span>
-                    <span className="island-text">{islandMessage.text}</span>
-                  </div>
-                ) : islandExpanded ? (
-                  <div className="island-content-expanded">
-                    <div className="island-row">
-                      <div className="island-pair">
-                        <span className="island-avatar c">C</span>
-                        <span className="island-avatar j">J</span>
-                        <span className="island-title">Pod: {pod.code}</span>
-                      </div>
-                      <span className="island-badge">{currentPercent}% Sync</span>
-                    </div>
-                    <div className="island-sub">
-                      {inSyncGoalsCount} goals matching today · {pod.currentStreak} day streak 🔥
-                    </div>
-                  </div>
-                ) : (
-                  <div className="island-content-compact">
-                    <div className="island-cam-dot"></div>
-                    <div className="island-mini-status">
-                      <span className="island-mini-dot"></span>
-                      <span className="island-mini-pct">{currentPercent}%</span>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <DynamicIslandHud isDesktopMockup={true} />
 
               <div className="status-icons-ios">
                 <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor">
