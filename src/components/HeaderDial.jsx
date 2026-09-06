@@ -152,15 +152,19 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
           <h2 className="narrative-heading font-bold">
             {currentPercent === 100
               ? 'All habits completed today'
-              : currentPercent > 0
+              : completedCount > 0
               ? `${completedCount} of ${habits.length} habits done`
+              : currentPercent > 0
+              ? `${currentPercent}% daily progress`
               : 'Ready to build your streaks'}
           </h2>
           <p className="narrative-sub">
             {currentPercent === 100
               ? 'Outstanding consistency today. Keep the momentum going tomorrow!'
-              : currentPercent > 0
+              : completedCount > 0
               ? `${habits.length - completedCount} habits remaining to hit 100% daily focus.`
+              : currentPercent > 0
+              ? 'Great start to the day. Keep going to check off your first complete habit!'
               : 'Check off your first habit below to kick off today\'s progress.'}
           </p>
         </div>

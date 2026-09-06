@@ -34,6 +34,9 @@
   --info: #2979FF;
   --danger: #FF5252;
 
+  --dial-track-color: rgba(255, 255, 255, 0.08);
+  --dial-track-inner: rgba(255, 255, 255, 0.05);
+
   /* Gradients */
   --fit-grad-primary: linear-gradient(135deg, #00D284 0%, #00B0FF 100%);
   --fit-grad-heart: linear-gradient(135deg, #00D284 0%, #00E676 100%);
@@ -210,6 +213,9 @@
 
   --border-subtle: rgba(0, 0, 0, 0.08);
   --border-focus: #00D284;
+
+  --dial-track-color: rgba(15, 23, 42, 0.08);
+  --dial-track-inner: rgba(15, 23, 42, 0.05);
 
   --shadow-elevation-1: 0 2px 6px rgba(0, 0, 0, 0.04);
   --shadow-elevation-2: 0 8px 24px rgba(0, 0, 0, 0.07);
