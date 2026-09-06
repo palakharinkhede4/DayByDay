@@ -1,4 +1,14 @@
-// DayByDay Remote Sync Client for Vercel Cloud
+// DayByDay Remote Sync Client & Offline-First API Gateway
+
+export const isNativePlatform = () => {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    window.Capacitor?.isNativePlatform?.() ||
+    window.location.protocol === 'capacitor:' ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  );
+};
 
 export const getApiBaseUrl = () => {
   if (typeof window === 'undefined') return '';
@@ -6,12 +16,36 @@ export const getApiBaseUrl = () => {
   if (customUrl && customUrl.trim()) {
     return customUrl.trim().replace(/\/$/, '');
   }
-  // When running on web / Vercel
+  // When running on public web / Vercel
   if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost')) {
     return window.location.origin;
   }
-  return ''; // Relative path for localhost or same-origin
+  return '';
 };
+
+export const hasRemoteBackend = () => {
+  const baseUrl = getApiBaseUrl();
+  if (baseUrl) return true;
+  if (typeof window !== 'undefined' && window.location.protocol.startsWith('http') && !isNativePlatform()) {
+    return true;
+  }
+  return false;
+};
+
+// Safe JSON parser to prevent "Unexpected token <, <!doctype" fatal errors
+async function parseJsonSafe(res) {
+  const contentType = res.headers.get('content-type') || '';
+  const text = await res.text();
+  
+  if (text.trim().startsWith('<') || (!contentType.includes('application/json') && text.includes('<!DOCTYPE'))) {
+    throw new Error('Server returned an HTML document instead of JSON. Check your backend configuration.');
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('Invalid server JSON response');
+  }
+}
 
 export const checkApiHealth = async (url) => {
   const targetUrl = url ? url.trim().replace(/\/$/, '') : getApiBaseUrl();
@@ -26,7 +60,7 @@ export const checkApiHealth = async (url) => {
     clearTimeout(timeoutId);
     const latency = Date.now() - start;
     if (res.ok) {
-      const data = await res.json();
+      const data = await parseJsonSafe(res);
       return { ok: true, latency, message: data.message || 'Connected to Vercel API' };
     }
     return { ok: false, message: `Server responded with HTTP ${res.status}` };
@@ -36,25 +70,23 @@ export const checkApiHealth = async (url) => {
 };
 
 export const fetchRemotePod = async (code) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.protocol === 'capacitor:')) {
-    // No remote URL configured on native app yet
-    return null;
-  }
   try {
     const res = await fetch(`${baseUrl}/api/pod?code=${encodeURIComponent(code)}`);
     if (!res.ok) {
       if (res.status === 404) return { notFound: true };
       return null;
     }
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
-    console.warn('Sync fetch skipped (offline or server not reachable):', err.message);
+    console.warn('Pod fetch offline fallback:', err.message);
     return null;
   }
 };
 
 export const pushHabitUpdate = async (podCode, userId, habitId, value) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/pod`, {
@@ -69,7 +101,7 @@ export const pushHabitUpdate = async (podCode, userId, habitId, value) => {
       }),
     });
     if (!res.ok) return null;
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
     console.warn('Push update skipped (offline):', err.message);
     return null;
@@ -77,6 +109,7 @@ export const pushHabitUpdate = async (podCode, userId, habitId, value) => {
 };
 
 export const pushFullSync = async (podCode, userId, podInfo, habits) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/pod`, {
@@ -91,14 +124,18 @@ export const pushFullSync = async (podCode, userId, podInfo, habits) => {
       }),
     });
     if (!res.ok) return null;
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
     return null;
   }
 };
 
-// USER ACCOUNTS & PAIRING APIs
+// USER ACCOUNTS & AUTHENTICATION
 export const registerUserRemote = async (username, password, displayName, avatar, securityQuestion, securityAnswer) => {
+  if (!hasRemoteBackend()) {
+    // Offline local first
+    return null;
+  }
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -114,18 +151,21 @@ export const registerUserRemote = async (username, password, displayName, avatar
         securityAnswer,
       }),
     });
-    const data = await res.json();
+    const data = await parseJsonSafe(res);
     if (!res.ok) {
       throw new Error(data.error || 'Failed to register');
     }
     return data;
   } catch (err) {
-    console.warn('User register network fallback:', err.message);
+    console.warn('User register network notice:', err.message);
     throw err;
   }
 };
 
 export const loginUserRemote = async (username, password) => {
+  if (!hasRemoteBackend()) {
+    return null;
+  }
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -137,7 +177,7 @@ export const loginUserRemote = async (username, password) => {
         password,
       }),
     });
-    const data = await res.json();
+    const data = await parseJsonSafe(res);
     if (!res.ok) {
       throw new Error(data.error || 'Invalid username or password');
     }
@@ -148,6 +188,7 @@ export const loginUserRemote = async (username, password) => {
 };
 
 export const getSecurityQuestionRemote = async (username) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -158,7 +199,7 @@ export const getSecurityQuestionRemote = async (username) => {
         username,
       }),
     });
-    const data = await res.json();
+    const data = await parseJsonSafe(res);
     if (!res.ok) {
       throw new Error(data.error || 'User not found');
     }
@@ -169,6 +210,7 @@ export const getSecurityQuestionRemote = async (username) => {
 };
 
 export const resetPasswordRemote = async (username, securityAnswer, newPassword) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -181,7 +223,7 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
         newPassword,
       }),
     });
-    const data = await res.json();
+    const data = await parseJsonSafe(res);
     if (!res.ok) {
       throw new Error(data.error || 'Failed to reset password');
     }
@@ -192,19 +234,21 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
 };
 
 export const fetchUserRemote = async (usernameOrCode) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const isCode = usernameOrCode.includes('-');
     const param = isCode ? `code=${encodeURIComponent(usernameOrCode)}` : `username=${encodeURIComponent(usernameOrCode)}`;
     const res = await fetch(`${baseUrl}/api/user?${param}`);
     if (!res.ok) return null;
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
     return null;
   }
 };
 
 export const syncUserHabitsRemote = async (userId, habits) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -217,13 +261,14 @@ export const syncUserHabitsRemote = async (userId, habits) => {
       }),
     });
     if (!res.ok) return null;
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
     return null;
   }
 };
 
 export const pairPartnerRemote = async (userId, partnerCode) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -235,17 +280,18 @@ export const pairPartnerRemote = async (userId, partnerCode) => {
         partnerCode,
       }),
     });
+    const data = await parseJsonSafe(res);
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Partner not found');
+      throw new Error(data.error || 'Partner not found');
     }
-    return await res.json();
+    return data;
   } catch (err) {
     throw err;
   }
 };
 
 export const unpairPartnerRemote = async (userId) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -257,13 +303,14 @@ export const unpairPartnerRemote = async (userId) => {
       }),
     });
     if (!res.ok) return null;
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
     return null;
   }
 };
 
 export const deleteHabitRemote = async (userId, habitId) => {
+  if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/user`, {
@@ -276,9 +323,8 @@ export const deleteHabitRemote = async (userId, habitId) => {
       }),
     });
     if (!res.ok) return null;
-    return await res.json();
+    return await parseJsonSafe(res);
   } catch (err) {
     return null;
   }
 };
-

@@ -40,8 +40,9 @@ const INITIAL_HABITS = [
     target: 10000,
     unit: 'steps',
     icon: 'steps',
-    user1: 6200,
-    user2: 7400,
+    user1: 0,
+    user2: 0,
+    history: {},
   },
   {
     id: 'sleep',
@@ -51,10 +52,11 @@ const INITIAL_HABITS = [
     target: 8,
     unit: 'hours',
     icon: 'sleep',
-    user1: 7.2,
-    user2: 7.16,
-    user1Display: '7h 12m',
-    user2Display: '7h 10m',
+    user1: 0,
+    user2: 0,
+    user1Display: '0h',
+    user2Display: '0h',
+    history: {},
   },
   {
     id: 'meditation',
@@ -64,8 +66,9 @@ const INITIAL_HABITS = [
     target: 10,
     unit: 'min',
     icon: 'meditation',
-    user1: 10,
-    user2: 10,
+    user1: 0,
+    user2: 0,
+    history: {},
   },
   {
     id: 'water',
@@ -73,21 +76,23 @@ const INITIAL_HABITS = [
     category: 'Daily',
     description: 'Stay hydrated',
     target: 8,
-    unit: 'pints',
+    unit: 'glasses',
     icon: 'water',
-    user1: 6,
-    user2: 8,
+    user1: 0,
+    user2: 0,
+    history: {},
   },
   {
     id: 'reading',
     name: 'Reading',
     category: 'Daily',
     description: 'Pages per day or books per month',
-    target: 10,
-    unit: 'pgs',
+    target: 15,
+    unit: 'pages',
     icon: 'reading',
-    user1: 8,
-    user2: 3,
+    user1: 0,
+    user2: 0,
+    history: {},
   },
   {
     id: 'workouts',
@@ -97,44 +102,25 @@ const INITIAL_HABITS = [
     target: 30,
     unit: 'min',
     icon: 'workouts',
-    user1: 30,
-    user2: 32,
+    user1: 0,
+    user2: 0,
+    history: {},
   },
   {
     id: 'vitamins',
-    name: 'Vitamins',
+    name: 'Vitamins & Health',
     category: 'Daily',
-    description: 'Daily vitamins, AM or PM',
+    description: 'Daily wellness supplements',
     target: 1,
-    unit: 'done',
+    unit: 'check',
     icon: 'vitamins',
-    user1: true,
-    user2: true,
+    user1: false,
+    user2: false,
+    history: {},
   }
 ];
 
-const INITIAL_BEYOND = [
-  {
-    id: 'savings',
-    name: 'Savings',
-    category: 'Periodic',
-    user1: 250,
-    user2: 200,
-    target: 500,
-    unit: '$',
-    icon: 'savings'
-  },
-  {
-    id: 'weight',
-    name: 'Weight',
-    category: 'Periodic',
-    user1: 168,
-    user2: 148,
-    target: null,
-    unit: 'lbs',
-    icon: 'weight'
-  }
-];
+const INITIAL_BEYOND = [];
 
 function detectInitialOS() {
   if (typeof window === 'undefined') return 'ios';
@@ -221,27 +207,62 @@ export const HabitProvider = ({ children }) => {
   const [pod, setPod] = useState(() => {
     const saved = localStorage.getItem('daybyday_pod') || localStorage.getItem('duotrack_pod');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { }
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.yesterdayPercent === 85 || (parsed.user2 && parsed.user2.name === 'Joe')) {
+          localStorage.removeItem('daybyday_pod');
+          localStorage.removeItem('duotrack_pod');
+        } else {
+          return parsed;
+        }
+      } catch (e) { }
     }
     return {
       isPaired: false,
-      code: user ? user.secretCode : 'DBD-1000',
+      code: user ? user.secretCode : 'DAY-1000',
       user1: { name: user?.displayName || 'You', email: '', initial: (user?.displayName || 'Y')[0].toUpperCase() },
-      user2: { name: 'Partner', email: '', initial: 'P' },
-      daysTogether: 1,
-      currentStreak: 1,
-      bestStreak: 1,
-      podHealth: 90,
-      healthStatus: 'THRIVING',
-      yesterdayPercent: 85
+      user2: null,
+      daysTogether: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      podHealth: 100,
+      healthStatus: 'ACTIVE',
+      yesterdayPercent: 0
     };
+  });
+
+  // Group Pod (up to 10 users)
+  const [groupPod, setGroupPod] = useState(() => {
+    const saved = localStorage.getItem('daybyday_group_pod');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return null;
+  });
+
+  // 1-on-1 Tracked Partner
+  const [trackedPartner, setTrackedPartner] = useState(() => {
+    const saved = localStorage.getItem('daybyday_tracked_partner');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return null;
   });
 
   // Habits list
   const [habits, setHabits] = useState(() => {
     const saved = localStorage.getItem('daybyday_habits') || localStorage.getItem('duotrack_habits');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { }
+      try {
+        const parsed = JSON.parse(saved);
+        const hasLegacyMock = parsed.some((h) => (h.id === 'steps' && h.user1 === 6200) || (h.id === 'sleep' && h.user1 === 7.2));
+        if (hasLegacyMock) {
+          localStorage.removeItem('daybyday_habits');
+          localStorage.removeItem('duotrack_habits');
+          return INITIAL_HABITS;
+        }
+        return parsed;
+      } catch (e) { }
     }
     return INITIAL_HABITS;
   });
@@ -518,11 +539,12 @@ export const HabitProvider = ({ children }) => {
     return () => clearInterval(reminderTimer);
   }, [habits]);
 
-  // Register New User (Calls Neon DB backend with password & recovery security question)
-  const registerUser = async (username, password, displayName = '', avatar = 'star', securityQuestion = '', securityAnswer = '') => {
+  // Register New User (Supports remote Neon DB backend with automatic local Storage Vault fallback)
+  const registerUser = async (username, password, displayName = '', avatar = '🌱', securityQuestion = '', securityAnswer = '') => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     const cleanDisplay = displayName || cleanUsername;
+    const cleanAvatar = (!avatar || avatar === 'star') ? '🌱' : avatar;
     const prefix = cleanUsername.slice(0, 3).toUpperCase();
     const rand = Math.floor(1000 + Math.random() * 9000);
     const localSecretCode = `${prefix}-${rand}`;
@@ -532,14 +554,26 @@ export const HabitProvider = ({ children }) => {
       username: cleanUsername,
       displayName: cleanDisplay,
       secretCode: localSecretCode,
-      avatar,
+      avatar: cleanAvatar,
       createdAt: new Date().toISOString(),
     };
 
-    const res = await registerUserRemote(cleanUsername, password, cleanDisplay, avatar, securityQuestion, securityAnswer);
-    if (res && res.user) {
-      newUser = res.user;
+    try {
+      const res = await registerUserRemote(cleanUsername, password, cleanDisplay, cleanAvatar, securityQuestion, securityAnswer);
+      if (res && res.user) {
+        newUser = res.user;
+      }
+    } catch (err) {
+      console.warn('Remote sync unavailable; continuing with local-first persistent vault:', err.message);
     }
+
+    // Always store offline credential record in vault so native/offline access is instantaneous
+    localStorage.setItem(`daybyday_local_acc_${cleanUsername}`, JSON.stringify({
+      user: newUser,
+      password,
+      securityQuestion,
+      securityAnswer: (securityAnswer || '').trim().toLowerCase(),
+    }));
 
     setUser(newUser);
     setPod((prev) => ({
@@ -561,74 +595,300 @@ export const HabitProvider = ({ children }) => {
   const loginUser = async (username, password) => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
-    const res = await loginUserRemote(cleanUsername, password);
-    if (res && res.user) {
-      setUser(res.user);
-      if (res.habits && res.habits.length) {
-        setHabits(res.habits);
+
+    try {
+      const res = await loginUserRemote(cleanUsername, password);
+      if (res && res.user) {
+        setUser(res.user);
+        if (res.habits && res.habits.length) setHabits(res.habits);
+        if (res.partner) setPartner(res.partner);
+        setPod((prev) => ({
+          ...prev,
+          code: res.podCode || res.user.secretCode,
+          isPaired: Boolean(res.partner),
+          user1: {
+            name: res.user.displayName || res.user.username,
+            email: `${res.user.username}@daybyday.invalid`,
+            initial: (res.user.displayName || res.user.username)[0].toUpperCase(),
+          },
+          user2: res.partner
+            ? {
+                name: res.partner.displayName || res.partner.username,
+                email: `${res.partner.username}@daybyday.invalid`,
+                initial: (res.partner.displayName || res.partner.username)[0].toUpperCase(),
+              }
+            : null,
+        }));
+        triggerCelebration();
+        triggerIslandNotification(`Welcome back @${res.user.username}!`, '👋');
+        return res;
       }
-      if (res.partner) {
-        setPartner(res.partner);
-      }
-      setPod((prev) => ({
-        ...prev,
-        code: res.podCode || res.user.secretCode,
-        isPaired: Boolean(res.partner),
-        user1: {
-          name: res.user.displayName || res.user.username,
-          email: `${res.user.username}@daybyday.invalid`,
-          initial: (res.user.displayName || res.user.username)[0].toUpperCase(),
-        },
-        user2: res.partner
-          ? {
-              name: res.partner.displayName || res.partner.username,
-              email: `${res.partner.username}@daybyday.invalid`,
-              initial: (res.partner.displayName || res.partner.username)[0].toUpperCase(),
-            }
-          : prev.user2,
-      }));
-      triggerCelebration();
-      triggerIslandNotification(`Welcome back @${res.user.username}!`, '👋');
-      return res;
+    } catch (err) {
+      console.warn('Remote login unavailable, attempting local vault fallback:', err.message);
     }
+
+    // Local Vault Fallback
+    const localAcc = localStorage.getItem(`daybyday_local_acc_${cleanUsername}`);
+    if (localAcc) {
+      try {
+        const parsed = JSON.parse(localAcc);
+        if (parsed.password === password) {
+          setUser(parsed.user);
+          triggerCelebration();
+          triggerIslandNotification(`Welcome back @${parsed.user.username}!`, '👋');
+          return { user: parsed.user };
+        } else {
+          throw new Error('Incorrect password');
+        }
+      } catch (e) {
+        if (e.message === 'Incorrect password') throw e;
+      }
+    }
+    throw new Error('Account not found or password incorrect');
   };
 
   // Get Security Question for User
   const getSecurityQuestion = async (username) => {
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
-    return await getSecurityQuestionRemote(cleanUsername);
+    try {
+      const remoteQ = await getSecurityQuestionRemote(cleanUsername);
+      if (remoteQ && remoteQ.securityQuestion) return remoteQ;
+    } catch { }
+
+    const localAcc = localStorage.getItem(`daybyday_local_acc_${cleanUsername}`);
+    if (localAcc) {
+      const parsed = JSON.parse(localAcc);
+      if (parsed.securityQuestion) return { securityQuestion: parsed.securityQuestion };
+    }
+    throw new Error('User not found');
   };
 
   // Reset Password with Security Answer
   const resetPassword = async (username, securityAnswer, newPassword) => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
-    const res = await resetPasswordRemote(cleanUsername, securityAnswer, newPassword);
+    try {
+      await resetPasswordRemote(cleanUsername, securityAnswer, newPassword);
+    } catch { }
+
+    const localAcc = localStorage.getItem(`daybyday_local_acc_${cleanUsername}`);
+    if (localAcc) {
+      const parsed = JSON.parse(localAcc);
+      if (parsed.securityAnswer === (securityAnswer || '').trim().toLowerCase()) {
+        parsed.password = newPassword;
+        localStorage.setItem(`daybyday_local_acc_${cleanUsername}`, JSON.stringify(parsed));
+      } else {
+        throw new Error('Security answer does not match');
+      }
+    }
     triggerIslandNotification('Password reset successfully!', '🔑');
-    return res;
+    return { ok: true };
   };
 
-  // Logout / Switch Account: EXPLICIT user sign-out clears localStorage and IndexedDB Vault
+  // Logout / Switch Account
   const logoutUser = async () => {
     sound.tap();
     setUser(null);
     setPartner(null);
+    setTrackedPartner(null);
+    setGroupPod(null);
     setHabits(INITIAL_HABITS);
     setBeyondGoals(INITIAL_BEYOND);
     setPod({
       isPaired: false,
-      code: 'DBD-1000',
+      code: 'DAY-1000',
       user1: { name: 'You', email: '', initial: 'Y' },
-      user2: { name: 'Partner', email: '', initial: 'P' },
-      daysTogether: 1,
-      currentStreak: 1,
-      bestStreak: 1,
-      podHealth: 90,
-      healthStatus: 'THRIVING',
-      yesterdayPercent: 85
+      user2: null,
+      daysTogether: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      podHealth: 100,
+      healthStatus: 'ACTIVE',
+      yesterdayPercent: 0
     });
+    localStorage.removeItem('daybyday_tracked_partner');
+    localStorage.removeItem('daybyday_group_pod');
     await clearVaultSession();
     triggerIslandNotification('Logged out', '👤');
+  };
+
+  // 1-on-1 Track Partner by Secret Code
+  const trackPartnerByCode = async (code) => {
+    if (!code || !code.trim()) throw new Error('Please enter a valid secret code');
+    sound.complete();
+    const cleanCode = code.trim().toUpperCase();
+
+    let partnerData = null;
+    try {
+      const remote = await fetchUserRemote(cleanCode);
+      if (remote && remote.user) {
+        partnerData = {
+          ...remote.user,
+          habits: remote.habits || [],
+          streak: remote.streak || 1,
+          todayPercent: remote.todayPercent || 0,
+          lastActive: 'Just now'
+        };
+      }
+    } catch { }
+
+    if (!partnerData) {
+      // Create a clean tracked profile for this code
+      const namePart = cleanCode.split('-')[0] || 'Partner';
+      partnerData = {
+        username: namePart.toLowerCase(),
+        displayName: namePart,
+        secretCode: cleanCode,
+        avatar: '🏃',
+        todayPercent: 0,
+        streak: 0,
+        lastActive: 'Active today',
+        habits: [
+          { id: 'steps', name: 'Steps', target: 10000, user1: 0, unit: 'steps' },
+          { id: 'water', name: 'Water', target: 8, user1: 0, unit: 'glasses' },
+          { id: 'sleep', name: 'Sleep', target: 8, user1: 0, unit: 'hours' },
+        ]
+      };
+    }
+
+    setTrackedPartner(partnerData);
+    localStorage.setItem('daybyday_tracked_partner', JSON.stringify(partnerData));
+    triggerCelebration();
+    triggerIslandNotification(`Tracking @${partnerData.username}!`, '🎯');
+    return partnerData;
+  };
+
+  const untrackPartner = () => {
+    sound.tap();
+    setTrackedPartner(null);
+    localStorage.removeItem('daybyday_tracked_partner');
+    triggerIslandNotification('Stopped tracking partner', '👋');
+  };
+
+  // Group Pod (up to 10 users)
+  const createGroupPod = (name) => {
+    sound.complete();
+    const cleanName = (name || 'Focus Group').trim();
+    const podCode = `POD-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newPod = {
+      id: `gpod_${Date.now().toString(36)}`,
+      name: cleanName,
+      code: podCode,
+      createdAt: new Date().toISOString(),
+      maxMembers: 10,
+      members: [
+        {
+          id: user?.id || 'usr_me',
+          username: user?.username || 'you',
+          displayName: user?.displayName || 'You',
+          avatar: user?.avatar || '🌱',
+          role: 'Owner',
+          todayPercent: currentPercent,
+          streak: pod.currentStreak || 0,
+        }
+      ],
+      sharedGoals: [
+        { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
+        { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
+      ]
+    };
+
+    setGroupPod(newPod);
+    localStorage.setItem('daybyday_group_pod', JSON.stringify(newPod));
+    triggerCelebration();
+    triggerIslandNotification(`Group ${cleanName} created!`, '👥');
+    return newPod;
+  };
+
+  const joinGroupPod = (code) => {
+    sound.complete();
+    const cleanCode = (code || '').trim().toUpperCase();
+    if (!cleanCode.startsWith('POD-')) throw new Error('Invalid Pod Code format. Must start with POD-');
+
+    // Create or join pod
+    let existing = null;
+    const saved = localStorage.getItem('daybyday_group_pod');
+    if (saved) {
+      try { existing = JSON.parse(saved); } catch { }
+    }
+
+    const podToJoin = (existing && existing.code === cleanCode) ? existing : {
+      id: `gpod_${cleanCode.toLowerCase()}`,
+      name: 'Accountability Pod',
+      code: cleanCode,
+      createdAt: new Date().toISOString(),
+      maxMembers: 10,
+      members: [
+        { id: 'usr_leader', username: 'alex', displayName: 'Alex', avatar: '⚡', role: 'Owner', todayPercent: 70, streak: 5 }
+      ],
+      sharedGoals: [
+        { id: 'sg_steps', name: 'Team 10k Steps', target: 10000, unit: 'steps', current: 0 },
+        { id: 'sg_water', name: 'Daily Hydration', target: 8, unit: 'glasses', current: 0 },
+      ]
+    };
+
+    if (podToJoin.members.length >= 10 && !podToJoin.members.some(m => m.username === user?.username)) {
+      throw new Error('This pod has reached the maximum capacity of 10 members.');
+    }
+
+    if (!podToJoin.members.some(m => m.username === user?.username)) {
+      podToJoin.members.push({
+        id: user?.id || 'usr_me',
+        username: user?.username || 'you',
+        displayName: user?.displayName || 'You',
+        avatar: user?.avatar || '🌱',
+        role: 'Member',
+        todayPercent: currentPercent,
+        streak: pod.currentStreak || 0,
+      });
+    }
+
+    setGroupPod(podToJoin);
+    localStorage.setItem('daybyday_group_pod', JSON.stringify(podToJoin));
+    triggerCelebration();
+    triggerIslandNotification(`Joined Pod ${cleanCode}!`, '🎉');
+    return podToJoin;
+  };
+
+  const leaveGroupPod = () => {
+    sound.tap();
+    setGroupPod(null);
+    localStorage.removeItem('daybyday_group_pod');
+    triggerIslandNotification('Left group pod', '👋');
+  };
+
+  const addSharedGoal = (name, target, unit) => {
+    sound.complete();
+    if (!groupPod) return;
+    const newGoal = {
+      id: `sg_${Date.now().toString(36)}`,
+      name: name.trim(),
+      target: Number(target) || 1,
+      unit: (unit || 'reps').trim(),
+      current: 0,
+    };
+    const updated = {
+      ...groupPod,
+      sharedGoals: [...(groupPod.sharedGoals || []), newGoal]
+    };
+    setGroupPod(updated);
+    localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
+    triggerIslandNotification(`Shared goal added!`, '✨');
+  };
+
+  const updateSharedGoalProgress = (goalId, delta) => {
+    sound.tap();
+    if (!groupPod) return;
+    const updatedGoals = (groupPod.sharedGoals || []).map(g => {
+      if (g.id === goalId) {
+        const next = Math.max(0, (g.current || 0) + delta);
+        return { ...g, current: next };
+      }
+      return g;
+    });
+    const updated = { ...groupPod, sharedGoals: updatedGoals };
+    setGroupPod(updated);
+    localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
   };
 
 
@@ -1036,6 +1296,15 @@ export const HabitProvider = ({ children }) => {
         requestNotificationPermission,
         exportData,
         resetAllData,
+        trackedPartner,
+        trackPartnerByCode,
+        untrackPartner,
+        groupPod,
+        createGroupPod,
+        joinGroupPod,
+        leaveGroupPod,
+        addSharedGoal,
+        updateSharedGoalProgress,
         serverUrl,
         setServerUrl,
         syncStatus,

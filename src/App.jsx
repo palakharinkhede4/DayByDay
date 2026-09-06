@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { HabitProvider } from './context/HabitContext';
 import { AppLayout } from './components/AppLayout';
+import { MyHabitsScreen } from './screens/MyHabitsScreen';
+import { TrackScreen } from './screens/TrackScreen';
 import { TogetherScreen } from './screens/TogetherScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
-import { WidgetsScreen } from './screens/WidgetsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNavBar } from './components/BottomNavBar';
 import { PairingModal } from './components/PairingModal';
@@ -12,7 +13,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { IOSInstallBanner } from './components/IOSInstallBanner';
 
 const MainAppContent = () => {
-  const [activeTab, setActiveTab] = useState('together');
+  const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
 
@@ -25,20 +26,20 @@ const MainAppContent = () => {
       <AppLayout
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onOpenPairing={() => setIsPairingOpen(true)}
         onOpenAddGoal={() => setIsAddGoalOpen(true)}
       >
-        {activeTab === 'together' && (
-          <TogetherScreen
+        {activeTab === 'habits' && (
+          <MyHabitsScreen
             onOpenSettings={() => setActiveTab('settings')}
             onOpenAddGoal={() => setIsAddGoalOpen(true)}
-            onOpenPairing={() => setIsPairingOpen(true)}
           />
         )}
 
-        {activeTab === 'insights' && <InsightsScreen />}
+        {activeTab === 'track' && <TrackScreen />}
 
-        {activeTab === 'widgets' && <WidgetsScreen />}
+        {activeTab === 'together' && <TogetherScreen />}
+
+        {activeTab === 'insights' && <InsightsScreen />}
 
         {activeTab === 'settings' && (
           <SettingsScreen

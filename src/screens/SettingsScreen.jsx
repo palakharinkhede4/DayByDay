@@ -99,29 +99,39 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
       {/* USER PROFILE CARD */}
       <div className="profile-card">
-        <div className="profile-avatar-circle">
-          <span>{user?.avatar || '🌱'}</span>
+        <div className="profile-avatar-circle font-extrabold">
+          <span>{(!user?.avatar || user?.avatar === 'star') ? (user?.displayName || user?.username || 'U')[0].toUpperCase() : user.avatar}</span>
         </div>
         <div className="profile-info">
           <h2 className="profile-name font-bold">
             {user ? (user.displayName || `@${user.username}`) : 'Anonymous User'}
           </h2>
-          <span className="profile-email">
+          <span className="profile-email font-mono">
             {user ? `@${user.username}` : 'No username set'}
           </span>
         </div>
         {user && (
           <div className="profile-actions-row">
-            <button className="copy-secret-chip" onClick={handleCopyCode}>
-              <span>Code: {user.secretCode}</span>
-              <span className="chip-copy-txt">{copiedCode ? 'Copied! ✓' : 'Copy'}</span>
-            </button>
-            <button className="signout-profile-btn" onClick={logoutUser} title="Sign Out / Switch Account">
+            <button className="signout-profile-btn font-medium" onClick={logoutUser} title="Sign Out / Switch Account">
               Sign Out
             </button>
           </div>
         )}
       </div>
+
+      {/* PROMINENT SECRET CODE CARD */}
+      {user && (
+        <div className="secret-code-settings-card">
+          <div className="code-card-left">
+            <span className="code-card-title font-bold">Your Secret Code</span>
+            <p className="code-card-hint">Share this code with a partner to let them track your habits or pair up.</p>
+            <span className="code-card-val font-mono font-black">{user.secretCode}</span>
+          </div>
+          <button className="code-card-copy-btn font-bold" onClick={handleCopyCode}>
+            <span>{copiedCode ? 'Copied! ✓' : 'Copy Code'}</span>
+          </button>
+        </div>
+      )}
 
       {/* SECTION: ACCOUNTABILITY / PARTNER */}
       <div className="settings-group">

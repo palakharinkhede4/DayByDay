@@ -1,40 +1,62 @@
 import React, { useState } from 'react';
 import { useHabits } from '../context/HabitContext';
+import { Copy, Check, Share2, X, Users, ArrowRight } from 'lucide-react';
 
 export const PairingModal = ({ isOpen, onClose }) => {
-  const { pod, pairPod, leavePod } = useHabits();
+  const { pod, user, pairWithPartner } = useHabits();
   const [inputCode, setInputCode] = useState('');
   const [copied, setCopied] = useState(false);
-  const [partnerInviteActive, setPartnerInviteActive] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleShare = async () => {
+  const myCode = user?.secretCode || pod?.code || 'DAY-1000';
+
+  const handleCopy = async () => {
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'Join my DayByDay Habit Pod!',
-          text: `Use my Pod code ${pod.code} to pair up and track habits together!`,
-          url: window.location.href,
-        });
-      } else {
-        await navigator.clipboard.writeText(pod.code);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(myCode);
       }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      await navigator.clipboard.writeText(pod.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const handleJoin = (e) => {
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Pair with me on DayByDay',
+          text: `Here is my DayByDay secret code: ${myCode}. Connect with me to track habits together!`,
+          url: window.location.href,
+        });
+      } else {
+        await handleCopy();
+      }
+    } catch {
+      await handleCopy();
+    }
+  };
+
+  const handleJoin = async (e) => {
     e.preventDefault();
-    if (inputCode.trim().length >= 4) {
-      pairPod(inputCode.trim().toUpperCase(), 'Joe');
+    const clean = inputCode.trim().toUpperCase();
+    if (clean.length < 4) return;
+    setError('');
+    setLoading(true);
+
+    try {
+      await pairWithPartner(clean);
       setInputCode('');
       onClose();
+    } catch (err) {
+      setError(err.message || 'Could not connect with partner. Check the code and try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,70 +67,56 @@ export const PairingModal = ({ isOpen, onClose }) => {
 
         <div className="modal-header">
           <div className="modal-title-wrap">
-            <span className="modal-pill-tag">Pair up to start</span>
-            <h2 className="modal-title">Your Pod Code</h2>
+            <span className="modal-pill-tag">Accountability Sync</span>
+            <h2 className="modal-title">Pair With Partner</h2>
           </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            ✕
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
+            <X size={18} />
           </button>
         </div>
 
-        {/* Big Pod Code Card (from video) */}
+        {/* My Secret Code Card */}
         <div className="pod-code-box">
-          <span className="code-eyebrow">POD ACCESS KEY</span>
-          <div className="code-display font-bold">{pod.code}</div>
+          <span className="code-eyebrow">YOUR SECRET CODE</span>
+          <div className="code-display font-bold">{myCode}</div>
           <p className="code-instructions">
-            Share this code with your partner. They'll enter it on their device to pair up.
+            Share this secret code with your accountability partner. They enter it on their device to connect with you.
           </p>
 
-          <button className="share-code-btn" onClick={handleShare}>
-            <span className="btn-icon">🔗</span>
-            <span>{copied ? 'Code Copied! ✓' : 'Share Code'}</span>
-          </button>
+          <div className="code-actions-row">
+            <button className="share-code-btn" onClick={handleShare}>
+              <Share2 size={16} />
+              <span>Share Code</span>
+            </button>
+            <button className="copy-code-btn" onClick={handleCopy}>
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Enter partner's code */}
         <div className="join-pod-section">
           <h3 className="section-label">Enter Partner's Code</h3>
+          {error && <div className="partner-error-banner">{error}</div>}
           <form onSubmit={handleJoin} className="code-input-form">
             <input
               type="text"
-              placeholder="e.g. ZAU8PP"
+              placeholder="e.g. PAL-4788"
               value={inputCode}
               onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-              maxLength={8}
+              maxLength={12}
               className="pod-code-input font-bold"
             />
             <button
               type="submit"
-              disabled={inputCode.trim().length < 4}
+              disabled={loading || inputCode.trim().length < 4}
               className="join-btn"
             >
-              Join
+              {loading ? 'Connecting...' : 'Connect'}
+              <ArrowRight size={16} />
             </button>
           </form>
-        </div>
-
-        {/* Mock Invite Notification banner (as shown in video) */}
-        <div className="mock-invite-callout">
-          <div className="invite-callout-header">
-            <span className="avatar-chip">J</span>
-            <div>
-              <span className="invite-name font-bold">Joe invited you!</span>
-              <p className="invite-desc">Join their pod and start tracking goals together</p>
-            </div>
-          </div>
-          <div className="invite-actions">
-            <button
-              className="accept-invite-btn"
-              onClick={() => {
-                pairPod('ZAU8PP', 'Joe');
-                onClose();
-              }}
-            >
-              Accept & Connect
-            </button>
-          </div>
         </div>
 
         <button className="done-link-btn" onClick={onClose}>

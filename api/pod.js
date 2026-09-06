@@ -67,34 +67,6 @@ export default async function handler(req, res) {
     const podKey = `pod_${cleanCode}`;
     let podData = await getKV(podKey);
 
-    // Auto-seed default initial pod for ZAU8PP so testing works immediately
-    if (!podData && cleanCode === 'ZAU8PP') {
-      podData = {
-        code: 'ZAU8PP',
-        isPaired: true,
-        user1: { name: 'Ced', email: 'ced@example.invalid', initial: 'C' },
-        user2: { name: 'Joe', email: 'joe@example.invalid', initial: 'J' },
-        daysTogether: 12,
-        currentStreak: 12,
-        bestStreak: 18,
-        podHealth: 86,
-        healthStatus: 'THRIVING',
-        yesterdayPercent: 87,
-        lastUpdated: Date.now(),
-        lastUpdatedBy: 'system',
-        habits: [
-          { id: 'steps', name: 'Steps', target: 10000, unit: 'steps', user1: 2200, user2: 7400 },
-          { id: 'sleep', name: 'Sleep', target: 8, unit: 'hours', user1: 6.0, user2: 7.16, user1Display: '6h', user2Display: '7h 10m' },
-          { id: 'meditation', name: 'Meditation', target: 10, unit: 'min', user1: 5, user2: 10 },
-          { id: 'water', name: 'Water', target: 8, unit: 'pints', user1: 5, user2: 8 },
-          { id: 'reading', name: 'Reading', target: 10, unit: 'pgs', user1: 5, user2: 3 },
-          { id: 'workouts', name: 'Workouts', target: 30, unit: 'min', user1: 0, user2: 32 },
-          { id: 'vitamins', name: 'Vitamins', target: 1, unit: 'done', user1: false, user2: true }
-        ]
-      };
-      await setKV(podKey, podData);
-    }
-
     if (!podData) {
       return res.status(404).json({ error: 'Pod not found', notFound: true });
     }
@@ -105,19 +77,22 @@ export default async function handler(req, res) {
   // 2. POST UPDATE OR CREATE POD
   if (req.method === 'POST') {
     const { action, podCode, userId, habitId, value, podInfo, habits } = req.body || {};
-    const cleanCode = (podCode || code || 'ZAU8PP').toUpperCase();
+    const cleanCode = (podCode || code || '').toUpperCase();
+    if (!cleanCode) {
+      return res.status(400).json({ error: 'Pod code is required' });
+    }
     const podKey = `pod_${cleanCode}`;
 
     let currentPod = (await getKV(podKey)) || {
       code: cleanCode,
-      user1: { name: 'Ced', email: 'ced@example.invalid', initial: 'C' },
-      user2: { name: 'Joe', email: 'joe@example.invalid', initial: 'J' },
-      daysTogether: 12,
-      currentStreak: 12,
-      bestStreak: 18,
-      podHealth: 86,
-      healthStatus: 'THRIVING',
-      yesterdayPercent: 87,
+      user1: podInfo?.user1 || { name: 'You', email: '', initial: 'Y' },
+      user2: podInfo?.user2 || null,
+      daysTogether: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      podHealth: 100,
+      healthStatus: 'ACTIVE',
+      yesterdayPercent: 0,
       habits: habits || [],
       lastUpdated: Date.now(),
       lastUpdatedBy: userId || 'user1',
