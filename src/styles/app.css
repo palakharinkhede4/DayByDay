@@ -5018,6 +5018,29 @@ button:active {
   letter-spacing: -0.04em;
 }
 
+.radial-ring-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0.35rem;
+}
+
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.legend-dot.green {
+  background: var(--user1-color, #00D284);
+  box-shadow: 0 0 6px var(--user1-color, #00D284);
+}
+
+.legend-dot.blue {
+  background: var(--user2-color, #2979FF);
+  box-shadow: 0 0 6px var(--user2-color, #2979FF);
+}
+
 .radial-label-sub {
   font-size: 0.68rem;
   font-weight: 800;

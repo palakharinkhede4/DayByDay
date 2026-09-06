@@ -7,6 +7,8 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
     user,
     habits,
     currentPercent,
+    partnerPercent,
+    isSolo,
     pod,
   } = useHabits();
 
@@ -25,10 +27,19 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
     return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
   }, []);
 
-  // Arc math for sharp SVG gauge (240-degree open gauge)
-  const radius = 68;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (currentPercent / 100) * circumference;
+  // Dual Concentric Rings (Inspired by Google Fit Activity Rings)
+  // Outer Ring: Daily Habit Completion (Heart Points Emerald)
+  const outerRadius = 68;
+  const outerCircumference = 2 * Math.PI * outerRadius;
+  const outerOffset = outerCircumference - (Math.min(100, Math.max(0, currentPercent)) / 100) * outerCircumference;
+
+  // Inner Ring: Partner Sync or 7-Day Consistency Momentum (Move Minutes Electric Blue)
+  const innerRadius = 53;
+  const innerCircumference = 2 * Math.PI * innerRadius;
+  const innerPercent = isSolo
+    ? Math.min(100, Math.max(pod.currentStreak > 0 ? 20 : 0, Math.round(((pod.currentStreak || 0) / 7) * 100)))
+    : (partnerPercent || 0);
+  const innerOffset = innerCircumference - (Math.min(100, Math.max(0, innerPercent)) / 100) * innerCircumference;
 
   return (
     <div className="modern-header-dial">
@@ -56,40 +67,72 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
         </div>
       </div>
 
-      {/* Crisp Circular / Radial Progress Dial */}
+      {/* Crisp Concentric Circular Progress Dial (Google Fit Athletic Style) */}
       <div className="radial-gauge-container">
         <div className="radial-svg-wrap">
           <svg className="radial-progress-svg" viewBox="0 0 160 160" width="160" height="160">
             <defs>
-              <linearGradient id="dialProgressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#10B981" />
-                <stop offset="100%" stopColor="#06B6D4" />
+              {/* Outer Ring Gradient (Emerald / Heart Points) */}
+              <linearGradient id="dialOuterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="var(--user1-color, #00D284)" />
+                <stop offset="100%" stopColor="var(--user1-light, #69F0AE)" />
+              </linearGradient>
+              {/* Inner Ring Gradient (Electric Blue / Move Momentum) */}
+              <linearGradient id="dialInnerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="var(--user2-color, #2979FF)" />
+                <stop offset="100%" stopColor="var(--user2-light, #82B1FF)" />
               </linearGradient>
             </defs>
 
-            {/* Background Circle */}
+            {/* Outer Background Track */}
             <circle
               className="radial-bg-circle"
               cx="80"
               cy="80"
-              r={radius}
+              r={outerRadius}
               fill="none"
-              stroke="var(--dial-track-color, rgba(148, 163, 184, 0.15))"
-              strokeWidth="10"
+              stroke="var(--dial-track-color, rgba(255, 255, 255, 0.08))"
+              strokeWidth="8.5"
             />
 
-            {/* Foreground Progress Circle */}
+            {/* Outer Foreground Progress Circle (Habits) */}
             <circle
-              className="radial-fill-circle"
+              className="radial-fill-circle outer-ring"
               cx="80"
               cy="80"
-              r={radius}
+              r={outerRadius}
               fill="none"
-              stroke="url(#dialProgressGrad)"
-              strokeWidth="10"
+              stroke="url(#dialOuterGrad)"
+              strokeWidth="8.5"
               strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
+              strokeDasharray={outerCircumference}
+              strokeDashoffset={outerOffset}
+              transform="rotate(-90 80 80)"
+            />
+
+            {/* Inner Background Track */}
+            <circle
+              className="radial-bg-circle inner-track"
+              cx="80"
+              cy="80"
+              r={innerRadius}
+              fill="none"
+              stroke="var(--dial-track-color, rgba(255, 255, 255, 0.06))"
+              strokeWidth="8.5"
+            />
+
+            {/* Inner Foreground Progress Circle (Momentum / Partner) */}
+            <circle
+              className="radial-fill-circle inner-ring"
+              cx="80"
+              cy="80"
+              r={innerRadius}
+              fill="none"
+              stroke="url(#dialInnerGrad)"
+              strokeWidth="8.5"
+              strokeLinecap="round"
+              strokeDasharray={innerCircumference}
+              strokeDashoffset={innerOffset}
               transform="rotate(-90 80 80)"
             />
           </svg>
@@ -97,7 +140,10 @@ export const HeaderDial = ({ onOpenSettings, onOpenAddGoal }) => {
           {/* Center Readout */}
           <div className="radial-center-stats">
             <span className="radial-percent-val font-extrabold">{currentPercent}%</span>
-            <span className="radial-label-sub">TODAY</span>
+            <div className="radial-ring-legend">
+              <span className="legend-dot green" title="Your daily habits"></span>
+              <span className="legend-dot blue" title="Streak & momentum"></span>
+            </div>
           </div>
         </div>
 

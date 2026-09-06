@@ -32,6 +32,9 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     setThemeColor,
     themeMode,
     setThemeMode,
+    osMode,
+    useMaterial3Theme,
+    setUseMaterial3Theme,
     habits,
     removeGoal,
     exportData,
@@ -63,10 +66,11 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   };
 
   const themeOptions = [
+    { id: 'fit', label: 'Activity Focus (Mint & Electric Blue)', c1: '#00D284', c2: '#2979FF' },
     { id: 'emerald', label: 'Mint & Coral', c1: '#10B981', c2: '#F43F5E' },
     { id: 'ocean', label: 'Cyan & Amber', c1: '#06B6D4', c2: '#F59E0B' },
-    { id: 'violet', label: 'Violet & Emerald', c1: '#8B5CF6', c2: '#10B981' },
-    { id: 'sunset', label: 'Sunset & Pink', c1: '#F97316', c2: '#EC4899' },
+    { id: 'violet', label: 'Violet & Mint', c1: '#8B5CF6', c2: '#00D284' },
+    { id: 'sunset', label: 'Sunset & Crimson', c1: '#F97316', c2: '#FF5252' },
   ];
 
   const userInitial = (user?.displayName || user?.username || 'U')[0].toUpperCase();
@@ -233,6 +237,27 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               ))}
             </div>
           </div>
+
+          {/* MATERIAL 3 DYNAMIC COLOR SYSTEM (Android App / OS) */}
+          {(osMode === 'android' || Boolean(window.Capacitor?.isNativePlatform?.()) || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent))) && (
+            <div className="settings-row-item">
+              <div className="row-left">
+                <Palette size={18} className="text-teal-400" />
+                <div>
+                  <span className="row-title">Material 3 Color Scheme</span>
+                  <span className="row-hint">Android Material You expressive tonal color system</span>
+                </div>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={useMaterial3Theme}
+                  onChange={(e) => setUseMaterial3Theme(e.target.checked)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          )}
         </div>
       </div>
 

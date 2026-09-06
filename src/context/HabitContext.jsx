@@ -196,7 +196,29 @@ export const HabitProvider = ({ children }) => {
 
   // 4. OS Engine ('ios' | 'android')
   const [osMode, setOsMode] = useState(() => detectInitialOS());
-  const [themeColor, setThemeColor] = useState(() => localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme') || 'emerald');
+  const [themeColor, setThemeColor] = useState(() => localStorage.getItem('daybyday_theme') || localStorage.getItem('duotrack_theme') || 'fit');
+
+  // Material 3 Dynamic Theme Toggle (Android Expressive - Off by default)
+  const [useMaterial3Theme, setUseMaterial3ThemeState] = useState(() => {
+    try {
+      return localStorage.getItem('daybyday_material3') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const setUseMaterial3Theme = (enabled) => {
+    const val = Boolean(enabled);
+    setUseMaterial3ThemeState(val);
+    try {
+      localStorage.setItem('daybyday_material3', String(val));
+    } catch {}
+    if (val) {
+      document.documentElement.setAttribute('data-theme-m3', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-theme-m3');
+    }
+  };
 
   // Active User role in current view ('user1' = You, 'user2' = Partner)
   const [activeUserId, setActiveUserId] = useState('user1');
@@ -365,6 +387,14 @@ export const HabitProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('daybyday_beyond', JSON.stringify(beyondGoals));
   }, [beyondGoals]);
+
+  useEffect(() => {
+    if (useMaterial3Theme) {
+      document.documentElement.setAttribute('data-theme-m3', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-theme-m3');
+    }
+  }, [useMaterial3Theme]);
 
   // Persistent Storage Vault initialization (iOS Safari ITP protection & Android WebView recovery)
   useEffect(() => {
@@ -1267,6 +1297,8 @@ export const HabitProvider = ({ children }) => {
         setOsMode,
         themeColor,
         setThemeColor,
+        useMaterial3Theme,
+        setUseMaterial3Theme,
         activeUserId,
         setActiveUserId,
         pod,
