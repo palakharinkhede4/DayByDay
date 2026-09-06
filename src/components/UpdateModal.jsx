@@ -1,5 +1,5 @@
-import React from 'react';
-import { Sparkles, Download, ExternalLink, X, CheckCircle2, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles, Download, ExternalLink, X, CheckCircle2, RefreshCw, Copy, Check, Info } from 'lucide-react';
 import { openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL } from '../utils/updateChecker';
 import { sound } from '../utils/sound';
 
@@ -7,6 +7,31 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
   if (!isOpen) return null;
 
   const isUpdate = updateInfo?.updateAvailable;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = async () => {
+    sound.tap();
+    const url = updateInfo?.directApkUrl || DIRECT_APK_URL;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Non-blocking fallback
+    }
+  };
 
   return (
     <div className="update-modal-backdrop" onClick={onClose}>
@@ -34,7 +59,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
               ? 'Connecting to GitHub Releases to check for the latest DayByDay build...'
               : isUpdate
               ? `A new version (${updateInfo?.releaseTag || 'Latest'}) of DayByDay is ready for you.`
-              : `You are on the latest build (${updateInfo?.currentVersion || 'v1.8.0'}).`}
+              : `You are on the latest build (${updateInfo?.currentVersion || 'v1.12.0'}).`}
           </p>
         </div>
 
@@ -68,6 +93,19 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
           </div>
         )}
 
+        {/* Chrome Mobile Download Tip Box */}
+        {isUpdate && (
+          <div className="update-tip-box">
+            <div className="update-tip-header">
+              <Info size={15} className="update-tip-icon" />
+              <span className="update-tip-title">Mobile Chrome Download Tip</span>
+            </div>
+            <p className="update-tip-text">
+              If Chrome pauses the download or says <em>"File might be harmful"</em>, pull down your notification tray and tap <strong>"Download anyway"</strong>. Or tap <strong>Copy Direct Link</strong> below and download smoothly in Brave or Firefox.
+            </p>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="update-modal-actions">
           {isUpdate && (
@@ -82,6 +120,17 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
             >
               <Download size={18} />
               <span>Download & Install APK</span>
+            </button>
+          )}
+
+          {isUpdate && (
+            <button
+              type="button"
+              className="update-action-btn secondary font-medium"
+              onClick={handleCopyLink}
+            >
+              {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+              <span>{copied ? 'Direct Link Copied!' : 'Copy Direct Download Link'}</span>
             </button>
           )}
 

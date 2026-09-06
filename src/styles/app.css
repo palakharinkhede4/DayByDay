@@ -7855,6 +7855,56 @@ button:active {
   text-align: right;
 }
 
+.update-tip-box {
+  background: rgba(0, 210, 132, 0.06);
+  border: 1px solid rgba(0, 210, 132, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+[data-theme-mode="light"] .update-tip-box {
+  background: rgba(0, 191, 118, 0.08);
+  border: 1px solid rgba(0, 191, 118, 0.25);
+}
+
+.update-tip-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.update-tip-icon {
+  color: var(--primary, #00D284);
+  flex-shrink: 0;
+}
+
+.update-tip-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary, #00D284);
+  letter-spacing: 0.02em;
+}
+
+.update-tip-text {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.update-tip-text strong {
+  color: var(--text-primary);
+}
+
+.update-tip-text em {
+  font-style: normal;
+  color: #fbbf24;
+}
+
 .update-modal-actions {
   display: flex;
   flex-direction: column;
