@@ -104,16 +104,16 @@ export const TrackScreen = () => {
       (myCode && partnerCode && String(partnerCode).toUpperCase() === String(myCode).toUpperCase());
 
     if (isMe) {
-      triggerIslandNotification?.('You cannot cheer yourself! 😅', 'info');
+      triggerIslandNotification?.('You cannot cheer yourself', 'info');
       return;
     }
 
     sound.complete();
-    const msg = customMessage || 'Keep crushing your goals! 🔥';
+    const msg = customMessage || 'Keep crushing your daily goals';
     sendCheer(partnerCode, msg);
     setCheerSent(true);
     triggerCelebration();
-    triggerIslandNotification(`Cheer sent to @${trackedPartner.username}! 🚀`, 'check');
+    triggerIslandNotification(`Cheer sent to @${trackedPartner.username}`, 'check');
     setTimeout(() => setCheerSent(false), 3000);
   };
 
@@ -384,45 +384,51 @@ export const TrackScreen = () => {
              (myCode && (trackedPartner.secretCode || trackedPartner.secret_code) && String(trackedPartner.secretCode || trackedPartner.secret_code).toUpperCase() === String(myCode).toUpperCase())) && (
             <div className="partner-cheer-section">
               <div className="cheer-title-row">
-                <Rocket size={16} className="text-amber-400" />
+                <Flame size={16} className="text-amber-400" />
                 <span className="cheer-title font-bold">Send Daily Encouragement</span>
               </div>
 
               <div className="cheer-presets-row">
                 <button
+                  type="button"
                   className="cheer-preset-chip"
-                  onClick={() => handleSendCheer('Keep crushing your streak! 🔥')}
+                  onClick={() => handleSendCheer('Keep crushing your daily streak')}
                 >
-                  🔥 Keep Crushing It
+                  <Flame size={14} className="text-amber-400" />
+                  <span>Keep Crushing It</span>
                 </button>
                 <button
+                  type="button"
                   className="cheer-preset-chip"
-                  onClick={() => handleSendCheer('Proud of your consistency! 💪')}
+                  onClick={() => handleSendCheer('Proud of your consistency')}
                 >
-                  💪 Proud of You
+                  <Award size={14} className="text-indigo-400" />
+                  <span>Proud of You</span>
                 </button>
                 <button
+                  type="button"
                   className="cheer-preset-chip"
-                  onClick={() => handleSendCheer('Almost there, finish strong! ⚡')}
+                  onClick={() => handleSendCheer('Almost there, finish strong today')}
                 >
-                  ⚡ Finish Strong
+                  <Zap size={14} className="text-emerald-400" />
+                  <span>Finish Strong</span>
                 </button>
               </div>
 
               <button
+                type="button"
                 className={`partner-nudge-btn cheer-btn ${cheerSent ? 'sent' : ''}`}
                 onClick={() => handleSendCheer()}
               >
                 {cheerSent ? (
                   <>
-                    <Check size={18} />
-                    <span className="font-bold">Cheer Sent! 🎉</span>
+                    <Check size={18} className="text-emerald-400" />
+                    <span className="font-bold">Cheer Sent</span>
                   </>
                 ) : (
                   <>
                     <Flame size={18} className="text-amber-300" />
                     <span className="font-bold">Cheer On @{trackedPartner.displayName || trackedPartner.username}</span>
-                    <Rocket size={16} />
                   </>
                 )}
               </button>

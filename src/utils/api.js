@@ -803,3 +803,25 @@ export const getUserGroupPodRemote = async (userId, username) => {
     return null;
   }
 };
+
+export const getUserGroupPodsRemote = async (userId, username) => {
+  if (!hasRemoteBackend() || (!userId && !username)) return [];
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_user_group_pods',
+        userId,
+        username,
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await parseJsonSafe(res);
+    return data?.pods || (data?.pod ? [data.pod] : []);
+  } catch {
+    return [];
+  }
+};
+

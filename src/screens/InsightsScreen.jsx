@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
 import {
   Flame,
@@ -34,7 +34,7 @@ const MONTH_NAMES = [
 const DAY_LETTERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const InsightsScreen = () => {
-  const { habits, pod } = useHabits();
+  const { habits, pod, syncDeviceHealth } = useHabits();
 
   // Mode: 'weekly' (7-day pulse) or 'calendar' (full interactive month view)
   const [viewMode, setViewMode] = useState('weekly');
@@ -43,6 +43,16 @@ export const InsightsScreen = () => {
   const [calDate, setCalDate] = useState(new Date());
   const todayKey = new Date().toISOString().slice(0, 10);
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
+
+  // Refresh calendar and sync stats on mount
+  useEffect(() => {
+    const now = new Date();
+    setCalDate(now);
+    setSelectedDateKey(now.toISOString().slice(0, 10));
+    if (typeof syncDeviceHealth === 'function') {
+      syncDeviceHealth({ silent: true, force: true }).catch?.(() => {});
+    }
+  }, [syncDeviceHealth]);
 
   const calYear = calDate.getFullYear();
   const calMonth = calDate.getMonth();
@@ -208,6 +218,12 @@ export const InsightsScreen = () => {
     };
   }, [selectedDateKey, habits, todayKey]);
 
+  // Active current streak (highest consecutive streak among active habits)
+  const activeStreak = useMemo(() => {
+    if (!habits || !habits.length) return 0;
+    return habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+  }, [habits]);
+
   // Overall completion rate for today
   const completedToday = useMemo(() => {
     return habits.filter((h) => {
@@ -222,12 +238,13 @@ export const InsightsScreen = () => {
 
   // Best streak
   const bestStreak = useMemo(() => {
-    let max = pod.currentStreak || 0;
+    let max = activeStreak;
     habits.forEach((h) => {
-      if (h.streak && h.streak > max) max = h.streak;
+      if (h.streak && h.streak > max) max = Number(h.streak);
+      if (h.bestStreak && h.bestStreak > max) max = Number(h.bestStreak);
     });
-    return max;
-  }, [habits, pod.currentStreak]);
+    return Math.max(max, pod?.bestStreak || 0);
+  }, [habits, activeStreak, pod?.bestStreak]);
 
   return (
     <div className="screen-insights-container">
@@ -253,16 +270,16 @@ export const InsightsScreen = () => {
           <div className="metric-icon-wrap amber">
             <Flame size={20} className="text-amber-500" />
           </div>
-          <span className="metric-value font-black">{pod.currentStreak || 0}d</span>
+          <span className="metric-value font-black">{activeStreak}d</span>
           <span className="metric-label">Active Streak</span>
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon-wrap purple">
-            <Award size={20} className="text-purple-400" />
+          <div className="metric-icon-wrap violet">
+            <Award size={20} className="text-violet-500" />
           </div>
           <span className="metric-value font-black">{bestStreak}d</span>
-          <span className="metric-label">Best Record</span>
+          <span className="metric-label">Best Streak</span>
         </div>
       </div>
 

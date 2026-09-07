@@ -21,6 +21,7 @@ import {
   joinGroupPodRemote,
   getGroupPodRemote,
   getUserGroupPodRemote,
+  getUserGroupPodsRemote,
   addGroupGoalRemote,
   updateGroupGoalRemote,
   deleteGroupGoalRemote,
@@ -339,14 +340,98 @@ export const HabitProvider = ({ children }) => {
     };
   });
 
-  // Group Pod (up to 10 users)
-  const [groupPod, setGroupPod] = useState(() => {
-    const saved = localStorage.getItem('daybyday_group_pod');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { }
-    }
-    return null;
+  // Untracked partner codes ref to prevent in-flight network queries from re-adding untracked friends
+  const untrackedCodesRef = useRef(new Set());
+
+  // Multiple Group Pods (up to 5 pods simultaneously)
+  const [groupPods, setGroupPods] = useState(() => {
+    try {
+      const savedMulti = localStorage.getItem('daybyday_group_pods');
+      if (savedMulti) {
+        const parsed = JSON.parse(savedMulti);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+      const savedSingle = localStorage.getItem('daybyday_group_pod');
+      if (savedSingle) {
+        const parsed = JSON.parse(savedSingle);
+        if (parsed) return [parsed];
+      }
+    } catch (e) { }
+    return [];
   });
+
+  const [activeGroupPodCode, setActiveGroupPodCode] = useState(() => {
+    try {
+      return localStorage.getItem('daybyday_active_group_pod_code') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  // Derived currently selected group pod
+  const groupPod = useMemo(() => {
+    if (!groupPods || !groupPods.length) return null;
+    if (activeGroupPodCode) {
+      const found = groupPods.find((p) => (p.code || '').toUpperCase() === activeGroupPodCode.toUpperCase());
+      if (found) return found;
+    }
+    return groupPods[0];
+  }, [groupPods, activeGroupPodCode]);
+
+  const selectGroupPod = useCallback((code) => {
+    sound.tap();
+    const clean = (code || '').toUpperCase();
+    setActiveGroupPodCode(clean);
+    try { localStorage.setItem('daybyday_active_group_pod_code', clean); } catch {}
+  }, []);
+
+  // Multi-pod updater for compatibility with existing setGroupPod callers
+  const setGroupPod = useCallback((podOrUpdater) => {
+    setGroupPods((prev) => {
+      let updatedActive;
+      if (typeof podOrUpdater === 'function') {
+        const active = (activeGroupPodCode && prev.find(p => (p.code || '').toUpperCase() === activeGroupPodCode.toUpperCase())) || prev[0] || null;
+        updatedActive = podOrUpdater(active);
+      } else {
+        updatedActive = podOrUpdater;
+      }
+
+      if (!updatedActive) {
+        const targetCode = (activeGroupPodCode || prev[0]?.code || '').toUpperCase();
+        const nextList = prev.filter(p => (p.code || '').toUpperCase() !== targetCode);
+        try {
+          localStorage.setItem('daybyday_group_pods', JSON.stringify(nextList));
+          if (nextList.length) {
+            localStorage.setItem('daybyday_group_pod', JSON.stringify(nextList[0]));
+            localStorage.setItem('daybyday_active_group_pod_code', nextList[0].code);
+            setActiveGroupPodCode(nextList[0].code);
+          } else {
+            localStorage.removeItem('daybyday_group_pod');
+            localStorage.removeItem('daybyday_active_group_pod_code');
+            setActiveGroupPodCode('');
+          }
+        } catch {}
+        return nextList;
+      }
+
+      const cleanCode = (updatedActive.code || '').toUpperCase();
+      const idx = prev.findIndex(p => (p.code || '').toUpperCase() === cleanCode);
+      let nextList;
+      if (idx >= 0) {
+        nextList = [...prev];
+        nextList[idx] = updatedActive;
+      } else {
+        nextList = [updatedActive, ...prev].slice(0, 5);
+      }
+      try {
+        localStorage.setItem('daybyday_group_pods', JSON.stringify(nextList));
+        localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedActive));
+        localStorage.setItem('daybyday_active_group_pod_code', cleanCode);
+      } catch {}
+      setActiveGroupPodCode(cleanCode);
+      return nextList;
+    });
+  }, [activeGroupPodCode]);
 
   // Multi-Partner Accountability Track (up to 5 partners)
   const [trackedPartners, setTrackedPartners] = useState(() => {
@@ -1407,24 +1492,43 @@ export const HabitProvider = ({ children }) => {
       );
     }
 
-    let updatedList = [];
-    if (existingIdx >= 0) {
-      updatedList = [...trackedPartners];
-      updatedList[existingIdx] = partnerData;
-    } else {
-      updatedList = [...trackedPartners, partnerData];
-    }
+    untrackedCodesRef.current.delete(cleanCode);
 
-    setTrackedPartners(updatedList);
+    setTrackedPartners((prev) => {
+      const idx = prev.findIndex((p) => (p.secretCode || p.secret_code || '').toUpperCase() === cleanCode);
+      let updatedList = [];
+      if (idx >= 0) {
+        updatedList = [...prev];
+        updatedList[idx] = partnerData;
+      } else {
+        updatedList = [...prev, partnerData].slice(0, 5);
+      }
+      try {
+        localStorage.setItem('daybyday_tracked_partners', JSON.stringify(updatedList));
+        localStorage.setItem('daybyday_tracked_partner', JSON.stringify(partnerData));
+        localStorage.setItem('daybyday_active_tracked_code', cleanCode);
+      } catch {}
+      return updatedList;
+    });
+
     setActiveTrackedCode(cleanCode);
-    localStorage.setItem('daybyday_tracked_partners', JSON.stringify(updatedList));
-    localStorage.setItem('daybyday_tracked_partner', JSON.stringify(partnerData));
-    localStorage.setItem('daybyday_active_tracked_code', cleanCode);
 
-    // Persist tracked partner codes to user cloud preferences
+    // Persist tracked partner codes to user cloud preferences and update local user state
     if (user?.id) {
-      const codes = updatedList.map((p) => p.secretCode || p.secret_code).filter(Boolean);
-      syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: codes }).catch(() => {});
+      setUser((prevUser) => {
+        if (!prevUser) return prevUser;
+        const currentCodes = (prevUser.preferences?.trackedPartnerCodes || []).filter(c => c.toUpperCase() !== cleanCode);
+        const nextCodes = [...currentCodes, cleanCode].slice(0, 5);
+        return {
+          ...prevUser,
+          preferences: {
+            ...(prevUser.preferences || {}),
+            trackedPartnerCodes: nextCodes,
+          },
+        };
+      });
+      const allCodes = [...trackedPartners.map((p) => p.secretCode || p.secret_code), cleanCode].filter(Boolean);
+      syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: [...new Set(allCodes)].slice(0, 5) }).catch(() => {});
     }
 
     triggerCelebration();
@@ -1434,12 +1538,17 @@ export const HabitProvider = ({ children }) => {
 
   // Periodically refresh progress for all tracked friends
   const refreshTrackedPartners = useCallback(async () => {
-    if (!trackedPartners || !trackedPartners.length) return;
-    try {
-      const refreshedList = await Promise.all(
-        trackedPartners.map(async (p) => {
+    setTrackedPartners((currentList) => {
+      if (!currentList || !currentList.length) return currentList;
+
+      const activeList = currentList.filter(
+        (p) => !untrackedCodesRef.current.has((p.secretCode || p.secret_code || '').toUpperCase())
+      );
+
+      Promise.all(
+        activeList.map(async (p) => {
           const pCode = p.secretCode || p.secret_code;
-          if (!pCode) return p;
+          if (!pCode || untrackedCodesRef.current.has(pCode.toUpperCase())) return p;
           try {
             let res = await fetchUserByCodeRemote(pCode);
             if (!res || !res.user) res = await fetchUserRemote(pCode);
@@ -1462,11 +1571,17 @@ export const HabitProvider = ({ children }) => {
           } catch {}
           return p;
         })
-      );
-      setTrackedPartners(refreshedList);
-      localStorage.setItem('daybyday_tracked_partners', JSON.stringify(refreshedList));
-    } catch {}
-  }, [trackedPartners]);
+      ).then((refreshedList) => {
+        const filtered = refreshedList.filter(
+          (p) => !untrackedCodesRef.current.has((p.secretCode || p.secret_code || '').toUpperCase())
+        );
+        setTrackedPartners(filtered);
+        try { localStorage.setItem('daybyday_tracked_partners', JSON.stringify(filtered)); } catch {}
+      });
+
+      return activeList;
+    });
+  }, []);
 
   // Auto-refresh tracked friends' progress on focus and periodically
   useEffect(() => {
@@ -1489,28 +1604,51 @@ export const HabitProvider = ({ children }) => {
 
   const untrackPartner = (codeToUntrack) => {
     sound.tap();
-    const targetCode = (codeToUntrack || trackedPartner?.secretCode || trackedPartner?.secret_code || '').toUpperCase();
-    const updated = trackedPartners.filter(
-      (p) => (p.secretCode || p.secret_code || '').toUpperCase() !== targetCode
-    );
-    setTrackedPartners(updated);
-    localStorage.setItem('daybyday_tracked_partners', JSON.stringify(updated));
+    const targetCode = (codeToUntrack || trackedPartner?.secretCode || trackedPartner?.secret_code || activeTrackedCode || '').toUpperCase();
+    if (!targetCode) return;
 
-    if (updated.length > 0) {
-      const nextCode = updated[0].secretCode || updated[0].secret_code;
-      setActiveTrackedCode(nextCode);
-      localStorage.setItem('daybyday_active_tracked_code', nextCode);
-      localStorage.setItem('daybyday_tracked_partner', JSON.stringify(updated[0]));
-    } else {
-      setActiveTrackedCode('');
-      localStorage.removeItem('daybyday_active_tracked_code');
-      localStorage.removeItem('daybyday_tracked_partner');
-    }
+    // Immediately mark in ref to block any in-flight background query
+    untrackedCodesRef.current.add(targetCode);
 
-    if (user?.id) {
-      const codes = updated.map((p) => p.secretCode || p.secret_code);
-      syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: codes }).catch(() => {});
-    }
+    setTrackedPartners((prev) => {
+      const remaining = prev.filter(
+        (p) => (p.secretCode || p.secret_code || '').toUpperCase() !== targetCode
+      );
+
+      try {
+        localStorage.setItem('daybyday_tracked_partners', JSON.stringify(remaining));
+        if (remaining.length > 0) {
+          const currentActive = (activeTrackedCode || '').toUpperCase();
+          if (currentActive === targetCode) {
+            const nextCode = remaining[0].secretCode || remaining[0].secret_code;
+            setActiveTrackedCode(nextCode);
+            localStorage.setItem('daybyday_active_tracked_code', nextCode);
+            localStorage.setItem('daybyday_tracked_partner', JSON.stringify(remaining[0]));
+          }
+        } else {
+          setActiveTrackedCode('');
+          localStorage.removeItem('daybyday_active_tracked_code');
+          localStorage.removeItem('daybyday_tracked_partner');
+        }
+      } catch {}
+
+      if (user?.id) {
+        const remainingCodes = remaining.map((p) => p.secretCode || p.secret_code).filter(Boolean);
+        setUser((prevUser) => {
+          if (!prevUser) return prevUser;
+          return {
+            ...prevUser,
+            preferences: {
+              ...(prevUser.preferences || {}),
+              trackedPartnerCodes: remainingCodes,
+            },
+          };
+        });
+        syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: remainingCodes }).catch(() => {});
+      }
+
+      return remaining;
+    });
 
     triggerIslandNotification('Stopped tracking partner', 'untrack');
   };
@@ -1532,7 +1670,7 @@ export const HabitProvider = ({ children }) => {
     sound.complete();
     triggerCelebration();
 
-    const msg = customMessage || (goalName ? `Encouraged you for ${goalName}! 🔥` : 'Keep crushing your goals! 🔥');
+    const msg = customMessage || (goalName ? `Encouraged you for ${goalName}!` : 'Keep crushing your goals!');
 
     try {
       await sendCheerRemote({
@@ -1614,14 +1752,14 @@ export const HabitProvider = ({ children }) => {
             const fromWho = c.from_name || (c.from_username ? `@${c.from_username}` : 'A teammate');
             const goalContext = c.goal_name || c.goalName;
             const islandText = goalContext
-              ? `${fromWho} encouraged you for "${goalContext}"! 🔥`
+              ? `${fromWho} encouraged you for "${goalContext}"!`
               : `${fromWho}: "${c.message}"`;
             triggerIslandNotification(islandText, 'flame');
 
             // 2. Local OS Notification
             const notifTitle = goalContext
-              ? `DayByDay · Encouraged for ${goalContext} 🔥`
-              : `DayByDay Encouragement 🔥`;
+              ? `DayByDay · Encouraged for ${goalContext}`
+              : `DayByDay Encouragement`;
             const notifBody = goalContext
               ? `${fromWho} cheered you on for "${goalContext}"! "${c.message}"`
               : `${fromWho} cheered you on: "${c.message}"`;
@@ -1675,9 +1813,19 @@ export const HabitProvider = ({ children }) => {
     };
   }, [user?.id, user?.username, groupPod?.code]);
 
-  // Group Pod (up to 10 users)
+  // Active user streak computed dynamically from habits
+  const activeUserStreak = useMemo(() => {
+    if (!habits || !habits.length) return 0;
+    return habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+  }, [habits]);
+
+  // Group Pods (up to 5 groups, up to 10 members each)
   const createGroupPod = async (name) => {
     sound.complete();
+    if (groupPods.length >= 5) {
+      throw new Error('You can participate in up to 5 group pods simultaneously. Please leave a group before creating a new one.');
+    }
+
     const cleanName = (name || 'Focus Group').trim();
     const randNum = Math.floor(1000 + Math.random() * 9000);
     const randChar = String.fromCharCode(65 + Math.floor(Math.random() * 26));
@@ -1730,7 +1878,7 @@ export const HabitProvider = ({ children }) => {
             profilePicture: profilePicture || null,
             role: 'Owner',
             todayPercent: currentPercent,
-            streak: pod.currentStreak || 0,
+            streak: activeUserStreak,
           },
         ],
         sharedGoals: defaultGoals,
@@ -1738,9 +1886,13 @@ export const HabitProvider = ({ children }) => {
     }
 
     setGroupPod(newPod);
-    localStorage.setItem('daybyday_group_pod', JSON.stringify(newPod));
     if (user?.id) {
-      syncPreferencesRemote(user.id, { ...(user.preferences || {}), groupPodCode: newPod.code }).catch(() => {});
+      const allPodCodes = [...groupPods.map((p) => p.code), newPod.code].filter(Boolean);
+      syncPreferencesRemote(user.id, {
+        ...(user.preferences || {}),
+        groupPodCode: newPod.code,
+        groupPodCodes: [...new Set(allPodCodes)].slice(0, 5),
+      }).catch(() => {});
     }
     triggerCelebration();
     triggerIslandNotification(`Group ${cleanName} created!`, 'users');
@@ -1751,6 +1903,17 @@ export const HabitProvider = ({ children }) => {
     sound.complete();
     const cleanCode = (code || '').trim().toUpperCase();
     if (!cleanCode) throw new Error('Please enter a pod code');
+
+    const alreadyJoined = groupPods.find((p) => (p.code || '').toUpperCase() === cleanCode);
+    if (alreadyJoined) {
+      selectGroupPod(cleanCode);
+      triggerIslandNotification(`Switched to Group ${cleanCode}`, 'users');
+      return alreadyJoined;
+    }
+
+    if (groupPods.length >= 5) {
+      throw new Error('You can participate in up to 5 group pods simultaneously. Please leave a group before joining a new one.');
+    }
 
     let podToJoin = null;
     try {
@@ -1764,23 +1927,32 @@ export const HabitProvider = ({ children }) => {
     }
 
     setGroupPod(podToJoin);
-    localStorage.setItem('daybyday_group_pod', JSON.stringify(podToJoin));
     if (user?.id) {
-      syncPreferencesRemote(user.id, { ...(user.preferences || {}), groupPodCode: podToJoin.code }).catch(() => {});
+      const allPodCodes = [...groupPods.map((p) => p.code), podToJoin.code].filter(Boolean);
+      syncPreferencesRemote(user.id, {
+        ...(user.preferences || {}),
+        groupPodCode: podToJoin.code,
+        groupPodCodes: [...new Set(allPodCodes)].slice(0, 5),
+      }).catch(() => {});
     }
     triggerCelebration();
     triggerIslandNotification(`Joined Pod ${cleanCode}!`, 'users');
     return podToJoin;
   };
 
-  const leaveGroupPod = async () => {
+  const leaveGroupPod = async (codeToLeave) => {
     sound.tap();
-    if (groupPod?.code && user?.id) {
-      leaveGroupPodRemote(groupPod.code, user.id).catch(() => {});
-      syncPreferencesRemote(user.id, { ...(user.preferences || {}), groupPodCode: null }).catch(() => {});
+    const targetCode = (codeToLeave || groupPod?.code || activeGroupPodCode || '').toUpperCase();
+    if (targetCode && user?.id) {
+      leaveGroupPodRemote(targetCode, user.id).catch(() => {});
+      const remainingCodes = groupPods.filter((p) => (p.code || '').toUpperCase() !== targetCode).map((p) => p.code);
+      syncPreferencesRemote(user.id, {
+        ...(user.preferences || {}),
+        groupPodCode: remainingCodes[0] || null,
+        groupPodCodes: remainingCodes,
+      }).catch(() => {});
     }
     setGroupPod(null);
-    localStorage.removeItem('daybyday_group_pod');
     triggerIslandNotification('Left group pod', 'user');
   };
 
@@ -2645,6 +2817,9 @@ export const HabitProvider = ({ children }) => {
         trackPartnerByCode,
         untrackPartner,
         sendCheer,
+        groupPods,
+        activeGroupPodCode,
+        selectGroupPod,
         groupPod,
         createGroupPod,
         joinGroupPod,

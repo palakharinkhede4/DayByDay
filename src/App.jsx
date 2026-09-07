@@ -68,12 +68,21 @@ class ScreenErrorBoundary extends React.Component {
 }
 
 const MainAppContent = () => {
-  const { user, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide } = useHabits();
+  const { user, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide, syncDeviceHealth } = useHabits();
   const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+
+  // Auto-sync fitness data whenever switching to habits, together, or settings
+  useEffect(() => {
+    if (activeTab === 'habits' || activeTab === 'together' || activeTab === 'settings') {
+      if (typeof syncDeviceHealth === 'function') {
+        syncDeviceHealth({ silent: true, force: true }).catch?.(() => {});
+      }
+    }
+  }, [activeTab, syncDeviceHealth]);
 
   // Automatically check for new releases when app opens and on focus/resume (throttled to 15 min, 0 DB load)
   useEffect(() => {

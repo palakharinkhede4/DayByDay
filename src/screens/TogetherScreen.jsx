@@ -220,6 +220,9 @@ export const TogetherScreen = () => {
   const {
     user,
     groupPod,
+    groupPods = [],
+    activeGroupPodCode,
+    selectGroupPod,
     createGroupPod,
     joinGroupPod,
     leaveGroupPod,
@@ -236,6 +239,7 @@ export const TogetherScreen = () => {
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showCreateJoinModal, setShowCreateJoinModal] = useState(false);
   const [isAddingGoal, setIsAddingGoal] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
   
@@ -279,12 +283,18 @@ export const TogetherScreen = () => {
     }
   };
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (!createName.trim()) return;
-    createGroupPod(createName.trim());
-    setCreateName('');
-    setIsCreating(false);
+    setError('');
+    try {
+      await createGroupPod(createName.trim());
+      setCreateName('');
+      setIsCreating(false);
+      setShowCreateJoinModal(false);
+    } catch (err) {
+      setError(err.message || 'Could not create group pod');
+    }
   };
 
   const handleJoin = async (e) => {
@@ -295,6 +305,7 @@ export const TogetherScreen = () => {
     try {
       await joinGroupPod(joinCode.trim());
       setJoinCode('');
+      setShowCreateJoinModal(false);
     } catch (err) {
       setError(err.message || 'Could not join pod. Check the code and try again.');
     } finally {
@@ -319,7 +330,7 @@ export const TogetherScreen = () => {
     setGoalUnit('steps');
     setGoalDelta(1000);
     setIsAddingGoal(false);
-    triggerIslandNotification('Shared goal added to pod! 🎯', 'check');
+    triggerIslandNotification('Shared goal added to pod', 'check');
   };
 
   const handleCheerMember = (member, goalName) => {
@@ -327,16 +338,16 @@ export const TogetherScreen = () => {
     const isMe = (user?.id && String(user.id) === String(member.id)) ||
                  (user?.username && member.username && String(user.username).toLowerCase() === String(member.username).toLowerCase());
     if (isMe) {
-      triggerIslandNotification?.('You cannot cheer yourself! 😅', 'info');
+      triggerIslandNotification?.('You cannot cheer yourself', 'info');
       return;
     }
 
     const code = member.secretCode || member.secret_code || member.username;
-    const msg = goalName ? `Cheering you on for ${goalName}! Keep crushing it! 🔥` : 'Crushing it in the pod! 🔥';
+    const msg = goalName ? `Cheering you on for ${goalName}! Keep up the momentum` : 'Keep up the great momentum in the pod';
     sendCheer(code, msg, goalName);
     setCheeredMemberId(member.id || member.username);
     triggerCelebration();
-    triggerIslandNotification(`Encouragement sent to @${member.username}! 🚀`, 'flame');
+    triggerIslandNotification(`Encouragement sent to @${member.username}`, 'flame');
     setTimeout(() => setCheeredMemberId(null), 2500);
   };
 
@@ -348,6 +359,57 @@ export const TogetherScreen = () => {
         <p className="screen-subtitle">
           Track shared habits with friends, family, or teammates. See individual progress and who crushed their goals.
         </p>
+      </div>
+
+      {/* Group Pods Selector Bar (up to 5 pods) */}
+      <div className="track-partners-selector-section group-pods-selector-section">
+        <div className="partners-selector-header">
+          <div className="partners-count-badge">
+            <Users size={16} className="text-primary" />
+            <span className="font-bold">Group Pods ({groupPods.length}/5)</span>
+          </div>
+          {groupPods.length < 5 && (
+            <button
+              type="button"
+              className="add-partner-toggle-btn"
+              onClick={() => {
+                sound.press();
+                setError('');
+                setShowCreateJoinModal(true);
+              }}
+              title="Create or join another group pod"
+            >
+              <Plus size={14} />
+              <span>New Group</span>
+            </button>
+          )}
+        </div>
+
+        {groupPods.length > 0 && (
+          <div className="partners-chips-scroll">
+            {groupPods.map((podItem) => {
+              const isActive = (groupPod?.code?.toUpperCase() === (podItem.code || '').toUpperCase());
+              return (
+                <button
+                  key={podItem.code}
+                  type="button"
+                  className={`partner-chip-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => selectGroupPod(podItem.code)}
+                >
+                  <div className="chip-avatar">
+                    <Users size={14} />
+                  </div>
+                  <div className="chip-info">
+                    <span className="chip-name font-bold">{podItem.name}</span>
+                    <span className="chip-progress-pill font-semibold">
+                      {podItem.members?.length || 1}/10
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {groupPod ? (
@@ -389,7 +451,7 @@ export const TogetherScreen = () => {
               </button>
               <button
                 className="group-action-btn leave"
-                onClick={leaveGroupPod}
+                onClick={() => leaveGroupPod(groupPod.code)}
                 title="Leave this group pod"
               >
                 <LogOut size={16} />
@@ -639,7 +701,7 @@ export const TogetherScreen = () => {
                           {completedCount === members.length ? (
                             <>
                               <CheckCircle2 size={14} className="text-emerald-400" />
-                              <span className="font-bold">All {members.length} Done! 🎉</span>
+                              <span className="font-bold">All {members.length} Completed</span>
                             </>
                           ) : (
                             <span className="font-bold">{completedCount} of {members.length} Done</span>
@@ -735,7 +797,7 @@ export const TogetherScreen = () => {
                                 {isDone ? (
                                   <span className="together-done-text">
                                     <Check size={13} strokeWidth={2.8} />
-                                    <span>Goal Completed! 🎉</span>
+                                    <span>Goal Completed</span>
                                   </span>
                                 ) : (
                                   <span className="together-remaining-text">
@@ -926,6 +988,72 @@ export const TogetherScreen = () => {
           onSave={editSharedGoal}
           onDelete={deleteSharedGoal}
         />
+      )}
+
+      {/* Create or Join Additional Group Pod Modal (up to 5 pods) */}
+      {showCreateJoinModal && (
+        <div className="habit-modal-backdrop" onClick={() => setShowCreateJoinModal(false)}>
+          <div className="habit-modal-sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div className="habit-modal-header">
+              <div className="habit-modal-title-row">
+                <Users size={20} className="text-primary" />
+                <h3 className="habit-modal-title font-bold">New Group Pod</h3>
+              </div>
+              <button
+                type="button"
+                className="habit-modal-close-btn"
+                onClick={() => setShowCreateJoinModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {error && <div className="partner-error-banner" style={{ margin: '0.75rem 1.25rem 0' }}>{error}</div>}
+
+            <div style={{ padding: '1rem 1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="group-option-box" style={{ margin: 0 }}>
+                <h4 className="option-title font-bold">Create a New Pod</h4>
+                <p className="option-desc">Start a private group and get a code to share with your team.</p>
+                <form onSubmit={handleCreate} className="create-pod-form">
+                  <input
+                    type="text"
+                    placeholder="e.g. Focus Squad"
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                    required
+                    className="group-input-field font-semibold"
+                  />
+                  <button type="submit" className="create-pod-confirm-btn font-bold">
+                    Create Pod
+                  </button>
+                </form>
+              </div>
+
+              <div className="group-option-box" style={{ margin: 0 }}>
+                <h4 className="option-title font-bold">Join an Existing Pod</h4>
+                <p className="option-desc">Enter the group code shared by your friend or leader.</p>
+                <form onSubmit={handleJoin} className="join-pod-form">
+                  <input
+                    type="text"
+                    placeholder="e.g. POD-8492"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    maxLength={10}
+                    className="group-input-field font-mono font-bold"
+                  />
+                  <button
+                    type="submit"
+                    disabled={joinCode.trim().length < 4 || isJoining}
+                    className="group-secondary-btn font-bold"
+                  >
+                    <span>{isJoining ? 'Joining...' : 'Join Pod'}</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

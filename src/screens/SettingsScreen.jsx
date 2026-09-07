@@ -802,13 +802,14 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       )}
       {/* AVATAR OPTIONS ACTION MODAL */}
       {avatarModalOpen && (
-        <div className="modal-backdrop" onClick={() => setAvatarModalOpen(false)}>
+        <div className="avatar-modal-backdrop" onClick={() => setAvatarModalOpen(false)}>
           <div className="avatar-options-modal" onClick={(e) => e.stopPropagation()}>
             <h3 className="avatar-modal-title font-bold">Profile Picture</h3>
             <p className="avatar-modal-subtitle">Add, modify, or remove your personal avatar.</p>
 
             <div className="avatar-modal-actions">
               <button
+                type="button"
                 className="avatar-action-btn primary font-bold"
                 onClick={() => {
                   setAvatarModalOpen(false);
@@ -821,6 +822,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
               {profilePicture && (
                 <button
+                  type="button"
                   className="avatar-action-btn danger font-bold"
                   onClick={() => {
                     setProfilePicture(null);
@@ -833,6 +835,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               )}
 
               <button
+                type="button"
                 className="avatar-action-btn cancel font-medium"
                 onClick={() => setAvatarModalOpen(false)}
               >

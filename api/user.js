@@ -1015,34 +1015,31 @@ export default async function handler(req, res) {
       }
     }
 
-    // ACTION: GET USER'S CURRENT GROUP POD (BY USER ID OR USERNAME)
-    if (action === 'get_user_group_pod') {
+    // ACTION: GET USER'S CURRENT GROUP PODS (UP TO 5 GROUPS)
+    if (action === 'get_user_group_pods' || action === 'get_user_group_pod') {
       const { userId, username } = req.body;
       const cleanU = (username || '').trim().replace(/^@/, '');
       try {
-        let pod = null;
+        let pods = [];
         if (sql) {
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
             WHERE ( ${userId ? sql`members::text LIKE ${'%"' + userId + '"%'}` : sql`FALSE`} )
                OR ( ${cleanU ? sql`members::text LIKE ${'%"' + cleanU + '"%'}` : sql`FALSE`} )
             ORDER BY updated_at DESC
-            LIMIT 1
+            LIMIT 5
           `;
-          if (groupRows.length > 0) {
-            const r = groupRows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
-          }
+          pods = groupRows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            code: r.code,
+            members: r.members || [],
+            sharedGoals: r.shared_goals || [],
+            createdAt: r.created_at,
+            maxMembers: 10,
+          }));
         }
-        return res.status(200).json({ success: true, pod });
+        return res.status(200).json({ success: true, pods, pod: pods[0] || null });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }

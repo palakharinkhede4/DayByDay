@@ -4,11 +4,10 @@ import {
   Users,
   HeartHandshake,
   BarChart2,
-  FolderPlus,
   Activity,
   Palette,
   X,
-  Sparkles,
+  Compass,
   MapPin,
   ArrowRight,
 } from 'lucide-react';
@@ -25,82 +24,73 @@ export const FeaturesGuideModal = ({ isOpen, onClose }) => {
   const features = [
     {
       id: 'habits',
-      title: 'Habits Tab (Daily Routines & Streaks)',
+      title: 'Habits',
       icon: CheckCircle2,
       accentColor: '#10B981',
-      bgGradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.1))',
-      location: 'Bottom Bar → Habits',
-      description: 'Log daily routines with one tap, track countable quantities like steps or water, and build unbroken streaks.',
+      bgGradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.08))',
+      location: 'Habits Tab',
+      description: 'Log daily routines with one tap, track steps and water, and maintain streaks.',
     },
     {
       id: 'track',
-      title: 'Track Tab (Live Social Accountability)',
+      title: 'Track Friends',
       icon: Users,
       accentColor: '#3B82F6',
-      bgGradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.1))',
-      location: 'Bottom Bar → Track',
-      description: 'Follow up to 5 friends live using their secret codes, see their real-time habit completion, and send cheering emojis.',
+      bgGradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.08))',
+      location: 'Track Tab',
+      description: 'Follow up to 5 friends live with their code and send real-time encouragement.',
     },
     {
       id: 'together',
-      title: 'Together Tab (Duo Pairs & Group Pods)',
+      title: 'Together Pods',
       icon: HeartHandshake,
       accentColor: '#F97316',
-      bgGradient: 'linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(234, 88, 12, 0.1))',
-      location: 'Bottom Bar → Together',
-      description: 'Pair 1-on-1 with an accountability partner or join a shared group pod to tackle collaborative milestone targets together.',
+      bgGradient: 'linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(234, 88, 12, 0.08))',
+      location: 'Together Tab',
+      description: 'Pair with a partner or join up to 5 group pods with shared milestone targets.',
     },
     {
       id: 'insights',
-      title: 'Insights Tab (Analytics & Consistency)',
+      title: 'Insights & Trends',
       icon: BarChart2,
       accentColor: '#8B5CF6',
-      bgGradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.1))',
-      location: 'Bottom Bar → Insights',
-      description: 'View weekly completion percentages, consistency trends, best streaks, and smart analytics to measure your progress.',
-    },
-    {
-      id: 'categories',
-      title: 'Custom Categories & Organization',
-      icon: FolderPlus,
-      accentColor: '#F59E0B',
-      bgGradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.1))',
-      location: 'Habits Screen → Top Bar [+] Button',
-      description: 'Create and color-code personalized categories (like Fitness, Work, Mind) to filter and organize your daily routine.',
+      bgGradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(124, 58, 237, 0.08))',
+      location: 'Insights Tab',
+      description: 'Check completion rates, weekly consistency graphs, and streak records.',
     },
     {
       id: 'health_sync',
-      title: 'Sync with Health App (Android & Apple Health)',
+      title: 'Health & Fitness Sync',
       icon: Activity,
       accentColor: '#00D284',
-      bgGradient: 'linear-gradient(135deg, rgba(0, 210, 132, 0.2), rgba(16, 185, 129, 0.1))',
-      location: 'Settings Menu → Health & Fitness Sync',
-      description: 'Automatically imports your step count every 30 minutes from your phone directly into your habits and shared pod goals.',
+      bgGradient: 'linear-gradient(135deg, rgba(0, 210, 132, 0.15), rgba(16, 185, 129, 0.08))',
+      location: 'Settings Menu',
+      description: 'Syncs your daily steps automatically every 30 minutes into habits and pod goals.',
     },
     {
       id: 'themes',
-      title: 'Themes, Modes & Personalization',
+      title: 'Themes & Modes',
       icon: Palette,
       accentColor: '#EC4899',
-      bgGradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(219, 39, 119, 0.1))',
-      location: 'Settings Menu → Appearance & Theme',
-      description: 'Customize your look with high-contrast Light mode, sleek Dark mode, Android Material You colors, or System Auto.',
+      bgGradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(219, 39, 119, 0.08))',
+      location: 'Settings Menu',
+      description: 'Switch between Dark mode, Light mode, or Material You system themes.',
     },
   ];
 
   return (
     <div className="features-guide-overlay" onClick={handleClose}>
-      <div className="features-guide-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="features-guide-modal compact-guide" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="features-guide-header">
           <div className="features-guide-header-left">
             <div className="features-guide-badge-icon">
-              <Sparkles size={20} className="text-amber-400" />
+              <Compass size={18} className="text-primary" />
             </div>
             <div>
-              <h2 className="features-guide-title font-extrabold">Welcome to DayByDay</h2>
+              <h2 className="features-guide-title font-bold">App Overview</h2>
               <p className="features-guide-subtitle">
-                Here is a quick tour of all features available to help you build great habits.
+                Core features to help you build and maintain daily momentum.
               </p>
             </div>
           </div>
@@ -110,27 +100,27 @@ export const FeaturesGuideModal = ({ isOpen, onClose }) => {
             onClick={handleClose}
             aria-label="Close guide"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Features List */}
-        <div className="features-guide-list">
+        <div className="features-guide-list compact-list">
           {features.map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.id} className="features-guide-card">
+              <div key={item.id} className="features-guide-card compact-card">
                 <div
-                  className="features-guide-card-icon"
+                  className="features-guide-card-icon compact-icon"
                   style={{ background: item.bgGradient, color: item.accentColor }}
                 >
-                  <Icon size={20} />
+                  <Icon size={18} />
                 </div>
                 <div className="features-guide-card-body">
                   <div className="features-guide-card-top">
-                    <span className="features-guide-card-title font-bold">{item.title}</span>
+                    <span className="features-guide-card-title font-semibold">{item.title}</span>
                     <span className="features-guide-card-badge">
-                      <MapPin size={10} style={{ marginRight: 2 }} />
+                      <MapPin size={9} style={{ marginRight: 2 }} />
                       {item.location}
                     </span>
                   </div>
@@ -144,15 +134,15 @@ export const FeaturesGuideModal = ({ isOpen, onClose }) => {
         {/* Footer */}
         <div className="features-guide-footer">
           <div className="features-guide-footer-hint">
-            💡 You can re-open this anytime in <strong>Settings → App Feature Guide</strong>.
+            You can re-open this guide anytime in Settings → App Feature Guide.
           </div>
           <button
             type="button"
-            className="features-guide-cta-btn font-bold"
+            className="features-guide-cta-btn font-semibold"
             onClick={handleClose}
           >
-            <span>Got It, Let's Start! 🚀</span>
-            <ArrowRight size={16} />
+            <span>Get Started</span>
+            <ArrowRight size={15} />
           </button>
         </div>
       </div>
