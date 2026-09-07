@@ -85,28 +85,14 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [changelogData, setChangelogData] = useState(null);
   const [loadingChangelog, setLoadingChangelog] = useState(false);
   const [syncingHealth, setSyncingHealth] = useState(false);
-  const [showAppleHealthModal, setShowAppleHealthModal] = useState(false);
-  const [appleHealthStepsInput, setAppleHealthStepsInput] = useState('');
 
   const handleManualHealthSync = async () => {
-    if (window.Capacitor?.isNativePlatform?.()) {
-      setSyncingHealth(true);
-      try {
-        await syncDeviceHealth({ silent: false, force: true });
-      } finally {
-        setSyncingHealth(false);
-      }
-    } else {
-      setAppleHealthStepsInput(String(healthStats?.steps || ''));
-      setShowAppleHealthModal(true);
+    setSyncingHealth(true);
+    try {
+      await syncDeviceHealth({ silent: false, force: true });
+    } finally {
+      setSyncingHealth(false);
     }
-  };
-
-  const handleSaveAppleHealthSteps = async (e) => {
-    e?.preventDefault?.();
-    const val = Math.max(0, parseInt(appleHealthStepsInput, 10) || 0);
-    await setCustomHealthSteps(val);
-    setShowAppleHealthModal(false);
   };
 
 
@@ -472,10 +458,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 onChange={async (e) => {
                   if (e.target.checked) {
                     await enableHealthSync();
-                    if (!window.Capacitor?.isNativePlatform?.()) {
-                      setAppleHealthStepsInput(String(healthStats?.steps || ''));
-                      setShowAppleHealthModal(true);
-                    }
+                    await syncDeviceHealth({ silent: false, force: true });
                   } else {
                     disableHealthSync();
                   }
@@ -487,21 +470,21 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
           {healthSyncEnabled && (
             <>
-              {/* Daily Stats Summary */}
+              {/* Daily Stats Summary: Multi-Metric Display */}
               <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.75rem', padding: '0.85rem 1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span className="live-indicator-dot"></span>
                     <span className="row-title font-bold" style={{ fontSize: '0.85rem' }}>
-                      Today's Activity
+                      Today's Health & Activity
                     </span>
                   </div>
                   <span className="row-hint" style={{ fontSize: '0.75rem' }}>
-                    {healthStats?.syncedAt ? `Updated ${new Date(healthStats.syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Live'}
+                    {healthStats?.syncedAt ? `Synced ${new Date(healthStats.syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Live'}
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                   <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
                     <div className="font-extrabold text-emerald-400" style={{ fontSize: '1.15rem' }}>
                       {(healthStats?.steps || 0).toLocaleString()}
@@ -522,21 +505,40 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                     </div>
                     <div className="row-hint" style={{ fontSize: '0.7rem' }}>Distance</div>
                   </div>
+
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-cyan-400" style={{ fontSize: '1.15rem' }}>
+                      {healthStats?.water ? `${Math.round(healthStats.water / 100) / 10}L` : (healthStats?.waterGlasses ? `${healthStats.waterGlasses} gl` : '0L')}
+                    </div>
+                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Hydration</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-indigo-400" style={{ fontSize: '1.15rem' }}>
+                      {healthStats?.sleep ? `${healthStats.sleep}h` : '0h'}
+                    </div>
+                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Sleep</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-purple-400" style={{ fontSize: '1.15rem' }}>
+                      {healthStats?.activeMinutes ? `${healthStats.activeMinutes}m` : '0m'}
+                    </div>
+                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Workouts</div>
+                  </div>
                 </div>
               </div>
 
-              {/* Sync Now Action */}
+              {/* Sync Now Direct Action (Zero manual modal popups) */}
               <div className="settings-row-item clickable" onClick={handleManualHealthSync}>
                 <div className="row-left">
                   <RefreshCw size={18} className={`text-emerald-400 ${syncingHealth ? 'animate-spin' : ''}`} />
                   <div>
                     <span className="row-title font-semibold">
-                      {window.Capacitor?.isNativePlatform?.() ? 'Sync Health Stats Now' : 'Update Apple Health Steps'}
+                      Sync Health Stats Now
                     </span>
                     <span className="row-hint">
-                      {window.Capacitor?.isNativePlatform?.()
-                        ? 'Instantly fetch fresh OS stats & push to Together pod'
-                        : 'Enter exact steps from iOS Health app & push to habits and pod'}
+                      Sync steps, calories, water, sleep & workouts to habits & Together pod
                     </span>
                   </div>
                 </div>
@@ -546,9 +548,27 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                   style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', borderColor: 'rgba(16, 185, 129, 0.3)' }}
                   disabled={syncingHealth}
                 >
-                  {syncingHealth ? 'Syncing...' : (window.Capacitor?.isNativePlatform?.() ? 'Sync Now' : 'Enter Steps')}
+                  {syncingHealth ? 'Syncing...' : 'Sync Now'}
                 </button>
               </div>
+
+              {/* Apple Health Automation Info for iOS Web Users */}
+              {!window.Capacitor?.isNativePlatform?.() && (
+                <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem', padding: '0.85rem 1rem', background: 'rgba(255, 255, 255, 0.02)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Activity size={16} className="text-emerald-400" />
+                      <span className="row-title font-semibold" style={{ fontSize: '0.82rem' }}>
+                        Apple Health Auto-Sync
+                      </span>
+                    </div>
+                    <span className="active-badge" style={{ fontSize: '0.65rem' }}>iOS Native</span>
+                  </div>
+                  <span className="row-hint" style={{ fontSize: '0.75rem', lineHeight: '1.35' }}>
+                    On iPhone, Apple Health data syncs automatically via Apple Shortcuts and device motion sensors with zero manual entry.
+                  </span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -766,67 +786,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         isChecking={checkingUpdate}
       />
 
-      {/* APPLE HEALTH / IOS STEPS INPUT MODAL */}
-      {showAppleHealthModal && (
-        <div className="update-modal-backdrop" onClick={() => setShowAppleHealthModal(false)}>
-          <div className="update-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div className="update-modal-header">
-              <div className="update-icon-circle" style={{ background: 'rgba(0, 210, 132, 0.15)', color: '#00D284' }}>
-                <Activity size={24} />
-              </div>
-              <h3 className="update-modal-title font-extrabold">Sync Apple Health Steps</h3>
-              <p className="update-modal-subtitle">
-                Enter your exact step count from the iOS Health app today. We sync this exact number into your habits and shared pod goals.
-              </p>
-            </div>
-
-            <form onSubmit={handleSaveAppleHealthSteps} style={{ padding: '0 1.25rem 1.25rem' }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label className="row-title font-bold" style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>
-                  Today's Step Count
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="150000"
-                    step="1"
-                    className="group-input-field font-bold"
-                    style={{ fontSize: '1.25rem', padding: '0.75rem 1rem', width: '100%', boxSizing: 'border-box' }}
-                    placeholder="e.g. 49"
-                    value={appleHealthStepsInput}
-                    onChange={(e) => setAppleHealthStepsInput(e.target.value)}
-                    autoFocus
-                  />
-                  <span style={{ position: 'absolute', right: '1rem', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>
-                    steps
-                  </span>
-                </div>
-                <span className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.35rem', display: 'block' }}>
-                  Open Apple Health on your iPhone to see your exact steps today.
-                </span>
-              </div>
-
-              <div className="confirm-btn-row">
-                <button
-                  type="button"
-                  className="confirm-btn cancel"
-                  onClick={() => setShowAppleHealthModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="confirm-btn font-bold"
-                  style={{ background: 'var(--primary, #10B981)', color: '#ffffff' }}
-                >
-                  Save & Sync
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* AVATAR OPTIONS ACTION MODAL */}
       {avatarModalOpen && (
         <div className="avatar-modal-backdrop" onClick={() => setAvatarModalOpen(false)}>

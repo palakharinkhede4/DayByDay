@@ -14,6 +14,7 @@ import { AuthScreen } from './screens/AuthScreen';
 import { FeaturesGuideModal } from './components/FeaturesGuideModal';
 import { useHabits } from './context/HabitContext';
 import { checkForAppUpdate } from './utils/updateChecker';
+import { ingestUrlHealthData } from './utils/fitnessSync';
 
 class ScreenErrorBoundary extends React.Component {
   constructor(props) {
@@ -88,6 +89,25 @@ const MainAppContent = () => {
       }
     }
   }, [activeTab]);
+
+  // Handle incoming health data (e.g. Apple Shortcuts / Health automations via URL params) on mount & resume
+  useEffect(() => {
+    const handleIncomingHealth = () => {
+      const incoming = ingestUrlHealthData();
+      if (incoming) {
+        syncDeviceHealthRef.current?.({ silent: true, force: true })?.catch?.(() => {});
+      }
+    };
+
+    handleIncomingHealth();
+    window.addEventListener('focus', handleIncomingHealth);
+    document.addEventListener('visibilitychange', handleIncomingHealth);
+
+    return () => {
+      window.removeEventListener('focus', handleIncomingHealth);
+      document.removeEventListener('visibilitychange', handleIncomingHealth);
+    };
+  }, []);
 
   // Automatically check for new releases when app opens and on focus/resume (throttled to 15 min, 0 DB load)
   useEffect(() => {

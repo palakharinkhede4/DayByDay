@@ -160,6 +160,31 @@ export default async function handler(req, res) {
       return res.status(result.success ? 200 : 500).json(result);
     }
 
+    if (action === 'get_health') {
+      const { userId } = req.query;
+      try {
+        if (sql) {
+          let user = null;
+          if (userId) {
+            const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+            user = rows[0] || null;
+          } else if (code) {
+            const rows = await sql`SELECT preferences FROM daybyday_users WHERE UPPER(secret_code) = ${String(code).trim().toUpperCase()} LIMIT 1`;
+            user = rows[0] || null;
+          } else if (username) {
+            const rows = await sql`SELECT preferences FROM daybyday_users WHERE LOWER(username) = ${String(username).trim().toLowerCase()} LIMIT 1`;
+            user = rows[0] || null;
+          }
+          if (user && user.preferences && user.preferences.healthData) {
+            return res.status(200).json({ success: true, healthData: user.preferences.healthData });
+          }
+        }
+        return res.status(200).json({ success: false, message: 'No remote health data found' });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
     if (!username && !code) {
       return res.status(400).json({ error: 'Username or secret code required' });
     }
@@ -382,6 +407,48 @@ export default async function handler(req, res) {
         };
         memoryDb.saveUser(user);
         return res.status(201).json({ user: sanitizeUser(user) });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: CLOUD HEALTH & FITNESS SYNC (Apple Health Shortcuts, Webhooks, Android)
+    if (action === 'health_sync' || action === 'sync_health') {
+      const { secretCode, username, userId, healthData } = req.body || {};
+      if (!healthData || typeof healthData !== 'object') {
+        return res.status(400).json({ error: 'healthData object is required' });
+      }
+
+      try {
+        if (sql) {
+          let user = null;
+          if (secretCode) {
+            const cleanCode = String(secretCode).trim().toUpperCase();
+            const rows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
+            user = rows[0] || null;
+          } else if (userId) {
+            const rows = await sql`SELECT * FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+            user = rows[0] || null;
+          } else if (username) {
+            const cleanUser = String(username).trim().toLowerCase().replace(/^@/, '');
+            const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = ${cleanUser} LIMIT 1`;
+            user = rows[0] || null;
+          }
+
+          if (user) {
+            const currentPrefs = user.preferences || {};
+            const updatedPrefs = {
+              ...currentPrefs,
+              healthData: {
+                ...healthData,
+                syncedAt: new Date().toISOString(),
+              },
+            };
+            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)} WHERE id = ${user.id}`;
+            return res.status(200).json({ success: true, healthData: updatedPrefs.healthData });
+          }
+        }
+        return res.status(200).json({ success: true, healthData });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }

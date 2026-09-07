@@ -2132,7 +2132,7 @@ export const HabitProvider = ({ children }) => {
     if (!force && !isHealthSyncEnabled()) return null;
     if (!silent) sound.press();
 
-    const healthData = await importDeviceHealthStats();
+    const healthData = await importDeviceHealthStats(user);
     if (healthData && healthData.success) {
       setHealthStats(healthData);
       await syncHealthDataToHabitsAndPod({
@@ -2486,27 +2486,34 @@ export const HabitProvider = ({ children }) => {
       syncUserHabitsRemote(user.id, nextHabitsList).catch(() => {});
     }
 
-    // Keep Health Stats and Together Pod goals synchronized with exact step habits
+    // Keep Health Stats and Together Pod goals synchronized with exact health habits
     if (userId === 'user1' && computedNextValue !== null && typeof computedNextValue === 'number') {
       const targetHabit = nextHabitsList.find((h) => h.id === habitId);
       if (targetHabit) {
         const u = (targetHabit.unit || '').toLowerCase();
         const n = (targetHabit.name || '').toLowerCase();
         const isStepHabit = u === 'steps' || n.includes('step') || n.includes('walk');
+        const isWaterHabit = targetHabit.id === 'water' || u.includes('glass') || u === 'ml' || n.includes('water');
+        const isSleepHabit = targetHabit.id === 'sleep' || u.includes('hour') || n.includes('sleep');
+        const isWorkoutHabit = targetHabit.id === 'workouts' || n.includes('workout') || n.includes('exercise');
+
         if (isStepHabit) {
           const steps = Math.max(0, Math.round(computedNextValue));
-          const newHealthData = {
-            steps,
-            calories: Math.round(steps * 0.04),
-            distanceKm: Math.round(steps * 0.000762 * 100) / 100,
-            activeMinutes: Math.round(steps / 100),
-            source: 'habit_entry',
-            syncedAt: new Date().toISOString(),
-          };
-          setHealthStats(newHealthData);
-          try {
-            localStorage.setItem('daybyday_health_sync_data', JSON.stringify(newHealthData));
-          } catch {}
+          setHealthStats((prev) => {
+            const updated = {
+              ...(prev || {}),
+              steps,
+              calories: Math.round(steps * 0.04),
+              distanceKm: Math.round(steps * 0.000762 * 100) / 100,
+              activeMinutes: Math.round(steps / 100),
+              source: 'habit_entry',
+              syncedAt: new Date().toISOString(),
+            };
+            try {
+              localStorage.setItem('daybyday_health_sync_data', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
 
           if (groupPod && Array.isArray(groupPod.sharedGoals)) {
             for (const sg of groupPod.sharedGoals) {
@@ -2517,6 +2524,55 @@ export const HabitProvider = ({ children }) => {
               }
             }
           }
+        } else if (isWaterHabit) {
+          const val = Math.max(0, computedNextValue);
+          const totalMl = u.includes('glass') ? val * 250 : val;
+          setHealthStats((prev) => {
+            const updated = {
+              ...(prev || {}),
+              water: totalMl,
+              waterGlasses: Math.round(totalMl / 250),
+              syncedAt: new Date().toISOString(),
+            };
+            try {
+              localStorage.setItem('daybyday_health_sync_data', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+          if (groupPod && Array.isArray(groupPod.sharedGoals)) {
+            for (const sg of groupPod.sharedGoals) {
+              const sn = (sg.name || '').toLowerCase();
+              if (sn.includes('water') || sn.includes('hydrat')) {
+                updateSharedGoalProgress(sg.id, 0, val, silent);
+              }
+            }
+          }
+        } else if (isSleepHabit) {
+          const hrs = Math.max(0, computedNextValue);
+          setHealthStats((prev) => {
+            const updated = {
+              ...(prev || {}),
+              sleep: hrs,
+              syncedAt: new Date().toISOString(),
+            };
+            try {
+              localStorage.setItem('daybyday_health_sync_data', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+        } else if (isWorkoutHabit) {
+          const mins = Math.max(0, computedNextValue);
+          setHealthStats((prev) => {
+            const updated = {
+              ...(prev || {}),
+              activeMinutes: mins,
+              syncedAt: new Date().toISOString(),
+            };
+            try {
+              localStorage.setItem('daybyday_health_sync_data', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
         }
       }
     }
