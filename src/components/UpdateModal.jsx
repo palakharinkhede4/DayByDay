@@ -4,11 +4,12 @@ import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL 
 import { sound } from '../utils/sound';
 
 export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false }) => {
+  const [copied, setCopied] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
+
   if (!isOpen) return null;
 
   const isUpdate = updateInfo?.updateAvailable;
-  const [copied, setCopied] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(false);
 
   const handleCopyLink = async () => {
     sound.press();

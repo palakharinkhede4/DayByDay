@@ -44,15 +44,12 @@ export const InsightsScreen = () => {
   const todayKey = new Date().toISOString().slice(0, 10);
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
 
-  // Refresh calendar and sync stats on mount
+  // Refresh calendar state on mount
   useEffect(() => {
     const now = new Date();
     setCalDate(now);
     setSelectedDateKey(now.toISOString().slice(0, 10));
-    if (typeof syncDeviceHealth === 'function') {
-      syncDeviceHealth({ silent: true, force: true }).catch?.(() => {});
-    }
-  }, [syncDeviceHealth]);
+  }, []);
 
   const calYear = calDate.getFullYear();
   const calMonth = calDate.getMonth();

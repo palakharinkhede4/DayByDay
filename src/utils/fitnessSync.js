@@ -3,8 +3,6 @@
  * Bridges Android OS Step Sensor / Activity Recognition and iOS Web App / Web Health Import.
  */
 
-import { sound } from './sound';
-
 const STORAGE_KEY = 'daybyday_health_sync_data';
 const ENABLED_KEY = 'daybyday_health_sync_enabled';
 
@@ -167,7 +165,7 @@ export const syncHealthDataToHabitsAndPod = async ({
   let updatedHabitsCount = 0;
   let updatedGoalsCount = 0;
 
-  // 1. Sync matching individual habits
+  // 1. Sync matching individual habits only if value actually changed
   for (const h of habits) {
     const unitLower = (h.unit || '').toLowerCase();
     const nameLower = (h.name || '').toLowerCase();
@@ -178,20 +176,27 @@ export const syncHealthDataToHabitsAndPod = async ({
       nameLower.includes('running');
 
     if (isStepHabit && typeof onUpdateHabit === 'function') {
-      onUpdateHabit(h.id, 'user1', steps, true, silent);
-      updatedHabitsCount++;
+      const curVal = h[activeUserId];
+      if (curVal !== steps) {
+        onUpdateHabit(h.id, activeUserId, steps, true, silent);
+        updatedHabitsCount++;
+      }
     }
   }
 
-  // 2. Sync matching shared pod goals in Together
+  // 2. Sync matching shared pod goals in Together only if value actually changed
   for (const sg of sharedGoals) {
     const unitLower = (sg.unit || '').toLowerCase();
     const nameLower = (sg.name || '').toLowerCase();
     const isStepGoal = unitLower === 'steps' || nameLower.includes('step') || nameLower.includes('walk');
 
     if (isStepGoal && typeof onUpdateSharedGoal === 'function') {
-      onUpdateSharedGoal(sg.id, 0, steps);
-      updatedGoalsCount++;
+      const memberEntry = sg.memberProgress?.[activeUserId];
+      const curVal = typeof memberEntry === 'object' ? Number(memberEntry?.value || 0) : Number(memberEntry || 0);
+      if (curVal !== steps) {
+        onUpdateSharedGoal(sg.id, 0, steps, silent);
+        updatedGoalsCount++;
+      }
     }
   }
 

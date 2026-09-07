@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HabitProvider } from './context/HabitContext';
 import { AppLayout } from './components/AppLayout';
 import { MyHabitsScreen } from './screens/MyHabitsScreen';
@@ -75,14 +75,19 @@ const MainAppContent = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
-  // Auto-sync fitness data whenever switching to habits, together, or settings
+  // Auto-sync fitness data ONLY ONCE when switching tabs (habits, together, settings, insights)
+  const prevTabRef = useRef(activeTab);
+  const syncDeviceHealthRef = useRef(syncDeviceHealth);
+  syncDeviceHealthRef.current = syncDeviceHealth;
+
   useEffect(() => {
-    if (activeTab === 'habits' || activeTab === 'together' || activeTab === 'settings') {
-      if (typeof syncDeviceHealth === 'function') {
-        syncDeviceHealth({ silent: true, force: true }).catch?.(() => {});
+    if (prevTabRef.current !== activeTab) {
+      prevTabRef.current = activeTab;
+      if (activeTab === 'habits' || activeTab === 'together' || activeTab === 'settings' || activeTab === 'insights') {
+        syncDeviceHealthRef.current?.({ silent: true, force: true })?.catch?.(() => {});
       }
     }
-  }, [activeTab, syncDeviceHealth]);
+  }, [activeTab]);
 
   // Automatically check for new releases when app opens and on focus/resume (throttled to 15 min, 0 DB load)
   useEffect(() => {

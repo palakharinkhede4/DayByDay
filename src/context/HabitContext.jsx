@@ -2029,7 +2029,7 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification('Shared goal added to pod!', 'target');
   };
 
-  const updateSharedGoalProgress = async (goalId, delta, explicitValue) => {
+  const updateSharedGoalProgress = async (goalId, delta, explicitValue, silent = false) => {
     if (!groupPod) return;
 
     const myKey = user?.id || user?.username || 'usr_me';
@@ -2081,11 +2081,13 @@ export const HabitProvider = ({ children }) => {
     setGroupPod(updatedPod);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedPod));
 
-    if (newCompletedState) {
-      sound.complete();
-      triggerCelebration();
-    } else {
-      sound.step();
+    if (!silent) {
+      if (newCompletedState) {
+        sound.complete();
+        triggerCelebration();
+      } else {
+        sound.step();
+      }
     }
 
     if (groupPod.code) {
@@ -2511,7 +2513,7 @@ export const HabitProvider = ({ children }) => {
               const su = (sg.unit || '').toLowerCase();
               const sn = (sg.name || '').toLowerCase();
               if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
-                updateSharedGoalProgress(sg.id, 0, steps);
+                updateSharedGoalProgress(sg.id, 0, steps, silent);
               }
             }
           }

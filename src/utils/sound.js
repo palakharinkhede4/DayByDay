@@ -14,6 +14,8 @@ class SoundEngine {
       }
     })();
     this.lastHapticTime = 0;
+    this.recentHapticTimestamps = [];
+    this.hapticCooldownUntil = 0;
     this.idleTimer = null;
     this.setupLifecycleListeners();
   }
@@ -182,11 +184,27 @@ class SoundEngine {
   async triggerHaptic(type = 'light', fallbackPattern = 35) {
     if (!this.hapticsEnabled) return;
 
-    // Strict throttle guard: block vibration spam (at most once every 120ms)
     const now = Date.now();
-    if (now - this.lastHapticTime < 120) {
+    // 1. Safety circuit breaker: Drop immediately if cooling down
+    if (now < this.hapticCooldownUntil) {
       return;
     }
+
+    // 2. Strict throttle guard: minimum 150ms spacing between any haptics
+    if (now - this.lastHapticTime < 150) {
+      return;
+    }
+
+    // 3. Runaway burst detector: max 4 haptics per 1.2 seconds
+    this.recentHapticTimestamps = this.recentHapticTimestamps.filter((t) => now - t < 1200);
+    if (this.recentHapticTimestamps.length >= 4) {
+      // Circuit breaker trips! Silence haptics for 3.5s to prevent hardware motor burnout or vibration loops
+      this.hapticCooldownUntil = now + 3500;
+      this.recentHapticTimestamps = [];
+      return;
+    }
+
+    this.recentHapticTimestamps.push(now);
     this.lastHapticTime = now;
 
     try {
