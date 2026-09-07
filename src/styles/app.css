@@ -812,12 +812,14 @@ html, body {
   border-color: var(--primary, #1A56C4);
 }
 
-/* Settings UI: Toggle Switch & Focus Select */
+/* Settings UI: Toggle Switch & Focus Select (Material Design 3 Standard) */
 .toggle-switch {
   position: relative;
   display: inline-block;
-  width: 44px;
-  height: 24px;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .toggle-switch input {
@@ -833,26 +835,30 @@ html, body {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.16);
-  transition: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  border-radius: 24px;
+  background-color: var(--border-medium, #334155);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
 }
 
 .toggle-slider:before {
   position: absolute;
   content: "";
-  height: 18px;
-  width: 18px;
+  height: 20px;
+  width: 20px;
   left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  top: 3px;
+  background-color: #FFFFFF;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
 }
 
 .toggle-switch input:checked + .toggle-slider {
   background-color: var(--primary, #1A56C4);
+  border-color: var(--primary, #1A56C4);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
@@ -4241,10 +4247,37 @@ button:active {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--bg-surface);
-  backdrop-filter: var(--card-backdrop);
-  border-bottom: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-elevation-1);
+  background: #090D16;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme-mode="light"] .desktop-navbar {
+  background: #000000 !important;
+  border-bottom: 1px solid #1E293B !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .brand-name {
+  color: #FFFFFF !important;
+  -webkit-text-fill-color: #FFFFFF !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .theme-mode-btn {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #FFFFFF !important;
+}
+
+[data-theme-mode="dark"] .desktop-navbar {
+  background: #090D16 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .desktop-nav-inner {
@@ -4474,10 +4507,40 @@ button:active {
   align-items: center;
   justify-content: space-between;
   padding: max(env(safe-area-inset-top, 0px) + 0.45rem, 0.75rem) 1.15rem 0.55rem 1.15rem;
-  background: rgba(10, 15, 18, 0.88);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #090D16;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme-mode="light"] .mobile-app-header {
+  background: #000000 !important;
+  border-bottom: 1px solid #1E293B !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme-mode="light"] .mobile-app-header .mobile-brand-title {
+  color: #FFFFFF !important;
+}
+
+[data-theme-mode="light"] .mobile-app-header .mobile-theme-btn {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #FFFFFF !important;
+}
+
+[data-theme-mode="light"] .mobile-app-header .mobile-avatar-badge {
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+[data-theme-mode="dark"] .mobile-app-header {
+  background: #090D16 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .mobile-brand-logo {
@@ -6133,7 +6196,7 @@ button:active {
   gap: 0.55rem;
   padding: 0.45rem 0.85rem;
   border-radius: 9999px;
-  background: var(--bg-surface, rgba(15, 23, 42, 0.65));
+  background: var(--bg-surface, #111827);
   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
   color: var(--text-secondary, #94a3b8);
   cursor: pointer;
@@ -6152,6 +6215,24 @@ button:active {
   border-color: var(--primary, #2563EB);
   color: var(--text-primary, #ffffff);
   box-shadow: 0 2px 10px rgba(37, 99, 235, 0.25);
+}
+
+[data-theme-mode="light"] .partner-chip-btn {
+  background: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  color: #334155 !important;
+}
+
+[data-theme-mode="light"] .partner-chip-btn:hover {
+  border-color: #94A3B8 !important;
+  color: #0F172A !important;
+}
+
+[data-theme-mode="light"] .partner-chip-btn.active {
+  background: #EFF6FF !important;
+  border-color: #2563EB !important;
+  color: #1E40AF !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15) !important;
 }
 
 .chip-avatar {
@@ -6187,38 +6268,27 @@ button:active {
 .chip-progress-pill {
   font-size: 0.72rem;
   background: rgba(255, 255, 255, 0.1);
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
   color: var(--text-primary, #f8fafc);
+  font-weight: 700;
 }
 
 .partner-chip-btn.active .chip-progress-pill {
   background: rgba(37, 99, 235, 0.35);
-  color: #93C5FD;
+  color: #BFDBFE;
 }
 
-.partner-chip-add-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: 9999px;
-  background: transparent;
-  border: 1px dashed var(--border-medium, rgba(255, 255, 255, 0.2));
-  color: var(--text-tertiary, #64748b);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 700;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
+[data-theme-mode="light"] .chip-progress-pill {
+  background: #E2E8F0 !important;
+  color: #0F172A !important;
+  font-weight: 800 !important;
 }
 
-.partner-chip-add-btn:hover,
-.partner-chip-add-btn.active {
-  border-color: var(--primary, #2563EB);
-  color: var(--primary, #2563EB);
-  background: rgba(37, 99, 235, 0.08);
+[data-theme-mode="light"] .partner-chip-btn.active .chip-progress-pill {
+  background: #DBEAFE !important;
+  color: #1D4ED8 !important;
+  font-weight: 800 !important;
 }
 
 .cancel-add-partner-btn {
@@ -9058,13 +9128,14 @@ button:active {
   margin: 0.15rem 0 0;
 }
 
-/* TOGGLE SWITCH */
+/* TOGGLE SWITCH (Material Design 3 Standard) */
 .habit-toggle-switch {
   position: relative;
   display: inline-block;
-  width: 44px;
-  height: 24px;
+  width: 48px;
+  height: 28px;
   flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .habit-toggle-switch input {
@@ -9073,29 +9144,9 @@ button:active {
   height: 0;
 }
 
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: var(--border-medium, #334155);
-  transition: 0.2s;
-  border-radius: 24px;
-}
-
-.toggle-slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: 0.2s;
-  border-radius: 50%;
-}
-
 .habit-toggle-switch input:checked + .toggle-slider {
   background-color: var(--primary);
+  border-color: var(--primary);
 }
 
 .habit-toggle-switch input:checked + .toggle-slider:before {

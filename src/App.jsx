@@ -74,9 +74,11 @@ const MainAppContent = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
-  // Automatically check for new releases when app opens (native Android APK & Web)
+  // Automatically check for new releases when app opens and on focus/resume (throttled to 15 min, 0 DB load)
   useEffect(() => {
     let isCancelled = false;
+    let lastChecked = Date.now();
+
     const checkUpdates = async () => {
       try {
         const info = await checkForAppUpdate();
@@ -85,14 +87,27 @@ const MainAppContent = () => {
           setIsUpdateModalOpen(true);
         }
       } catch (err) {
-        console.warn('Startup update check notice:', err);
+        console.warn('Update check notice:', err);
       }
     };
 
     const timer = setTimeout(checkUpdates, 1500);
+
+    const handleResumeOrFocus = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastChecked > 15 * 60 * 1000) {
+        lastChecked = Date.now();
+        checkUpdates();
+      }
+    };
+
+    window.addEventListener('focus', handleResumeOrFocus);
+    document.addEventListener('visibilitychange', handleResumeOrFocus);
+
     return () => {
       isCancelled = true;
       clearTimeout(timer);
+      window.removeEventListener('focus', handleResumeOrFocus);
+      document.removeEventListener('visibilitychange', handleResumeOrFocus);
     };
   }, []);
 

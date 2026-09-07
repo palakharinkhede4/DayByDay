@@ -64,7 +64,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     enableHealthSync,
     disableHealthSync,
     syncDeviceHealth,
-    setCustomHealthSteps,
   } = useHabits();
 
   const fileInputRef = useRef(null);
@@ -81,8 +80,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [changelogData, setChangelogData] = useState(null);
   const [loadingChangelog, setLoadingChangelog] = useState(false);
   const [syncingHealth, setSyncingHealth] = useState(false);
-  const [showHealthCalibrate, setShowHealthCalibrate] = useState(false);
-  const [calibrateSteps, setCalibrateSteps] = useState('');
 
   const handleManualHealthSync = async () => {
     setSyncingHealth(true);
@@ -91,14 +88,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     } finally {
       setSyncingHealth(false);
     }
-  };
-
-  const handleSaveCalibrate = async (e) => {
-    e.preventDefault();
-    if (!calibrateSteps) return;
-    await setCustomHealthSteps(calibrateSteps);
-    setShowHealthCalibrate(false);
-    setCalibrateSteps('');
   };
 
 
@@ -507,18 +496,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                   {syncingHealth ? 'Syncing...' : 'Sync Now'}
                 </button>
               </div>
-
-              {/* Apple Health / Custom Steps Calibrate Option */}
-              <div className="settings-row-item clickable" onClick={() => setShowHealthCalibrate(true)}>
-                <div className="row-left">
-                  <Sparkles size={18} className="text-teal-400" />
-                  <div>
-                    <span className="row-title">Apple Health / Custom Calibrate</span>
-                    <span className="row-hint">Manually set or calibrate steps on iOS Safari or browser</span>
-                  </div>
-                </div>
-                <ChevronRight size={18} />
-              </div>
             </>
           )}
         </div>
@@ -757,59 +734,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* HEALTH SYNC CALIBRATION MODAL (iOS Web App & Manual Sync) */}
-      {showHealthCalibrate && (
-        <div className="modal-backdrop" onClick={() => setShowHealthCalibrate(false)}>
-          <div className="pairing-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%' }}>
-            <div className="pairing-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <Activity size={22} className="text-emerald-400" />
-                <h3 className="pairing-title font-bold">Health & Activity Sync</h3>
-              </div>
-            </div>
-
-            <p className="pairing-desc" style={{ marginTop: '0.5rem', fontSize: '0.88rem' }}>
-              On iOS Safari or desktop web, enter your Apple Health steps count below to sync habits and Together pod goals.
-            </p>
-
-            <form onSubmit={handleSaveCalibrate} style={{ marginTop: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label className="font-semibold text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  Today's Steps
-                </label>
-                <input
-                  type="number"
-                  placeholder="e.g. 8500"
-                  value={calibrateSteps}
-                  onChange={(e) => setCalibrateSteps(e.target.value)}
-                  className="pairing-input font-mono font-bold"
-                  style={{ fontSize: '1.2rem', padding: '0.75rem 1rem' }}
-                  autoFocus
-                />
-              </div>
-
-              <div className="pairing-actions-row" style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
-                <button
-                  type="button"
-                  className="confirm-btn cancel"
-                  onClick={() => setShowHealthCalibrate(false)}
-                  style={{ flex: 1 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="confirm-btn font-bold"
-                  style={{ flex: 1, background: 'linear-gradient(135deg, #10B981, #059669)', color: '#fff' }}
-                >
-                  Save & Sync
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

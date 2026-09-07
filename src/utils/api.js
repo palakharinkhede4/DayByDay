@@ -303,9 +303,28 @@ export const pushFullSync = async (podCode, userId, podInfo, habits) => {
   }
 };
 
-export const registerUserRemote = async (username, password, securityQuestion, securityAnswer, displayName) => {
+export const registerUserRemote = async (username, password, arg3, arg4, arg5, arg6) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
+
+  let displayName = username;
+  let avatar = 'star';
+  let securityQuestion = '';
+  let securityAnswer = '';
+
+  if (typeof arg5 !== 'undefined' || typeof arg6 !== 'undefined') {
+    // Invoked as: (username, password, displayName, avatar, securityQuestion, securityAnswer)
+    displayName = arg3 || username;
+    avatar = arg4 || 'star';
+    securityQuestion = (arg5 || '').trim();
+    securityAnswer = (arg6 || '').trim();
+  } else {
+    // Invoked as: (username, password, securityQuestion, securityAnswer, displayName)
+    securityQuestion = (arg3 || '').trim();
+    securityAnswer = (arg4 || '').trim();
+    displayName = arg5 || username;
+  }
+
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
       method: 'POST',
@@ -314,9 +333,10 @@ export const registerUserRemote = async (username, password, securityQuestion, s
         action: 'register',
         username,
         password,
+        displayName: displayName || username,
+        avatar: avatar || 'star',
         securityQuestion,
         securityAnswer,
-        displayName: displayName || username,
       }),
     });
     const data = await parseJsonSafe(res);

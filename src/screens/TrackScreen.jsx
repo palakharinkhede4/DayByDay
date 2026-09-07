@@ -176,6 +176,19 @@ export const TrackScreen = () => {
                 (trackedPartner && (trackedPartner.secretCode === code || trackedPartner.secret_code === code));
               const displayName = partner.displayName || partner.username || 'Friend';
 
+              const habitsList = partner.habits || [];
+              const computedPct = habitsList.length > 0
+                ? Math.round(
+                    habitsList.reduce((acc, h) => {
+                      const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                      if (isBool) return acc + (Boolean(h.user1) ? 100 : 0);
+                      const val = Math.max(0, Number(h.user1) || 0);
+                      const target = Math.max(1, Number(h.target) || 1);
+                      return acc + Math.min(100, Math.round((val / target) * 100));
+                    }, 0) / habitsList.length
+                  )
+                : (partner.todayPercent || 0);
+
               return (
                 <button
                   key={code}
@@ -199,22 +212,12 @@ export const TrackScreen = () => {
                   <div className="chip-info">
                     <span className="chip-name font-bold">{displayName}</span>
                     <span className="chip-progress-pill font-semibold">
-                      {partner.todayPercent || 0}%
+                      {computedPct}%
                     </span>
                   </div>
                 </button>
               );
             })}
-
-            {trackedPartners.length < 5 && (
-              <button
-                className={`partner-chip-add-btn ${showAddForm ? 'active' : ''}`}
-                onClick={() => setShowAddForm(!showAddForm)}
-              >
-                <Plus size={16} />
-                <span>+ Add</span>
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -308,7 +311,23 @@ export const TrackScreen = () => {
           {/* Quick Stats Grid */}
           <div className="partner-stats-grid">
             <div className="partner-stat-box">
-              <span className="stat-num font-black">{trackedPartner.todayPercent || 0}%</span>
+              <span className="stat-num font-black">
+                {(() => {
+                  const partnerHabits = trackedPartner.habits || [];
+                  if (partnerHabits.length > 0) {
+                    return Math.round(
+                      partnerHabits.reduce((acc, h) => {
+                        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                        if (isBool) return acc + (Boolean(h.user1) ? 100 : 0);
+                        const val = Math.max(0, Number(h.user1) || 0);
+                        const target = Math.max(1, Number(h.target) || 1);
+                        return acc + Math.min(100, Math.round((val / target) * 100));
+                      }, 0) / partnerHabits.length
+                    );
+                  }
+                  return trackedPartner.todayPercent || 0;
+                })()}%
+              </span>
               <span className="stat-lbl">Today's Goals Done</span>
             </div>
 

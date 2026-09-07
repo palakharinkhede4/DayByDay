@@ -55,6 +55,30 @@ import {
   updateCustomHealthStats,
 } from '../utils/fitnessSync';
 
+export const resolveEffectiveTheme = (mode) => {
+  if (mode === 'light' || mode === 'dark') return mode;
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'dark';
+};
+
+export const calculatePartnerCompletionPercent = (partnerHabits) => {
+  if (!partnerHabits || !Array.isArray(partnerHabits) || partnerHabits.length === 0) return 0;
+  const total = partnerHabits.length;
+  const totalProgress = partnerHabits.reduce((acc, h) => {
+    const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+    if (isBool) {
+      return acc + (Boolean(h.user1) ? 100 : 0);
+    }
+    const val = Math.max(0, Number(h.user1) || 0);
+    const target = Math.max(1, Number(h.target) || 1);
+    const pct = Math.min(100, Math.round((val / target) * 100));
+    return acc + pct;
+  }, 0);
+  return Math.round(totalProgress / total);
+};
+
 const HabitContext = createContext(null);
 
 const INITIAL_HABITS = [
@@ -223,7 +247,9 @@ export const HabitProvider = ({ children }) => {
   const setThemeMode = (mode) => {
     setThemeModeState(mode);
     localStorage.setItem('daybyday_theme_mode', mode);
-    document.documentElement.setAttribute('data-theme-mode', mode);
+    const effective = resolveEffectiveTheme(mode);
+    document.documentElement.setAttribute('data-theme-mode', effective);
+    document.documentElement.setAttribute('data-theme-preference', mode);
   };
 
   // 4. OS Engine ('ios' | 'android')
@@ -541,7 +567,27 @@ export const HabitProvider = ({ children }) => {
   }, [osMode]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme-mode', themeMode);
+    const applyTheme = () => {
+      const effective = resolveEffectiveTheme(themeMode);
+      document.documentElement.setAttribute('data-theme-mode', effective);
+      document.documentElement.setAttribute('data-theme-preference', themeMode);
+    };
+
+    applyTheme();
+
+    if (themeMode === 'auto' && typeof window !== 'undefined' && window.matchMedia) {
+      const mql = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleMediaChange = () => {
+        applyTheme();
+      };
+      if (mql.addEventListener) {
+        mql.addEventListener('change', handleMediaChange);
+        return () => mql.removeEventListener('change', handleMediaChange);
+      } else if (mql.addListener) {
+        mql.addListener(handleMediaChange);
+        return () => mql.removeListener(handleMediaChange);
+      }
+    }
   }, [themeMode]);
 
   useEffect(() => {
@@ -870,19 +916,14 @@ export const HabitProvider = ({ children }) => {
           results.forEach((remote, idx) => {
             if (remote && remote.user) {
               const partnerHabits = remote.habits || [];
-              const total = partnerHabits.length;
-              const completed = partnerHabits.filter((h) => {
-                const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-                return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-              }).length;
-              const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              const calcPct = calculatePartnerCompletionPercent(partnerHabits);
               const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
               const actualCode = missing[idx].toUpperCase();
               loaded.push({
                 ...remote.user,
                 habits: partnerHabits,
                 streak: remote.streak ?? calcStreak,
-                todayPercent: remote.todayPercent ?? calcPct,
+                todayPercent: (partnerHabits.length > 0) ? calcPct : (remote.todayPercent ?? 0),
                 profilePicture: remote.preferences?.profilePicture || remote.user?.profilePicture || null,
                 lastActive: 'Active today',
                 secretCode: actualCode,
@@ -1327,12 +1368,7 @@ export const HabitProvider = ({ children }) => {
       }
       if (remote && remote.user) {
         const partnerHabits = remote.habits || [];
-        const total = partnerHabits.length;
-        const completed = partnerHabits.filter((h) => {
-          const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-          return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-        }).length;
-        const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const calcPct = calculatePartnerCompletionPercent(partnerHabits);
         const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
         const actualCode = remote.user.secretCode || remote.user.secret_code || cleanCode;
 
@@ -1340,7 +1376,7 @@ export const HabitProvider = ({ children }) => {
           ...remote.user,
           habits: partnerHabits,
           streak: remote.streak ?? calcStreak,
-          todayPercent: remote.todayPercent ?? calcPct,
+          todayPercent: (partnerHabits.length > 0) ? calcPct : (remote.todayPercent ?? 0),
           profilePicture: remote.preferences?.profilePicture || remote.user?.profilePicture || null,
           lastActive: 'Active today',
           secretCode: actualCode,
@@ -1401,19 +1437,14 @@ export const HabitProvider = ({ children }) => {
             if (!res || !res.user) res = await fetchUserRemote(pCode);
             if (res && res.user) {
               const partnerHabits = res.habits || [];
-              const total = partnerHabits.length;
-              const completed = partnerHabits.filter((h) => {
-                const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-                return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-              }).length;
-              const calcPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              const calcPct = calculatePartnerCompletionPercent(partnerHabits);
               const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
               return {
                 ...p,
                 ...res.user,
                 habits: partnerHabits,
                 streak: res.streak ?? calcStreak,
-                todayPercent: res.todayPercent ?? calcPct,
+                todayPercent: (partnerHabits.length > 0) ? calcPct : (res.todayPercent ?? 0),
                 profilePicture: res.preferences?.profilePicture || res.user?.profilePicture || p.profilePicture,
                 lastActive: 'Active today',
                 secretCode: pCode,
