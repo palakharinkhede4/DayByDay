@@ -999,7 +999,7 @@ export const HabitProvider = ({ children }) => {
     }
     if (prefs.trackedPartnerCodes && Array.isArray(prefs.trackedPartnerCodes) && prefs.trackedPartnerCodes.length) {
       const currentCodes = trackedPartners.map((p) => (p.secretCode || p.secret_code || '').toUpperCase());
-      const missing = prefs.trackedPartnerCodes.filter((c) => c && !currentCodes.includes(c.toUpperCase()));
+      const missing = prefs.trackedPartnerCodes.filter((c) => c && !currentCodes.includes(c.toUpperCase()) && !untrackedCodesRef.current.has(c.toUpperCase()));
       if (missing.length > 0) {
         Promise.all(missing.map((c) => fetchUserByCodeRemote(c))).then((results) => {
           const loaded = [];
@@ -1436,7 +1436,15 @@ export const HabitProvider = ({ children }) => {
     sound.tap();
     const clean = (code || '').toUpperCase().trim();
     setActiveTrackedCode(clean);
-    localStorage.setItem('daybyday_active_tracked_code', clean);
+    try {
+      localStorage.setItem('daybyday_active_tracked_code', clean);
+      const partner = trackedPartners.find(
+        (p) => (p.secretCode || p.secret_code || '').toUpperCase() === clean
+      );
+      if (partner) {
+        localStorage.setItem('daybyday_tracked_partner', JSON.stringify(partner));
+      }
+    } catch {}
   };
 
   const trackPartnerByCode = async (code) => {

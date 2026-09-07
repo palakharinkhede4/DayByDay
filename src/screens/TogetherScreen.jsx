@@ -14,7 +14,6 @@ import {
   LogOut,
   Target,
   Trash2,
-  Rocket,
   Minus,
   X,
   Sparkles,
