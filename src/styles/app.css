@@ -11630,3 +11630,417 @@ button:active {
   color: #0284c7;
 }
 
+/* ==========================================================
+   IOS HEALTH SETUP GUIDE MODAL (LIGHT & DARK ADAPTIVE)
+   ========================================================== */
+.ios-health-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.ios-health-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  background: #182230;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+  color: #F8FAFC;
+  font-family: inherit;
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme-mode="light"] .ios-health-modal {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18) !important;
+  color: #0f172a !important;
+}
+
+.ios-health-header {
+  padding: 1.25rem 1.25rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme-mode="light"] .ios-health-header {
+  border-bottom-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.ios-health-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ios-health-icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+[data-theme-mode="light"] .ios-health-icon-badge {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #059669 !important;
+}
+
+.ios-health-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: #F8FAFC;
+  letter-spacing: -0.02em;
+}
+
+[data-theme-mode="light"] .ios-health-title {
+  color: #0f172a !important;
+}
+
+.ios-health-subtitle {
+  font-size: 0.76rem;
+  color: #94A3B8;
+  display: block;
+  margin-top: 0.1rem;
+}
+
+[data-theme-mode="light"] .ios-health-subtitle {
+  color: #64748b !important;
+}
+
+.ios-health-close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme-mode="light"] .ios-health-close-btn {
+  background: rgba(15, 23, 42, 0.05) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  color: #475569 !important;
+}
+
+.ios-health-close-btn:hover {
+  filter: brightness(1.2);
+}
+
+.ios-health-privacy {
+  margin: 0.85rem 1.25rem 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+[data-theme-mode="light"] .ios-health-privacy {
+  background: rgba(16, 185, 129, 0.07) !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.ios-health-privacy-title {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #34D399;
+  line-height: 1.35;
+}
+
+[data-theme-mode="light"] .ios-health-privacy-title {
+  color: #059669 !important;
+}
+
+.ios-health-privacy-desc {
+  display: block;
+  font-size: 0.7rem;
+  color: #94A3B8;
+  line-height: 1.35;
+}
+
+[data-theme-mode="light"] .ios-health-privacy-desc {
+  color: #475569 !important;
+}
+
+.ios-health-tabs {
+  display: flex;
+  padding: 0.85rem 1.25rem 0;
+  gap: 0.5rem;
+}
+
+.ios-health-tab-btn {
+  flex: 1;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: #94A3B8;
+  transition: all 0.15s ease;
+}
+
+[data-theme-mode="light"] .ios-health-tab-btn {
+  background: rgba(15, 23, 42, 0.04) !important;
+  color: #64748b !important;
+}
+
+.ios-health-tab-btn.active {
+  background: var(--primary, #2563EB) !important;
+  color: #FFFFFF !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.ios-health-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  scrollbar-width: thin;
+}
+
+.ios-health-step-card {
+  padding: 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+[data-theme-mode="light"] .ios-health-step-card {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.ios-health-step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.18);
+  color: #60A5FA;
+  font-size: 0.78rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+[data-theme-mode="light"] .ios-health-step-num {
+  background: rgba(37, 99, 235, 0.12) !important;
+  color: #2563EB !important;
+}
+
+.ios-health-step-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #F8FAFC;
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+[data-theme-mode="light"] .ios-health-step-title {
+  color: #0f172a !important;
+}
+
+.ios-health-step-desc {
+  font-size: 0.76rem;
+  color: #94A3B8;
+  line-height: 1.45;
+}
+
+[data-theme-mode="light"] .ios-health-step-desc {
+  color: #475569 !important;
+}
+
+.ios-health-link-box {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 0.5rem;
+}
+
+[data-theme-mode="light"] .ios-health-link-box {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.ios-health-link-code {
+  flex: 1;
+  font-size: 0.73rem;
+  color: #60A5FA;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-theme-mode="light"] .ios-health-link-code {
+  color: #2563EB !important;
+}
+
+.ios-health-copy-btn {
+  background: rgba(59, 130, 246, 0.2);
+  border: none;
+  color: #93C5FD;
+  border-radius: 8px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+[data-theme-mode="light"] .ios-health-copy-btn {
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: #1d4ed8 !important;
+}
+
+.ios-health-copy-btn.copied {
+  background: #10B981 !important;
+  color: #FFFFFF !important;
+}
+
+.ios-health-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.ios-health-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #F8FAFC;
+  margin-bottom: 0.35rem;
+}
+
+[data-theme-mode="light"] .ios-health-label {
+  color: #0f172a !important;
+}
+
+.ios-health-input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  color: #F8FAFC;
+  font-size: 0.95rem;
+  font-weight: 600;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+[data-theme-mode="light"] .ios-health-input {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.ios-health-input:focus {
+  border-color: var(--primary, #2563EB) !important;
+}
+
+.ios-health-submit-btn {
+  margin-top: 0.4rem;
+  padding: 0.85rem;
+  border-radius: 14px;
+  border: none;
+  background: var(--primary, #2563EB);
+  color: #FFFFFF;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+}
+
+.ios-health-submit-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.ios-health-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ios-health-footer {
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: flex-end;
+}
+
+[data-theme-mode="light"] .ios-health-footer {
+  border-top-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.ios-health-done-btn {
+  padding: 0.55rem 1.2rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #F8FAFC;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme-mode="light"] .ios-health-done-btn {
+  background: rgba(15, 23, 42, 0.07) !important;
+  color: #0f172a !important;
+}

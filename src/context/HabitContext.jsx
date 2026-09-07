@@ -80,6 +80,58 @@ export const calculatePartnerCompletionPercent = (partnerHabits) => {
   return Math.round(totalProgress / total);
 };
 
+export function isHabitMatchingSharedGoal(h, sg) {
+  if (!h || !sg) return false;
+  const hId = (h.id || '').toLowerCase();
+  const hName = (h.name || '').toLowerCase();
+  const hUnit = (h.unit || '').toLowerCase();
+  const sgName = (sg.name || '').toLowerCase();
+  const sgUnit = (sg.unit || '').toLowerCase();
+
+  // 1. Direct name match
+  if (hName === sgName) return true;
+
+  // 2. Unit match (if specific unit like glasses, cups, steps, pages, min, km, etc.)
+  if (hUnit && sgUnit && hUnit === sgUnit) return true;
+
+  // 3. Semantic keyword matching:
+  // Water / Daily Hydration (matches "Water" <-> "Daily Hydration")
+  const isWaterH = hId.includes('water') || hName.includes('water') || hName.includes('hydrat') || hUnit.includes('glass') || hUnit.includes('cup');
+  const isWaterSG = sgName.includes('water') || sgName.includes('hydrat') || sgUnit.includes('glass') || sgUnit.includes('cup');
+  if (isWaterH && isWaterSG) return true;
+
+  // Steps / Walking / Running
+  const isStepH = hId === 'steps' || hUnit === 'steps' || hName.includes('step') || hName.includes('walk') || hName.includes('run');
+  const isStepSG = sgUnit === 'steps' || sgName.includes('step') || sgName.includes('walk') || sgName.includes('run');
+  if (isStepH && isStepSG) return true;
+
+  // Reading / Book / Pages
+  const isReadH = hId.includes('read') || hName.includes('read') || hName.includes('book') || hUnit.includes('page');
+  const isReadSG = sgName.includes('read') || sgName.includes('book') || sgUnit.includes('page');
+  if (isReadH && isReadSG) return true;
+
+  // Meditation / Mindfulness
+  const isMedH = hId.includes('meditat') || hName.includes('meditat') || hName.includes('mindful');
+  const isMedSG = sgName.includes('meditat') || sgName.includes('mindful');
+  if (isMedH && isMedSG) return true;
+
+  // Workout / Exercise / Fitness / Gym
+  const isWorkH = hId.includes('workout') || hName.includes('workout') || hName.includes('exercise') || hName.includes('gym') || hName.includes('train');
+  const isWorkSG = sgName.includes('workout') || sgName.includes('exercise') || sgName.includes('gym') || sgName.includes('train');
+  if (isWorkH && isWorkSG) return true;
+
+  // Sleep
+  const isSleepH = hId.includes('sleep') || hName.includes('sleep');
+  const isSleepSG = sgName.includes('sleep');
+  if (isSleepH && isSleepSG) return true;
+
+  // 4. Substring containment
+  if (hName.length >= 3 && sgName.includes(hName)) return true;
+  if (sgName.length >= 3 && hName.includes(sgName)) return true;
+
+  return false;
+}
+
 const HabitContext = createContext(null);
 
 const INITIAL_HABITS = [
@@ -2104,33 +2156,88 @@ export const HabitProvider = ({ children }) => {
     // Bidirectional sync: propagate updated value to matching habit in Habits tab
     const matchedGoal = updatedGoals.find((g) => g.id === goalId);
     if (matchedGoal) {
-      const gUnit = (matchedGoal.unit || '').toLowerCase();
-      const gName = (matchedGoal.name || '').toLowerCase();
-      const targetHabit = habits.find((h) => {
-        const hUnit = (h.unit || '').toLowerCase();
-        const hName = (h.name || '').toLowerCase();
-        const hId = (h.id || '').toLowerCase();
-        if (gUnit === 'steps' || gName.includes('step') || gName.includes('walk')) {
-          return hUnit === 'steps' || hId === 'steps' || hName.includes('step') || hName.includes('walk');
-        }
-        if (gUnit === 'calories' || gUnit === 'kcal' || gName.includes('calor')) {
-          return hUnit === 'calories' || hUnit === 'kcal' || hName.includes('calor');
-        }
-        if (gUnit === 'km' || gUnit === 'miles' || gName.includes('distance')) {
-          return hUnit === 'km' || hUnit === 'miles' || hName.includes('distance');
-        }
-        return hName === gName;
-      });
-
+      const targetHabit = habits.find((h) => isHabitMatchingSharedGoal(h, matchedGoal));
       if (targetHabit) {
         const myEntry = matchedGoal.memberProgress?.[myKey];
         const myVal = typeof myEntry === 'object' ? Number(myEntry.value) : Number(myEntry);
         if (myVal !== undefined && !isNaN(myVal) && Number(targetHabit.user1) !== myVal) {
-          updateHabit(targetHabit.id, 'user1', myVal, true);
+          updateHabit(targetHabit.id, 'user1', myVal, true, true);
         }
       }
     }
   };
+
+  // Auto-reconciliation: Ensure Habits progress always reflects into matching Together Group Pod shared goals
+  useEffect(() => {
+    if (!groupPod || !Array.isArray(groupPod.sharedGoals) || !Array.isArray(habits) || habits.length === 0) return;
+
+    let podNeedsUpdate = false;
+    const myKey = user?.id || user?.username || 'usr_me';
+
+    const reconciledGoals = groupPod.sharedGoals.map((sg) => {
+      const matchingHabit = habits.find((h) => isHabitMatchingSharedGoal(h, sg));
+      if (!matchingHabit) return sg;
+
+      const habitVal = typeof matchingHabit.user1 === 'boolean'
+        ? (matchingHabit.user1 ? 1 : 0)
+        : Math.max(0, Number(matchingHabit.user1) || 0);
+
+      const memberProgress = { ...(sg.memberProgress || {}) };
+      const myEntry = memberProgress[myKey] ??
+                      (user?.id ? memberProgress[user.id] : undefined) ??
+                      (user?.username ? memberProgress[user.username] : undefined) ??
+                      memberProgress['user1'];
+
+      const currentVal = typeof myEntry === 'object'
+        ? (Number(myEntry?.value) || 0)
+        : (Number(myEntry) || 0);
+
+      if (habitVal > currentVal) {
+        podNeedsUpdate = true;
+        const newCompleted = habitVal >= (Number(sg.target) || 1);
+        const updatedEntry = {
+          value: habitVal,
+          completed: newCompleted,
+          updatedAt: new Date().toISOString(),
+        };
+        memberProgress[myKey] = updatedEntry;
+        if (user?.id) memberProgress[user.id] = updatedEntry;
+        if (user?.username) memberProgress[user.username] = updatedEntry;
+
+        const totalSum = Object.values(memberProgress).reduce(
+          (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
+          0
+        );
+
+        if (groupPod.code) {
+          updateGroupGoalRemote(
+            groupPod.code,
+            sg.id,
+            0,
+            myKey,
+            habitVal,
+            newCompleted
+          ).catch(() => {});
+        }
+
+        return {
+          ...sg,
+          current: totalSum,
+          memberProgress,
+        };
+      }
+
+      return sg;
+    });
+
+    if (podNeedsUpdate) {
+      const nextPod = { ...groupPod, sharedGoals: reconciledGoals };
+      setGroupPod(nextPod);
+      try {
+        localStorage.setItem('daybyday_group_pod', JSON.stringify(nextPod));
+      } catch {}
+    }
+  }, [habits, groupPod?.code]);
 
   // Enable Native OS / Health App Sync (Asks permission one-time and retains it)
   const enableHealthSync = async () => {
@@ -2519,8 +2626,8 @@ export const HabitProvider = ({ children }) => {
       syncUserHabitsRemote(user.id, nextHabitsList).catch(() => {});
     }
 
-    // Keep Health Stats and Together Pod goals synchronized with exact health habits
-    if (userId === 'user1' && computedNextValue !== null && typeof computedNextValue === 'number') {
+    // Keep Health Stats and Together Pod goals synchronized with exact habits
+    if (userId === 'user1' && computedNextValue !== null && computedNextValue !== undefined) {
       const targetHabit = nextHabitsList.find((h) => h.id === habitId);
       if (targetHabit) {
         const u = (targetHabit.unit || '').toLowerCase();
@@ -2528,7 +2635,7 @@ export const HabitProvider = ({ children }) => {
         const isStepHabit = u === 'steps' || n.includes('step') || n.includes('walk');
 
         if (isStepHabit) {
-          const steps = Math.max(0, Math.round(computedNextValue));
+          const steps = Math.max(0, Math.round(Number(computedNextValue) || 0));
           const calories = Math.round(steps * 0.04);
           const distanceKm = Math.round(steps * 0.000762 * 100) / 100;
           setHealthStats((prev) => {
@@ -2545,18 +2652,17 @@ export const HabitProvider = ({ children }) => {
             } catch {}
             return updated;
           });
+        }
 
-          if (groupPod && Array.isArray(groupPod.sharedGoals)) {
-            for (const sg of groupPod.sharedGoals) {
-              const su = (sg.unit || '').toLowerCase();
-              const sn = (sg.name || '').toLowerCase();
-              if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
-                updateSharedGoalProgress(sg.id, 0, steps, silent);
-              } else if (su === 'calories' || su === 'kcal' || sn.includes('calor')) {
-                updateSharedGoalProgress(sg.id, 0, calories, silent);
-              } else if (su === 'km' || su === 'miles' || sn.includes('distance')) {
-                updateSharedGoalProgress(sg.id, 0, distanceKm, silent);
-              }
+        // UNIFIED SYNC: Update ANY matching shared goal in the Together pod (Water, Steps, Reading, Meditation, etc.)!
+        if (groupPod && Array.isArray(groupPod.sharedGoals)) {
+          const valToSync = typeof computedNextValue === 'boolean'
+            ? (computedNextValue ? 1 : 0)
+            : Math.max(0, Number(computedNextValue) || 0);
+
+          for (const sg of groupPod.sharedGoals) {
+            if (isHabitMatchingSharedGoal(targetHabit, sg)) {
+              updateSharedGoalProgress(sg.id, 0, valToSync, silent);
             }
           }
         }

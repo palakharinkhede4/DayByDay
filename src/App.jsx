@@ -86,8 +86,11 @@ const MainAppContent = () => {
   useEffect(() => {
     if (prevTabRef.current !== activeTab) {
       prevTabRef.current = activeTab;
-      if (activeTab === 'habits' || activeTab === 'together' || activeTab === 'settings' || activeTab === 'insights') {
-        syncDeviceHealthRef.current?.({ silent: true, force: true })?.catch?.(() => {});
+      // Only sync device health on tab switch if user explicitly enabled fitness sync
+      if (typeof window !== 'undefined' && localStorage.getItem('daybyday_health_sync_enabled') === 'true') {
+        if (activeTab === 'habits' || activeTab === 'together') {
+          syncDeviceHealthRef.current?.({ silent: true, force: false })?.catch?.(() => {});
+        }
       }
     }
   }, [activeTab]);

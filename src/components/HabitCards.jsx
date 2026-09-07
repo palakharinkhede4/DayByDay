@@ -486,27 +486,6 @@ export const HabitCards = ({ onOpenAddGoal }) => {
                 <SlidersHorizontal size={13} />
                 <span>Manage</span>
               </button>
-              <button
-                type="button"
-                className={`category-chip reorder-category-chip font-medium ${isReorderMode || isReorderModalOpen ? 'active' : ''}`}
-                onClick={() => {
-                  sound.tap();
-                  setIsReorderModalOpen(true);
-                }}
-                title="Reorder habits (drag, move up/down, or send to top/bottom)"
-              >
-                <ArrowUpDown size={13} />
-                <span>Reorder</span>
-              </button>
-              <button
-                type="button"
-                className={`category-chip health-sync-chip font-medium ${isSyncingHealth ? 'loading' : ''}`}
-                onClick={handleSyncHealth}
-                title="Import steps and fitness data from device"
-              >
-                <Activity size={13} className={isSyncingHealth ? 'animate-spin text-emerald-400' : 'text-emerald-400'} />
-                <span>{isSyncingHealth ? 'Syncing...' : 'Sync Steps'}</span>
-              </button>
             </>
           )}
         </div>

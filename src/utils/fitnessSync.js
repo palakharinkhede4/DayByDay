@@ -359,7 +359,10 @@ export const syncHealthDataToHabitsAndPod = async ({
     const targetVal = resolveMetricValue(metric, h, healthData);
     if (targetVal === null || targetVal === undefined) continue;
 
-    const curVal = h[activeUserId];
+    const curVal = Number(h[activeUserId]) || 0;
+    // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an empty device sync!
+    if (targetVal <= 0 && curVal > 0) continue;
+
     if (curVal !== targetVal && typeof onUpdateHabit === 'function') {
       onUpdateHabit(h.id, activeUserId, targetVal, true, silent);
       updatedHabitsCount++;
@@ -372,7 +375,7 @@ export const syncHealthDataToHabitsAndPod = async ({
     if (!metric) continue;
 
     const targetVal = resolveMetricValue(metric, sg, healthData);
-    if (targetVal === null || targetVal === undefined) continue;
+    if (targetVal === null || targetVal === undefined || targetVal <= 0) continue;
 
     const memberEntry = sg.memberProgress?.[activeUserId];
     const curVal = typeof memberEntry === 'object' ? Number(memberEntry?.value || 0) : Number(memberEntry || 0);
