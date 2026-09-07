@@ -170,13 +170,25 @@ export const importDeviceHealthStats = async (user = null) => {
     let lastSaved = urlPayload || getStoredHealthData() || {};
 
     // Check remote cloud health sync if logged in (e.g. iOS Shortcut pushed data to backend)
-    const userIdOrCode = user?.id || user?.secretCode || user?.username;
+    const userCode = user?.secretCode || user?.secret_code || '';
+    const userIdVal = user?.id || '';
+    const userNameVal = user?.username || '';
+    const userIdOrCode = userIdVal || userCode || userNameVal;
+
     if (userIdOrCode) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const url = `/api/user?action=get_health&userId=${encodeURIComponent(user?.id || '')}&code=${encodeURIComponent(user?.secretCode || '')}`;
-        const resp = await fetch(url, { signal: controller.signal });
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const cacheBuster = Date.now();
+        const url = `/api/user?action=get_health&userId=${encodeURIComponent(userIdVal)}&code=${encodeURIComponent(userCode)}&username=${encodeURIComponent(userNameVal)}&_t=${cacheBuster}`;
+        const resp = await fetch(url, {
+          signal: controller.signal,
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store',
+            'Pragma': 'no-cache',
+          },
+        });
         clearTimeout(timeoutId);
         if (resp.ok) {
           const json = await resp.json();
@@ -188,9 +200,9 @@ export const importDeviceHealthStats = async (user = null) => {
     }
 
     const todayDate = new Date().toISOString().slice(0, 10);
-    const isToday = lastSaved?.syncedAt?.startsWith(todayDate);
+    const isToday = lastSaved?.syncedAt ? lastSaved.syncedAt.startsWith(todayDate) : true;
 
-    const steps = isToday && typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : (Number(lastSaved?.steps) || 0);
+    const steps = typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : (Number(lastSaved?.steps) || 0);
     const calories = Number(lastSaved?.calories) || Math.round(steps * 0.04);
     const distanceKm = Number(lastSaved?.distanceKm) || Math.round(steps * 0.000762 * 100) / 100;
 

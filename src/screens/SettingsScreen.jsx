@@ -470,44 +470,6 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
           {healthSyncEnabled && (
             <>
-              {/* Daily Stats Summary: Steps, Calories, Distance */}
-              <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.75rem', padding: '0.85rem 1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span className="live-indicator-dot"></span>
-                    <span className="row-title font-bold" style={{ fontSize: '0.85rem' }}>
-                      Today's Activity
-                    </span>
-                  </div>
-                  <span className="row-hint" style={{ fontSize: '0.75rem' }}>
-                    {healthStats?.syncedAt ? `Synced ${new Date(healthStats.syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Live'}
-                  </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.6rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-emerald-400" style={{ fontSize: '1.2rem' }}>
-                      {(healthStats?.steps || 0).toLocaleString()}
-                    </div>
-                    <div className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Steps</div>
-                  </div>
-
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.6rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-amber-400" style={{ fontSize: '1.2rem' }}>
-                      {healthStats?.calories || Math.round((healthStats?.steps || 0) * 0.04)}
-                    </div>
-                    <div className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Calories (kcal)</div>
-                  </div>
-
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.6rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-blue-400" style={{ fontSize: '1.2rem' }}>
-                      {healthStats?.distanceKm !== undefined ? healthStats.distanceKm : (Math.round((healthStats?.steps || 0) * 0.000762 * 100) / 100)} km
-                    </div>
-                    <div className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Distance</div>
-                  </div>
-                </div>
-              </div>
-
               {/* Sync Now Direct Action (Zero manual modal popups) */}
               <div className="settings-row-item clickable" onClick={handleManualHealthSync}>
                 <div className="row-left">

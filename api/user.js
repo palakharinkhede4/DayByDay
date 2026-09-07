@@ -146,6 +146,11 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Set strict cache headers to prevent stale data on iOS Safari / WebKit PWAs
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   if (!isTablesInitialized()) {
     await ensureTables();
   }
@@ -153,7 +158,7 @@ export default async function handler(req, res) {
 
   // 1. GET: FETCH USER PROFILE, HABITS, OR RESOLVE DIRECT APK CDN
   if (req.method === 'GET') {
-    const { username, code, action, url } = req.query;
+    const { username, code, action, url, userId } = req.query;
 
     if (action === 'resolve_latest_apk' || action === 'resolve_cdn') {
       const result = await resolveLatestApkCdn(url);
@@ -161,24 +166,36 @@ export default async function handler(req, res) {
     }
 
     if (action === 'get_health') {
-      const { userId } = req.query;
       try {
+        const cleanCode = (code || '').trim().toUpperCase();
+        const cleanUser = (username || '').trim().toLowerCase().replace(/^@/, '');
+
         if (sql) {
           let user = null;
           if (userId) {
             const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
-            user = rows[0] || null;
-          } else if (code) {
-            const rows = await sql`SELECT preferences FROM daybyday_users WHERE UPPER(secret_code) = ${String(code).trim().toUpperCase()} LIMIT 1`;
-            user = rows[0] || null;
-          } else if (username) {
-            const rows = await sql`SELECT preferences FROM daybyday_users WHERE LOWER(username) = ${String(username).trim().toLowerCase()} LIMIT 1`;
-            user = rows[0] || null;
+            if (rows.length > 0) user = rows[0];
+          }
+          if (!user && cleanCode) {
+            const rows = await sql`SELECT preferences FROM daybyday_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
+            if (rows.length > 0) user = rows[0];
+          }
+          if (!user && cleanUser) {
+            const rows = await sql`SELECT preferences FROM daybyday_users WHERE LOWER(username) = ${cleanUser} LIMIT 1`;
+            if (rows.length > 0) user = rows[0];
           }
           if (user && user.preferences && user.preferences.healthData) {
             return res.status(200).json({ success: true, healthData: user.preferences.healthData });
           }
         }
+
+        // Memory Store Fallback
+        const lookup = (cleanCode || cleanUser || userId || '').trim().replace(/^@/, '');
+        const memUser = memoryDb.getUser(lookup);
+        if (memUser && memUser.preferences && memUser.preferences.healthData) {
+          return res.status(200).json({ success: true, healthData: memUser.preferences.healthData });
+        }
+
         return res.status(200).json({ success: false, message: 'No remote health data found' });
       } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -282,7 +299,26 @@ export default async function handler(req, res) {
           console.warn('Notice querying user group pod:', gpErr.message);
         }
 
-        const formattedHabits = habits.map(formatHabitFromRow);
+        const todayDateStr = new Date().toISOString().slice(0, 10);
+        const remoteHealthData = user.preferences?.healthData;
+        const isTodayHealthData = remoteHealthData?.syncedAt?.startsWith(todayDateStr);
+
+        const formattedHabits = habits.map(formatHabitFromRow).map((h) => {
+          if (isTodayHealthData && remoteHealthData?.steps) {
+            const isStep = (h.id || '').toLowerCase() === 'steps' ||
+                           (h.unit || '').toLowerCase() === 'steps' ||
+                           (h.name || '').toLowerCase().includes('step') ||
+                           (h.name || '').toLowerCase().includes('walk');
+            if (isStep && (Number(h.user1) || 0) < remoteHealthData.steps) {
+              return {
+                ...h,
+                user1: remoteHealthData.steps,
+                completed: remoteHealthData.steps >= (Number(h.target) || 10000),
+              };
+            }
+          }
+          return h;
+        });
         const totalHabits = formattedHabits.length;
         const completedCount = formattedHabits.filter(h => {
           const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
@@ -420,39 +456,82 @@ export default async function handler(req, res) {
       }
 
       try {
+        const cleanSteps = typeof healthData.steps === 'number' ? Math.max(0, Math.round(healthData.steps)) : 0;
+        const cleanCalories = typeof healthData.calories === 'number' ? Math.max(0, Math.round(healthData.calories)) : Math.round(cleanSteps * 0.04);
+        const cleanDistance = typeof healthData.distanceKm === 'number' ? Math.max(0, Math.round(healthData.distanceKm * 100) / 100) : Math.round(cleanSteps * 0.000762 * 100) / 100;
+        const cleanHealthData = {
+          steps: cleanSteps,
+          calories: cleanCalories,
+          distanceKm: cleanDistance,
+          source: healthData.source || 'fitness_sync',
+          syncedAt: new Date().toISOString(),
+        };
+
         if (sql) {
           let user = null;
-          if (secretCode) {
-            const cleanCode = String(secretCode).trim().toUpperCase();
+          const cleanCode = String(secretCode || '').trim().toUpperCase();
+          const cleanUser = String(username || '').trim().toLowerCase().replace(/^@/, '');
+
+          if (cleanCode) {
             const rows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
-            user = rows[0] || null;
-          } else if (userId) {
+            if (rows.length > 0) user = rows[0];
+          }
+          if (!user && userId) {
             const rows = await sql`SELECT * FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
-            user = rows[0] || null;
-          } else if (username) {
-            const cleanUser = String(username).trim().toLowerCase().replace(/^@/, '');
+            if (rows.length > 0) user = rows[0];
+          }
+          if (!user && cleanUser) {
             const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = ${cleanUser} LIMIT 1`;
-            user = rows[0] || null;
+            if (rows.length > 0) user = rows[0];
           }
 
           if (user) {
             const currentPrefs = user.preferences || {};
-            const cleanHealthData = {
-              steps: typeof healthData.steps === 'number' ? Math.max(0, Math.round(healthData.steps)) : 0,
-              calories: typeof healthData.calories === 'number' ? Math.max(0, Math.round(healthData.calories)) : Math.round((healthData.steps || 0) * 0.04),
-              distanceKm: typeof healthData.distanceKm === 'number' ? Math.max(0, Math.round(healthData.distanceKm * 100) / 100) : Math.round((healthData.steps || 0) * 0.000762 * 100) / 100,
-              source: healthData.source || 'fitness_sync',
-              syncedAt: new Date().toISOString(),
-            };
             const updatedPrefs = {
               ...currentPrefs,
               healthData: cleanHealthData,
             };
             await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)} WHERE id = ${user.id}`;
+
+            // Also keep user's step habit row in daybyday_habits in perfect sync
+            try {
+              const todayKey = new Date().toISOString().slice(0, 10);
+              const userHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id}`;
+              for (const h of userHabits) {
+                const isStep = (h.habit_id || '').toLowerCase() === 'steps' ||
+                               (h.unit || '').toLowerCase() === 'steps' ||
+                               (h.name || '').toLowerCase().includes('step') ||
+                               (h.name || '').toLowerCase().includes('walk');
+                if (isStep) {
+                  const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+                  history[todayKey] = cleanHealthData.steps;
+                  const targetNum = Number(h.target) || 10000;
+                  const isDone = cleanHealthData.steps >= targetNum;
+                  await sql`
+                    UPDATE daybyday_habits 
+                    SET user1 = ${cleanHealthData.steps}, history = ${JSON.stringify(history)}, completed = ${isDone}
+                    WHERE id = ${h.id}
+                  `;
+                }
+              }
+            } catch (hSyncErr) {
+              console.warn('Notice updating step habit row in SQL:', hSyncErr.message);
+            }
+
             return res.status(200).json({ success: true, healthData: cleanHealthData });
           }
         }
-        return res.status(200).json({ success: true, healthData });
+
+        // Memory store fallback
+        const lookup = (secretCode || username || userId || '').trim().replace(/^@/, '');
+        const memUser = memoryDb.getUser(lookup);
+        if (memUser) {
+          memUser.preferences = memUser.preferences || {};
+          memUser.preferences.healthData = cleanHealthData;
+          memoryDb.saveUser(memUser);
+        }
+
+        return res.status(200).json({ success: true, healthData: cleanHealthData });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }

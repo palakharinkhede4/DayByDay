@@ -11578,3 +11578,48 @@ button:active {
 [data-theme-mode="light"] .features-guide-footer-hint {
   color: #64748b !important;
 }
+
+/* Habit Card Step Health Metrics Subtext (Calories & Distance) */
+.habit-health-metrics-subtext {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-top: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: fit-content;
+  letter-spacing: 0.01em;
+  transition: background 0.15s ease;
+}
+
+.habit-health-metrics-subtext .metric-cal {
+  color: #fbbf24;
+}
+
+.habit-health-metrics-subtext .metric-dist {
+  color: #38bdf8;
+}
+
+.habit-health-metrics-subtext .metric-sep {
+  opacity: 0.4;
+  font-size: 0.75rem;
+  color: inherit;
+}
+
+[data-theme-mode="light"] .habit-health-metrics-subtext {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme-mode="light"] .habit-health-metrics-subtext .metric-cal {
+  color: #d97706;
+}
+
+[data-theme-mode="light"] .habit-health-metrics-subtext .metric-dist {
+  color: #0284c7;
+}
+

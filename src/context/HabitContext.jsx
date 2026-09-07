@@ -2466,6 +2466,9 @@ export const HabitProvider = ({ children }) => {
       });
 
       nextHabitsList = updatedList;
+      try {
+        localStorage.setItem('daybyday_habits', JSON.stringify(updatedList));
+      } catch {}
       return updatedList;
     });
 

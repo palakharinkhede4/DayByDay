@@ -77,9 +77,11 @@ const MainAppContent = () => {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
   // Auto-sync fitness data ONLY ONCE when switching tabs (habits, together, settings, insights)
-  const prevTabRef = useRef(activeTab);
+  const prevTabRef = useRef(null);
   const syncDeviceHealthRef = useRef(syncDeviceHealth);
-  syncDeviceHealthRef.current = syncDeviceHealth;
+  useEffect(() => {
+    syncDeviceHealthRef.current = syncDeviceHealth;
+  }, [syncDeviceHealth]);
 
   useEffect(() => {
     if (prevTabRef.current !== activeTab) {

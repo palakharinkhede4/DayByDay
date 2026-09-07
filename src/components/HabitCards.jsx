@@ -76,6 +76,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     deleteCustomCategory,
     syncDeviceHealth,
     triggerIslandNotification,
+    healthStats,
   } = useHabits();
 
   const [isSyncingHealth, setIsSyncingHealth] = useState(false);
@@ -85,18 +86,19 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     setIsSyncingHealth(true);
     try {
       if (syncDeviceHealth) {
-        const res = await syncDeviceHealth();
+        const res = await syncDeviceHealth({ silent: false, force: true });
         if (res && res.success) {
           sound.complete();
+          const stepCount = res.steps !== undefined ? res.steps : (res.stats?.steps || 0);
           triggerIslandNotification?.(
-            `Synced ${res.stats?.steps?.toLocaleString() || 0} steps from device!`,
+            `Synced ${Number(stepCount).toLocaleString()} steps from device!`,
             'health',
             'success'
           );
         } else {
           sound.step();
           triggerIslandNotification?.(
-            res?.message || 'Device health synced',
+            res?.error || res?.message || 'Device health synced',
             'health',
             'info'
           );
@@ -500,6 +502,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             index={index}
             totalCount={filteredHabits.length}
             activeUserId={activeUserId}
+            healthStats={healthStats}
             onUpdate={updateHabit}
             onRemove={removeGoal}
             onOpenEdit={() => setSelectedHabitForEdit(habit)}
@@ -564,6 +567,7 @@ const ModernHabitCard = ({
   index,
   totalCount,
   activeUserId,
+  healthStats,
   onUpdate,
   onRemove,
   onOpenEdit,
@@ -584,6 +588,19 @@ const ModernHabitCard = ({
   const isDone = isBool ? Boolean(habit.user1) : val >= target;
   const percent = isBool ? (isDone ? 100 : 0) : Math.min(100, Math.round((val / target) * 100));
   const animatedPercent = pageMounted ? percent : 0;
+
+  const isStepHabit = habit.id === 'steps' ||
+                      (habit.unit || '').toLowerCase() === 'steps' ||
+                      (habit.name || '').toLowerCase().includes('step') ||
+                      (habit.name || '').toLowerCase().includes('walk');
+
+  const showHealthMetrics = isStepHabit && val > 0;
+  const metricsCalories = (healthStats && healthStats.steps === val && healthStats.calories)
+    ? healthStats.calories
+    : Math.round(val * 0.04);
+  const metricsDistance = (healthStats && healthStats.steps === val && healthStats.distanceKm !== undefined)
+    ? healthStats.distanceKm
+    : Math.round(val * 0.000762 * 100) / 100;
 
   const stepDelta = Number(habit.delta) || (habit.unit === 'steps' ? 1000 : (habit.id === 'workouts' ? 5 : 1));
 
@@ -739,7 +756,7 @@ const ModernHabitCard = ({
 
             <div className="habit-meta-row">
               <span className="habit-target-text font-medium">
-                {isBool ? (isDone ? 'Completed' : 'Pending') : `${val} / ${target} ${habit.unit || ''}`}
+                {isBool ? (isDone ? 'Completed' : 'Pending') : `${val.toLocaleString()} / ${target.toLocaleString()} ${habit.unit || ''}`}
               </span>
 
               {habit.reminderTime && (
@@ -749,6 +766,14 @@ const ModernHabitCard = ({
                 </span>
               )}
             </div>
+
+            {showHealthMetrics && (
+              <div className="habit-health-metrics-subtext" title="Logged activity metrics">
+                <span className="metric-cal">🔥 {metricsCalories.toLocaleString()} kcal</span>
+                <span className="metric-sep">·</span>
+                <span className="metric-dist">📍 {metricsDistance} km</span>
+              </div>
+            )}
           </div>
         </div>
 
