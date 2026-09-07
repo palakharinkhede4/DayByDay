@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
   ArrowUpDown,
   X,
@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronsUp,
   ChevronsDown,
-  GripVertical,
   Check,
   Flame,
 } from 'lucide-react';
@@ -15,11 +14,6 @@ import { sound } from '../utils/sound';
 
 export const ReorderHabitsModal = ({ isOpen, onClose }) => {
   const { habits, reorderHabit, reorderHabitToIndex } = useHabits();
-  const [draggedId, setDraggedId] = useState(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
-  const listContainerRef = useRef(null);
-  const dragOverIdxRef = useRef(null);
-  const pointerYRef = useRef(null);
 
   // Lock body scroll while modal is active
   useEffect(() => {
@@ -30,78 +24,6 @@ export const ReorderHabitsModal = ({ isOpen, onClose }) => {
       document.body.style.overflow = originalOverflow;
     };
   }, [isOpen]);
-
-  // Modal auto-scroll RAF loop during drag inside the sheet
-  useEffect(() => {
-    if (!draggedId) return;
-
-    let rafId = null;
-
-    const scrollLoop = () => {
-      const container = listContainerRef.current;
-      if (container && pointerYRef.current !== null) {
-        const rect = container.getBoundingClientRect();
-        const y = pointerYRef.current;
-        const threshold = 70;
-
-        if (y < rect.top + threshold) {
-          const intensity = Math.min(1, (rect.top + threshold - y) / threshold);
-          container.scrollTop -= Math.max(3, Math.round(intensity * 18));
-        } else if (y > rect.bottom - threshold) {
-          const intensity = Math.min(1, (y - (rect.bottom - threshold)) / threshold);
-          container.scrollTop += Math.max(3, Math.round(intensity * 18));
-        }
-      }
-      rafId = requestAnimationFrame(scrollLoop);
-    };
-
-    const handlePointerMove = (e) => {
-      if (e.touches && e.touches.length > 0) {
-        pointerYRef.current = e.touches[0].clientY;
-        const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
-        const item = el?.closest('.reorder-modal-item');
-        if (item && item.dataset.index !== undefined) {
-          const idx = parseInt(item.dataset.index, 10);
-          if (!isNaN(idx) && dragOverIdxRef.current !== idx) {
-            dragOverIdxRef.current = idx;
-            setDragOverIdx(idx);
-            sound.dragOver();
-          }
-        }
-      } else if (e.clientY !== undefined) {
-        pointerYRef.current = e.clientY;
-      }
-    };
-
-    const handlePointerUp = () => {
-      if (draggedId && dragOverIdxRef.current !== null) {
-        const fromIdx = habits.findIndex((h) => h.id === draggedId);
-        if (fromIdx !== -1 && fromIdx !== dragOverIdxRef.current) {
-          reorderHabitToIndex(draggedId, dragOverIdxRef.current);
-          sound.step();
-        }
-      }
-      setDraggedId(null);
-      setDragOverIdx(null);
-      dragOverIdxRef.current = null;
-      pointerYRef.current = null;
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('touchmove', handlePointerMove, { passive: true });
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('touchend', handlePointerUp);
-
-    rafId = requestAnimationFrame(scrollLoop);
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('touchmove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('touchend', handlePointerUp);
-    };
-  }, [draggedId, habits, reorderHabitToIndex]);
 
   if (!isOpen) return null;
 
@@ -130,33 +52,100 @@ export const ReorderHabitsModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="manage-categories-modal-backdrop" onClick={onClose}>
+    <div
+      className="manage-categories-modal-backdrop"
+      onClick={onClose}
+      style={{
+        zIndex: 10000,
+        padding: '1rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
       <div
         className="manage-categories-modal reorder-habits-modal-card"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 520, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
+        style={{
+          width: '100%',
+          maxWidth: 480,
+          maxHeight: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 20,
+          background: 'var(--card-bg, #1e293b)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          overflow: 'hidden',
+        }}
       >
         {/* Header */}
-        <div className="manage-cat-header" style={{ flexShrink: 0 }}>
-          <div className="manage-cat-title-group">
-            <div className="manage-cat-icon-badge" style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#3B82F6' }}>
+        <div
+          style={{
+            padding: '1.25rem 1.25rem 0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                background: 'rgba(59, 130, 246, 0.15)',
+                color: '#3B82F6',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <ArrowUpDown size={20} />
             </div>
             <div>
-              <h3 className="manage-cat-title font-extrabold">Reorder Habits</h3>
-              <p className="manage-cat-subtitle">
-                Move habits up, down, or straight to top/bottom
-              </p>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: '1.1rem',
+                  fontWeight: 800,
+                  color: 'var(--text-primary, #F8FAFC)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                Reorder Habits
+              </h3>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--text-tertiary, #94A3B8)',
+                }}
+              >
+                Tap arrows to prioritize habits on home screen
+              </span>
             </div>
           </div>
           <button
             type="button"
-            className="manage-cat-close-btn"
             onClick={() => {
               sound.press();
               onClose();
             }}
             aria-label="Close"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              color: 'var(--text-secondary, #94A3B8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
           >
             <X size={18} />
           </button>
@@ -164,161 +153,194 @@ export const ReorderHabitsModal = ({ isOpen, onClose }) => {
 
         {/* Scrollable Habits List */}
         <div
-          ref={listContainerRef}
           className="reorder-modal-list"
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '0.75rem 1rem',
+            padding: '1rem 1.25rem',
             display: 'flex',
             flexDirection: 'column',
-            gap: '0.5rem',
+            gap: '0.65rem',
           }}
         >
           {habits.map((habit, index) => {
             const isFirst = index === 0;
             const isLast = index === habits.length - 1;
-            const isDragging = draggedId === habit.id;
-            const isTarget = dragOverIdx === index;
 
             return (
               <div
                 key={habit.id}
-                data-index={index}
-                className={`reorder-modal-item ${isDragging ? 'is-dragging' : ''} ${isTarget ? 'is-target' : ''}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.65rem',
-                  padding: '0.6rem 0.75rem',
-                  borderRadius: '12px',
-                  background: isDragging
-                    ? 'var(--bg-surface-high, #1E293B)'
-                    : isTarget
-                    ? 'rgba(37, 99, 235, 0.15)'
-                    : 'rgba(255, 255, 255, 0.03)',
-                  border: isTarget
-                    ? '1.5px dashed #3B82F6'
-                    : '1px solid rgba(255, 255, 255, 0.08)',
-                  transition: 'background 0.15s, border-color 0.15s',
+                  gap: '0.75rem',
+                  padding: '0.75rem 0.9rem',
+                  borderRadius: 14,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.07)',
+                  transition: 'background 0.15s ease, transform 0.15s ease',
                 }}
               >
-                {/* Drag Grip */}
-                <div
-                  className="reorder-item-drag-handle"
-                  title="Drag to reorder"
-                  style={{
-                    touchAction: 'none',
-                    cursor: 'grab',
-                    color: 'var(--text-tertiary, #64748B)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '0.2rem',
-                  }}
-                  onPointerDown={(e) => {
-                    pointerYRef.current = e.clientY;
-                    dragOverIdxRef.current = index;
-                    setDraggedId(habit.id);
-                    setDragOverIdx(index);
-                    sound.dragStart();
-                  }}
-                >
-                  <GripVertical size={16} />
-                </div>
-
                 {/* Index Order Badge */}
                 <span
-                  className="font-extrabold"
                   style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--text-secondary, #94A3B8)',
-                    minWidth: '24px',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    color: '#60A5FA',
+                    background: 'rgba(59, 130, 246, 0.12)',
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  #{index + 1}
+                  {index + 1}
                 </span>
 
-                {/* Habit Details */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span
-                    className="font-bold text-ellipsis"
-                    style={{
-                      fontSize: '0.9rem',
-                      color: 'var(--text-primary, #F8FAFC)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {habit.name}
-                  </span>
-                  {habit.streak > 0 && (
+                {/* Habit Name & Streak */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                     <span
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '2px',
-                        fontSize: '0.68rem',
+                        fontSize: '0.92rem',
                         fontWeight: 700,
-                        color: '#F59E0B',
-                        background: 'rgba(245, 158, 11, 0.12)',
-                        padding: '1px 5px',
-                        borderRadius: '6px',
+                        color: 'var(--text-primary, #F8FAFC)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
-                      <Flame size={10} />
-                      {habit.streak}d
+                      {habit.name}
                     </span>
-                  )}
+                    {habit.streak > 0 && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          color: '#F59E0B',
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          padding: '1px 6px',
+                          borderRadius: '6px',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Flame size={10} />
+                        {habit.streak}d
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      color: 'var(--text-tertiary, #64748B)',
+                    }}
+                  >
+                    Goal: {habit.target} {habit.unit || ''}
+                  </span>
                 </div>
 
-                {/* Quick Action Button Group */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
+                {/* Control Buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
                   {/* Move to Top */}
                   <button
                     type="button"
-                    className="reorder-action-btn"
                     disabled={isFirst}
                     onClick={(e) => handleMoveToTop(e, habit.id)}
                     title="Move to top"
                     aria-label="Move to top"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: isFirst ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.07)',
+                      color: isFirst ? 'rgba(255, 255, 255, 0.2)' : 'var(--text-primary, #F8FAFC)',
+                      cursor: isFirst ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.15s ease',
+                    }}
                   >
-                    <ChevronsUp size={14} />
+                    <ChevronsUp size={15} />
                   </button>
 
                   {/* Move Up */}
                   <button
                     type="button"
-                    className="reorder-action-btn"
                     disabled={isFirst}
                     onClick={(e) => handleMoveUp(e, habit.id)}
-                    title="Move up"
+                    title="Move up one position"
                     aria-label="Move up"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: isFirst ? 'rgba(255, 255, 255, 0.02)' : 'rgba(59, 130, 246, 0.15)',
+                      color: isFirst ? 'rgba(255, 255, 255, 0.2)' : '#60A5FA',
+                      cursor: isFirst ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.15s ease',
+                    }}
                   >
-                    <ChevronUp size={14} />
+                    <ChevronUp size={16} />
                   </button>
 
                   {/* Move Down */}
                   <button
                     type="button"
-                    className="reorder-action-btn"
                     disabled={isLast}
                     onClick={(e) => handleMoveDown(e, habit.id)}
-                    title="Move down"
+                    title="Move down one position"
                     aria-label="Move down"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: isLast ? 'rgba(255, 255, 255, 0.02)' : 'rgba(59, 130, 246, 0.15)',
+                      color: isLast ? 'rgba(255, 255, 255, 0.2)' : '#60A5FA',
+                      cursor: isLast ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.15s ease',
+                    }}
                   >
-                    <ChevronDown size={14} />
+                    <ChevronDown size={16} />
                   </button>
 
                   {/* Move to Bottom */}
                   <button
                     type="button"
-                    className="reorder-action-btn"
                     disabled={isLast}
                     onClick={(e) => handleMoveToBottom(e, habit.id)}
                     title="Move to bottom"
                     aria-label="Move to bottom"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: isLast ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.07)',
+                      color: isLast ? 'rgba(255, 255, 255, 0.2)' : 'var(--text-primary, #F8FAFC)',
+                      cursor: isLast ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.15s ease',
+                    }}
                   >
-                    <ChevronsDown size={14} />
+                    <ChevronsDown size={15} />
                   </button>
                 </div>
               </div>
@@ -327,22 +349,30 @@ export const ReorderHabitsModal = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer Done Action */}
-        <div style={{ padding: '0.75rem 1rem 1rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', flexShrink: 0 }}>
+        <div
+          style={{
+            padding: '0.85rem 1.25rem 1.25rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            flexShrink: 0,
+          }}
+        >
           <button
             type="button"
-            className="confirm-btn font-bold"
             style={{
               width: '100%',
-              background: 'var(--primary, #2563EB)',
+              background: 'var(--primary, #3B82F6)',
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.4rem',
-              padding: '0.75rem',
-              borderRadius: '10px',
+              padding: '0.8rem',
+              borderRadius: 12,
               border: 'none',
+              fontSize: '0.9rem',
+              fontWeight: 700,
               cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
             }}
             onClick={() => {
               sound.complete();

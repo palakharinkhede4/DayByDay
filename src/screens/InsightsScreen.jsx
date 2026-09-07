@@ -83,14 +83,18 @@ export const InsightsScreen = () => {
 
       let completedOnDate = 0;
       habits.forEach((h) => {
+        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+        const target = Number(h.target) || 1;
         if (h.history && h.history[dateKey] !== undefined) {
           const val = h.history[dateKey];
-          if (typeof h.user1 === 'boolean' ? Boolean(val) : (Number(val) || 0) >= h.target) {
+          if (isBool ? Boolean(val) : (Number(val) || 0) >= target) {
             completedOnDate++;
           }
         } else if (isToday) {
-          const isDone = typeof h.user1 === 'boolean' ? h.user1 : (h.user1 || 0) >= h.target;
-          if (isDone) completedOnDate++;
+          const val = Math.max(Number(h.history?.[dateKey]) || 0, Number(h.user1) || 0);
+          if (isBool ? (Boolean(h.user1) || Boolean(h.history?.[dateKey])) : val >= target) {
+            completedOnDate++;
+          }
         }
       });
 
@@ -129,12 +133,15 @@ export const InsightsScreen = () => {
 
       let completedCount = 0;
       habits.forEach((h) => {
+        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+        const target = Number(h.target) || 1;
         if (h.history && h.history[dateKey] !== undefined) {
           const val = h.history[dateKey];
-          const isDone = typeof h.user1 === 'boolean' ? Boolean(val) : (Number(val) || 0) >= h.target;
+          const isDone = isBool ? Boolean(val) : (Number(val) || 0) >= target;
           if (isDone) completedCount++;
         } else if (isToday) {
-          const isDone = typeof h.user1 === 'boolean' ? h.user1 : (h.user1 || 0) >= h.target;
+          const val = Math.max(Number(h.history?.[dateKey]) || 0, Number(h.user1) || 0);
+          const isDone = isBool ? (Boolean(h.user1) || Boolean(h.history?.[dateKey])) : val >= target;
           if (isDone) completedCount++;
         }
       });
@@ -224,14 +231,23 @@ export const InsightsScreen = () => {
   // Overall completion rate for today
   const completedToday = useMemo(() => {
     return habits.filter((h) => {
-      if (typeof h.user1 === 'boolean') return h.user1;
-      return (h.user1 || 0) >= h.target;
+      const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+      const target = Number(h.target) || 1;
+      const val = Math.max(Number(h.history?.[todayKey]) || 0, Number(h.user1) || 0);
+      return isBool ? (Boolean(h.user1) || Boolean(h.history?.[todayKey])) : val >= target;
     }).length;
-  }, [habits]);
+  }, [habits, todayKey]);
 
   const completionPercent = habits.length > 0
     ? Math.round((completedToday / habits.length) * 100)
     : 0;
+
+  // 7-day average consistency rate
+  const weeklyAverage = useMemo(() => {
+    if (!weekDays.length) return 0;
+    const sumPct = weekDays.reduce((acc, d) => acc + Math.round((d.completedCount / d.total) * 100), 0);
+    return Math.round(sumPct / weekDays.length);
+  }, [weekDays]);
 
   // Best streak
   const bestStreak = useMemo(() => {
@@ -253,7 +269,7 @@ export const InsightsScreen = () => {
         </p>
       </div>
 
-      {/* Top 3 Metric Cards */}
+      {/* Top 4 Metric Cards */}
       <div className="insights-metric-cards">
         <div className="metric-card">
           <div className="metric-icon-wrap emerald">
@@ -261,6 +277,14 @@ export const InsightsScreen = () => {
           </div>
           <span className="metric-value font-black">{completionPercent}%</span>
           <span className="metric-label">Today's Rate</span>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-icon-wrap teal">
+            <BarChart3 size={20} className="text-teal-400" />
+          </div>
+          <span className="metric-value font-black">{weeklyAverage}%</span>
+          <span className="metric-label">7-Day Avg</span>
         </div>
 
         <div className="metric-card">

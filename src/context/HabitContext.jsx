@@ -2100,6 +2100,36 @@ export const HabitProvider = ({ children }) => {
         newCompletedState
       ).catch(() => {});
     }
+
+    // Bidirectional sync: propagate updated value to matching habit in Habits tab
+    const matchedGoal = updatedGoals.find((g) => g.id === goalId);
+    if (matchedGoal) {
+      const gUnit = (matchedGoal.unit || '').toLowerCase();
+      const gName = (matchedGoal.name || '').toLowerCase();
+      const targetHabit = habits.find((h) => {
+        const hUnit = (h.unit || '').toLowerCase();
+        const hName = (h.name || '').toLowerCase();
+        const hId = (h.id || '').toLowerCase();
+        if (gUnit === 'steps' || gName.includes('step') || gName.includes('walk')) {
+          return hUnit === 'steps' || hId === 'steps' || hName.includes('step') || hName.includes('walk');
+        }
+        if (gUnit === 'calories' || gUnit === 'kcal' || gName.includes('calor')) {
+          return hUnit === 'calories' || hUnit === 'kcal' || hName.includes('calor');
+        }
+        if (gUnit === 'km' || gUnit === 'miles' || gName.includes('distance')) {
+          return hUnit === 'km' || hUnit === 'miles' || hName.includes('distance');
+        }
+        return hName === gName;
+      });
+
+      if (targetHabit) {
+        const myEntry = matchedGoal.memberProgress?.[myKey];
+        const myVal = typeof myEntry === 'object' ? Number(myEntry.value) : Number(myEntry);
+        if (myVal !== undefined && !isNaN(myVal) && Number(targetHabit.user1) !== myVal) {
+          updateHabit(targetHabit.id, 'user1', myVal, true);
+        }
+      }
+    }
   };
 
   // Enable Native OS / Health App Sync (Asks permission one-time and retains it)
@@ -2522,6 +2552,10 @@ export const HabitProvider = ({ children }) => {
               const sn = (sg.name || '').toLowerCase();
               if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
                 updateSharedGoalProgress(sg.id, 0, steps, silent);
+              } else if (su === 'calories' || su === 'kcal' || sn.includes('calor')) {
+                updateSharedGoalProgress(sg.id, 0, calories, silent);
+              } else if (su === 'km' || su === 'miles' || sn.includes('distance')) {
+                updateSharedGoalProgress(sg.id, 0, distanceKm, silent);
               }
             }
           }

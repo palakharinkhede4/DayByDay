@@ -8099,13 +8099,14 @@ button:active {
 
 .insights-metric-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
 }
 
 @media (max-width: 640px) {
   .insights-metric-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.65rem;
   }
 }
 
@@ -8151,6 +8152,12 @@ button:active {
   color: #FBBC04;
 }
 
+.metric-icon-wrap.teal {
+  background: rgba(20, 184, 166, 0.15);
+  color: #14B8A6;
+}
+
+.metric-icon-wrap.violet,
 .metric-icon-wrap.purple {
   background: rgba(179, 136, 255, 0.15);
   color: #B388FF;

@@ -131,6 +131,101 @@ async function resolveLatestApkCdn(explicitUrl) {
   }
 }
 
+async function findUserByIdentifier(sql, { userId, code, secretCode, username }) {
+  const cleanCode = (secretCode || code || '').trim().toUpperCase();
+  const cleanUser = (username || '').trim().toLowerCase().replace(/^@/, '');
+  const uid = (userId || '').trim();
+
+  if (sql) {
+    if (uid) {
+      const rows = await sql`SELECT * FROM daybyday_users WHERE id = ${uid} LIMIT 1`;
+      if (rows.length > 0) return rows[0];
+    }
+    if (cleanCode) {
+      const rows = await sql`SELECT * FROM daybyday_users WHERE UPPER(secret_code) = ${cleanCode} LIMIT 1`;
+      if (rows.length > 0) return rows[0];
+    }
+    if (cleanUser) {
+      const rows = await sql`SELECT * FROM daybyday_users WHERE LOWER(username) = ${cleanUser} LIMIT 1`;
+      if (rows.length > 0) return rows[0];
+    }
+  } else {
+    const lookup = (cleanCode || cleanUser || uid).replace(/^@/, '');
+    const memUser = memoryDb.getUser(lookup);
+    if (memUser) return memUser;
+  }
+  return null;
+}
+
+async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
+  const steps = Math.max(0, Math.round(Number(healthPayload.steps) || 0));
+  const calories = healthPayload.calories !== undefined
+    ? Math.max(0, Math.round(Number(healthPayload.calories) || 0))
+    : Math.round(steps * 0.04);
+  const distanceKm = healthPayload.distanceKm !== undefined
+    ? Math.max(0, Math.round(Number(healthPayload.distanceKm) * 100) / 100)
+    : Math.round(steps * 0.000762 * 100) / 100;
+
+  const normalized = {
+    steps,
+    calories,
+    distanceKm,
+    source: healthPayload.source || 'apple_health',
+    syncedAt: new Date().toISOString(),
+  };
+
+  if (sql && targetUser?.id) {
+    const existingPrefs = targetUser.preferences || {};
+    const updatedPrefs = { ...existingPrefs, healthData: normalized };
+    await sql`
+      UPDATE daybyday_users 
+      SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
+      WHERE id = ${targetUser.id}
+    `;
+
+    if (steps > 0) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      try {
+        const stepHabits = await sql`
+          SELECT * FROM daybyday_habits 
+          WHERE user_id = ${targetUser.id} 
+            AND (LOWER(habit_id) = 'steps' OR LOWER(unit) = 'steps' OR LOWER(name) LIKE '%step%' OR LOWER(name) LIKE '%walk%')
+        `;
+        for (const sh of stepHabits) {
+          const target = Number(sh.target) || 10000;
+          const completed = steps >= target;
+          const history = typeof sh.history === 'object' && sh.history !== null ? { ...sh.history } : {};
+          history[todayStr] = steps;
+          await sql`
+            UPDATE daybyday_habits
+            SET today_value = ${steps},
+                completed = ${completed},
+                history = ${JSON.stringify(history)}::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${sh.id}
+          `;
+        }
+      } catch (hErr) {
+        console.warn('Notice updating step habit in health_sync:', hErr.message);
+      }
+    }
+  } else if (targetUser) {
+    if (!targetUser.preferences) targetUser.preferences = {};
+    targetUser.preferences.healthData = normalized;
+    if (steps > 0) {
+      const habits = memoryDb.getUserHabits(targetUser.id);
+      const stepH = habits.find(h => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
+      if (stepH) {
+        stepH.today_value = steps;
+        stepH.completed = steps >= (Number(stepH.target) || 10000);
+        if (!stepH.history) stepH.history = {};
+        stepH.history[new Date().toISOString().slice(0, 10)] = steps;
+      }
+    }
+  }
+  return normalized;
+}
+
 export default async function handler(req, res) {
   // CORS Headers for Web & Native Apps
   const origin = req.headers.origin || '*';
@@ -199,6 +294,30 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: false, message: 'No remote health data found' });
       } catch (err) {
         return res.status(500).json({ error: err.message });
+      }
+    }
+
+    if (action === 'health_sync') {
+      try {
+        const user = await findUserByIdentifier(sql, {
+          userId,
+          code,
+          secretCode: req.query.secretCode,
+          username,
+        });
+        if (!user) {
+          return res.status(404).json({ success: false, error: 'User not found. Check your private Secret Code.' });
+        }
+        const healthPayload = {
+          steps: req.query.steps,
+          calories: req.query.calories,
+          distanceKm: req.query.distance || req.query.distanceKm,
+          source: req.query.source || 'apple_health',
+        };
+        const synced = await applyHealthSyncToUser(sql, user, healthPayload);
+        return res.status(200).json({ success: true, message: 'Health data synced', healthData: synced });
+      } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
       }
     }
 
@@ -760,6 +879,33 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, message: 'Password reset successfully' });
       } catch (err) {
         return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: HEALTH SYNC (Apple Shortcuts / iOS Webhooks / Daily Auto-Sync)
+    if (action === 'health_sync') {
+      try {
+        const body = req.body || {};
+        const user = await findUserByIdentifier(sql, {
+          userId: body.userId,
+          code: body.code,
+          secretCode: body.secretCode,
+          username: body.username,
+        });
+        if (!user) {
+          return res.status(404).json({ success: false, error: 'User not found. Check your private Secret Code.' });
+        }
+        const rawHealth = body.healthData || body;
+        const healthPayload = {
+          steps: rawHealth.steps !== undefined ? rawHealth.steps : body.steps,
+          calories: rawHealth.calories !== undefined ? rawHealth.calories : body.calories,
+          distanceKm: rawHealth.distanceKm !== undefined ? rawHealth.distanceKm : (rawHealth.distance || body.distance || body.distanceKm),
+          source: rawHealth.source || body.source || 'apple_health',
+        };
+        const synced = await applyHealthSyncToUser(sql, user, healthPayload);
+        return res.status(200).json({ success: true, message: 'Health synced successfully', healthData: synced });
+      } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
       }
     }
 

@@ -36,6 +36,7 @@ import {
   DIRECT_APK_URL,
 } from '../utils/updateChecker';
 import { UpdateModal } from '../components/UpdateModal';
+import { IosHealthSetupGuide } from '../components/IosHealthSetupGuide';
 
 
 export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
@@ -85,14 +86,33 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [changelogData, setChangelogData] = useState(null);
   const [loadingChangelog, setLoadingChangelog] = useState(false);
   const [syncingHealth, setSyncingHealth] = useState(false);
+  const [showIosHealthGuide, setShowIosHealthGuide] = useState(false);
+
+  // Detect iOS web (non-native) — strictly iPhone / iPad running Safari or iOS PWA
+  const isIosWeb = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.Capacitor?.isNativePlatform?.()) return false;
+    const ua = window.navigator?.userAgent || '';
+    return /iPhone|iPad|iPod/i.test(ua) || (window.navigator?.platform === 'MacIntel' && window.navigator?.maxTouchPoints > 1);
+  }, []);
 
   const handleManualHealthSync = async () => {
     setSyncingHealth(true);
     try {
-      await syncDeviceHealth({ silent: false, force: true });
+      const res = await syncDeviceHealth({ silent: false, force: true });
+      if (res && res.success && (res.steps > 0 || res.calories > 0)) {
+        // success — health context already shows notification
+      } else if (isIosWeb) {
+        setShowIosHealthGuide(true);
+      }
     } finally {
       setSyncingHealth(false);
     }
+  };
+
+  const handleManualHealthEntry = async ({ steps, calories, distanceKm }) => {
+    if (!setCustomHealthSteps) return;
+    await setCustomHealthSteps({ steps, calories, distanceKm, source: 'manual_entry' });
   };
 
 
@@ -458,7 +478,10 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 onChange={async (e) => {
                   if (e.target.checked) {
                     await enableHealthSync();
-                    await syncDeviceHealth({ silent: false, force: true });
+                    const res = await syncDeviceHealth({ silent: false, force: true });
+                    if (isIosWeb && (!res?.success || (!res?.steps && !res?.calories))) {
+                      setShowIosHealthGuide(true);
+                    }
                   } else {
                     disableHealthSync();
                   }
@@ -493,21 +516,47 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 </button>
               </div>
 
-              {/* Apple Health Automation Info for iOS Web Users */}
-              {!window.Capacitor?.isNativePlatform?.() && (
-                <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem', padding: '0.85rem 1rem', background: 'rgba(255, 255, 255, 0.02)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Activity size={16} className="text-emerald-400" />
-                      <span className="row-title font-semibold" style={{ fontSize: '0.82rem' }}>
-                        Apple Health Auto-Sync
+              {/* iOS Sync Setup Guide — only displayed for iOS Web App users */}
+              {isIosWeb && (
+                <div
+                  className="settings-row-item clickable"
+                  onClick={() => {
+                    sound.tap();
+                    setShowIosHealthGuide(true);
+                  }}
+                  style={{
+                    cursor: 'pointer',
+                    background: 'rgba(59, 130, 246, 0.08)',
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                    borderRadius: '12px',
+                    padding: '0.85rem 1rem',
+                  }}
+                >
+                  <div className="row-left">
+                    <Smartphone size={18} className="text-blue-400" />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <span className="row-title font-semibold" style={{ color: '#60A5FA' }}>
+                          iOS Sync Setup Guide
+                        </span>
+                        <span
+                          className="active-badge"
+                          style={{
+                            fontSize: '0.62rem',
+                            background: 'rgba(59, 130, 246, 0.2)',
+                            color: '#93C5FD',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                          }}
+                        >
+                          iOS Web
+                        </span>
+                      </div>
+                      <span className="row-hint">
+                        Prefilled Apple Shortcut setup & private webhook link
                       </span>
                     </div>
-                    <span className="active-badge" style={{ fontSize: '0.65rem' }}>iOS Native</span>
                   </div>
-                  <span className="row-hint" style={{ fontSize: '0.75rem', lineHeight: '1.35' }}>
-                    On iPhone, Apple Health data syncs automatically via Apple Shortcuts and device motion sensors with zero manual entry.
-                  </span>
+                  <ChevronRight size={18} className="text-blue-400" />
                 </div>
               )}
             </>
@@ -798,6 +847,15 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           </div>
         </div>
       </div>
+
+      {/* iOS Health Setup Guide Modal */}
+      <IosHealthSetupGuide
+        isOpen={showIosHealthGuide}
+        onClose={() => setShowIosHealthGuide(false)}
+        userSecretCode={user?.secretCode || user?.secret_code}
+        onManualEntry={handleManualHealthEntry}
+        currentHealthData={healthStats}
+      />
     </div>
   );
 };

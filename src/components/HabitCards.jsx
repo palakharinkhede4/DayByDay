@@ -26,6 +26,7 @@ import {
 import { HabitDetailModal } from './HabitDetailModal';
 import { ManageCategoriesModal } from './ManageCategoriesModal';
 import { ReorderHabitsModal } from './ReorderHabitsModal';
+import { IosHealthSetupGuide } from './IosHealthSetupGuide';
 import { sound } from '../utils/sound';
 
 function formatDays(days) {
@@ -67,6 +68,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   const {
     habits,
     activeUserId,
+    user,
     updateHabit,
     removeGoal,
     reorderHabit,
@@ -75,11 +77,21 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     addCustomCategory,
     deleteCustomCategory,
     syncDeviceHealth,
+    setCustomHealthSteps,
+    healthSyncEnabled,
     triggerIslandNotification,
     healthStats,
   } = useHabits();
 
   const [isSyncingHealth, setIsSyncingHealth] = useState(false);
+  const [showIosHealthGuide, setShowIosHealthGuide] = useState(false);
+
+  // Detect iOS web (non-native) — only then show setup guide when sync returns no data
+  const isIosWeb = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.Capacitor?.isNativePlatform?.()) return false;
+    return /iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+  }, []);
 
   const handleSyncHealth = async () => {
     sound.press();
@@ -87,28 +99,39 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     try {
       if (syncDeviceHealth) {
         const res = await syncDeviceHealth({ silent: false, force: true });
-        if (res && res.success) {
+        if (res && res.success && (res.steps > 0 || res.calories > 0)) {
           sound.complete();
           const stepCount = res.steps !== undefined ? res.steps : (res.stats?.steps || 0);
           triggerIslandNotification?.(
             `Synced ${Number(stepCount).toLocaleString()} steps from device!`,
-            'health',
-            'success'
+            'check'
           );
+        } else if (isIosWeb) {
+          // On iOS web with no data — show setup guide
+          setShowIosHealthGuide(true);
         } else {
           sound.step();
           triggerIslandNotification?.(
-            res?.error || res?.message || 'Device health synced',
-            'health',
-            'info'
+            res?.error || 'Could not fetch health data. Check device permissions.',
+            'untrack'
           );
         }
       }
     } catch (err) {
       console.warn('Health sync error in HabitCards:', err);
+      if (isIosWeb) setShowIosHealthGuide(true);
     } finally {
       setIsSyncingHealth(false);
     }
+  };
+
+  const handleManualHealthEntry = async ({ steps, calories, distanceKm }) => {
+    if (!setCustomHealthSteps) return;
+    await setCustomHealthSteps({ steps, calories, distanceKm, source: 'manual_entry' });
+    triggerIslandNotification?.(
+      `Logged ${steps.toLocaleString()} steps manually!`,
+      'check'
+    );
   };
 
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -557,6 +580,14 @@ export const HabitCards = ({ onOpenAddGoal }) => {
       <ReorderHabitsModal
         isOpen={isReorderModalOpen}
         onClose={() => setIsReorderModalOpen(false)}
+      />
+
+      {/* iOS Health Setup Guide Modal (shown when Sync Now finds no data on iOS web) */}
+      <IosHealthSetupGuide
+        isOpen={showIosHealthGuide}
+        onClose={() => setShowIosHealthGuide(false)}
+        userSecretCode={user?.secretCode || user?.secret_code}
+        onManualEntry={handleManualHealthEntry}
       />
     </div>
   );
