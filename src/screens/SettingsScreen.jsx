@@ -443,11 +443,11 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
             <div className="row-left">
               <Activity size={18} className="text-emerald-400" />
               <div>
-                <span className="row-title">Sync with Health App</span>
+                <span className="row-title">Sync with Fitness App</span>
                 <span className="row-hint">
                   {healthSyncEnabled
-                    ? 'Active · Automatically updates steps & activity day by day in Habits & Together Pod'
-                    : 'One-time permission to auto-import daily steps from Android Sensor / Apple Health'}
+                    ? 'Active · Automatically updates steps, calories & distance in Habits & Together Pod'
+                    : 'Auto-sync daily steps, calories & distance from Android Sensor / Apple Health'}
                 </span>
               </div>
             </div>
@@ -470,13 +470,13 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
 
           {healthSyncEnabled && (
             <>
-              {/* Daily Stats Summary: Multi-Metric Display */}
+              {/* Daily Stats Summary: Steps, Calories, Distance */}
               <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.75rem', padding: '0.85rem 1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span className="live-indicator-dot"></span>
                     <span className="row-title font-bold" style={{ fontSize: '0.85rem' }}>
-                      Today's Health & Activity
+                      Today's Activity
                     </span>
                   </div>
                   <span className="row-hint" style={{ fontSize: '0.75rem' }}>
@@ -485,46 +485,25 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-emerald-400" style={{ fontSize: '1.15rem' }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-emerald-400" style={{ fontSize: '1.2rem' }}>
                       {(healthStats?.steps || 0).toLocaleString()}
                     </div>
-                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Steps</div>
+                    <div className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Steps</div>
                   </div>
 
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-amber-400" style={{ fontSize: '1.15rem' }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-amber-400" style={{ fontSize: '1.2rem' }}>
                       {healthStats?.calories || Math.round((healthStats?.steps || 0) * 0.04)}
                     </div>
-                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Calories</div>
+                    <div className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Calories (kcal)</div>
                   </div>
 
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-blue-400" style={{ fontSize: '1.15rem' }}>
-                      {healthStats?.distanceKm || (Math.round((healthStats?.steps || 0) * 0.000762 * 10) / 10)} km
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                    <div className="font-extrabold text-blue-400" style={{ fontSize: '1.2rem' }}>
+                      {healthStats?.distanceKm !== undefined ? healthStats.distanceKm : (Math.round((healthStats?.steps || 0) * 0.000762 * 100) / 100)} km
                     </div>
-                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Distance</div>
-                  </div>
-
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-cyan-400" style={{ fontSize: '1.15rem' }}>
-                      {healthStats?.water ? `${Math.round(healthStats.water / 100) / 10}L` : (healthStats?.waterGlasses ? `${healthStats.waterGlasses} gl` : '0L')}
-                    </div>
-                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Hydration</div>
-                  </div>
-
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-indigo-400" style={{ fontSize: '1.15rem' }}>
-                      {healthStats?.sleep ? `${healthStats.sleep}h` : '0h'}
-                    </div>
-                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Sleep</div>
-                  </div>
-
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '10px', padding: '0.5rem 0.6rem', textAlign: 'center' }}>
-                    <div className="font-extrabold text-purple-400" style={{ fontSize: '1.15rem' }}>
-                      {healthStats?.activeMinutes ? `${healthStats.activeMinutes}m` : '0m'}
-                    </div>
-                    <div className="row-hint" style={{ fontSize: '0.7rem' }}>Workouts</div>
+                    <div className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Distance</div>
                   </div>
                 </div>
               </div>
@@ -535,10 +514,10 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                   <RefreshCw size={18} className={`text-emerald-400 ${syncingHealth ? 'animate-spin' : ''}`} />
                   <div>
                     <span className="row-title font-semibold">
-                      Sync Health Stats Now
+                      Sync Activity Now
                     </span>
                     <span className="row-hint">
-                      Sync steps, calories, water, sleep & workouts to habits & Together pod
+                      Sync steps, calories & distance to habits & Together pod
                     </span>
                   </div>
                 </div>

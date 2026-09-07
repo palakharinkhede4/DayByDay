@@ -437,15 +437,19 @@ export default async function handler(req, res) {
 
           if (user) {
             const currentPrefs = user.preferences || {};
+            const cleanHealthData = {
+              steps: typeof healthData.steps === 'number' ? Math.max(0, Math.round(healthData.steps)) : 0,
+              calories: typeof healthData.calories === 'number' ? Math.max(0, Math.round(healthData.calories)) : Math.round((healthData.steps || 0) * 0.04),
+              distanceKm: typeof healthData.distanceKm === 'number' ? Math.max(0, Math.round(healthData.distanceKm * 100) / 100) : Math.round((healthData.steps || 0) * 0.000762 * 100) / 100,
+              source: healthData.source || 'fitness_sync',
+              syncedAt: new Date().toISOString(),
+            };
             const updatedPrefs = {
               ...currentPrefs,
-              healthData: {
-                ...healthData,
-                syncedAt: new Date().toISOString(),
-              },
+              healthData: cleanHealthData,
             };
             await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)} WHERE id = ${user.id}`;
-            return res.status(200).json({ success: true, healthData: updatedPrefs.healthData });
+            return res.status(200).json({ success: true, healthData: cleanHealthData });
           }
         }
         return res.status(200).json({ success: true, healthData });

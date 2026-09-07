@@ -1,6 +1,7 @@
 /**
  * DayByDay Cross-Platform Fitness & Health Sync Gateway
  * Bridges Android OS Step Sensor / Activity Recognition and iOS Web App / Apple Health & Shortcuts.
+ * Strictly focuses on 3 core fitness metrics: Steps, Active Calories, and Distance.
  */
 
 const STORAGE_KEY = 'daybyday_health_sync_data';
@@ -69,7 +70,7 @@ export const requestHealthPermission = async () => {
 
 /**
  * Parses URL query parameters or hash fragments passed from iOS Shortcuts, Apple Health automations, or webhooks.
- * e.g. ?health_sync=1&steps=49&water=1500&sleep=7.5&calories=240&distance=0.8&active=25
+ * e.g. ?health_sync=1&steps=10240&calories=410&distance=7.8
  */
 export const ingestUrlHealthData = () => {
   if (typeof window === 'undefined') return null;
@@ -95,15 +96,18 @@ export const ingestUrlHealthData = () => {
     } else {
       const getVal = (key) => searchParams.get(key) || hashParams.get(key);
       if (getVal('steps')) payload.steps = Math.max(0, parseInt(getVal('steps'), 10) || 0);
-      if (getVal('water')) payload.water = Math.max(0, parseInt(getVal('water'), 10) || 0);
-      if (getVal('sleep')) payload.sleep = Math.max(0, parseFloat(getVal('sleep')) || 0);
       if (getVal('calories')) payload.calories = Math.max(0, parseInt(getVal('calories'), 10) || 0);
-      if (getVal('distance')) payload.distanceKm = Math.max(0, parseFloat(getVal('distance')) || 0);
-      if (getVal('active') || getVal('workout')) {
-        payload.activeMinutes = Math.max(0, parseInt(getVal('active') || getVal('workout'), 10) || 0);
+      if (getVal('distance') || getVal('distanceKm')) {
+        payload.distanceKm = Math.max(0, parseFloat(getVal('distance') || getVal('distanceKm')) || 0);
       }
-      if (getVal('meditation') || getVal('mindful')) {
-        payload.mindfulMinutes = Math.max(0, parseInt(getVal('meditation') || getVal('mindful'), 10) || 0);
+    }
+
+    if (payload.steps !== undefined && payload.steps !== null) {
+      if (payload.calories === undefined) {
+        payload.calories = Math.round(payload.steps * 0.04);
+      }
+      if (payload.distanceKm === undefined) {
+        payload.distanceKm = Math.round(payload.steps * 0.000762 * 100) / 100;
       }
     }
 
@@ -132,7 +136,7 @@ export const ingestUrlHealthData = () => {
 };
 
 /**
- * Imports device health & fitness statistics from:
+ * Imports device fitness statistics (Steps, Calories, Distance) from:
  * 1. Native Android Hardware Step Counter (Capacitor)
  * 2. URL parameters from iOS Apple Shortcuts
  * 3. Remote cloud health sync (from iOS Shortcuts or Webhooks posted to /api/user)
@@ -148,16 +152,10 @@ export const importDeviceHealthStats = async (user = null) => {
       const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats();
       if (stats && stats.success) {
         const steps = Math.max(0, Number(stats.steps) || 0);
-        const stored = getStoredHealthData() || {};
         const payload = {
           steps,
           calories: Number(stats.calories) || Math.round(steps * 0.04),
           distanceKm: Number(stats.distanceKm) || Math.round(steps * 0.000762 * 100) / 100,
-          activeMinutes: Number(stats.activeMinutes) || Math.round(steps / 100),
-          water: Number(stored.water) || 0,
-          waterGlasses: Number(stored.waterGlasses) || Math.round((Number(stored.water) || 0) / 250),
-          sleep: Number(stored.sleep) || 0,
-          mindfulMinutes: Number(stored.mindfulMinutes) || 0,
           source: stats.source || 'android_step_counter',
           syncedAt: new Date().toISOString(),
         };
@@ -195,21 +193,11 @@ export const importDeviceHealthStats = async (user = null) => {
     const steps = isToday && typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : (Number(lastSaved?.steps) || 0);
     const calories = Number(lastSaved?.calories) || Math.round(steps * 0.04);
     const distanceKm = Number(lastSaved?.distanceKm) || Math.round(steps * 0.000762 * 100) / 100;
-    const activeMinutes = Number(lastSaved?.activeMinutes) || Math.round(steps / 100);
-    const water = Number(lastSaved?.water) || 0;
-    const waterGlasses = Number(lastSaved?.waterGlasses) || Math.round(water / 250);
-    const sleep = Number(lastSaved?.sleep) || 0;
-    const mindfulMinutes = Number(lastSaved?.mindfulMinutes) || 0;
 
     const payload = {
       steps,
       calories,
       distanceKm,
-      activeMinutes,
-      water,
-      waterGlasses,
-      sleep,
-      mindfulMinutes,
       source: isToday && lastSaved?.source ? lastSaved.source : 'apple_health',
       syncedAt: isToday && lastSaved?.syncedAt ? lastSaved.syncedAt : new Date().toISOString(),
     };
@@ -242,7 +230,6 @@ export const updateCustomHealthStats = (input) => {
       steps,
       calories: Math.round(steps * 0.04),
       distanceKm: Math.round(steps * 0.000762 * 100) / 100,
-      activeMinutes: Math.round(steps / 100),
       source: 'apple_health',
       syncedAt: new Date().toISOString(),
     };
@@ -254,7 +241,6 @@ export const updateCustomHealthStats = (input) => {
       steps,
       calories: input.calories !== undefined ? Number(input.calories) : (current.calories || Math.round(steps * 0.04)),
       distanceKm: input.distanceKm !== undefined ? Number(input.distanceKm) : (current.distanceKm || Math.round(steps * 0.000762 * 100) / 100),
-      activeMinutes: input.activeMinutes !== undefined ? Number(input.activeMinutes) : (current.activeMinutes || Math.round(steps / 100)),
       source: input.source || 'apple_health',
       syncedAt: new Date().toISOString(),
     };
@@ -267,11 +253,9 @@ export const updateCustomHealthStats = (input) => {
 };
 
 /**
- * Helper to match and resolve target value for any health metric
+ * Helper to match and resolve target value for fitness metrics (steps, calories, distance)
  */
 function resolveMetricValue(metricType, habitOrGoal, healthData) {
-  const unitLower = (habitOrGoal.unit || '').toLowerCase();
-
   switch (metricType) {
     case 'steps':
       return typeof healthData.steps === 'number' ? Math.max(0, Math.round(healthData.steps)) : null;
@@ -282,34 +266,14 @@ function resolveMetricValue(metricType, habitOrGoal, healthData) {
     case 'distance':
       return typeof healthData.distanceKm === 'number' ? Math.max(0, Math.round(healthData.distanceKm * 10) / 10) : null;
 
-    case 'workouts':
-      return typeof healthData.activeMinutes === 'number' ? Math.max(0, Math.round(healthData.activeMinutes)) : null;
-
-    case 'sleep':
-      return typeof healthData.sleep === 'number' ? Math.max(0, Math.round(healthData.sleep * 10) / 10) : null;
-
-    case 'water': {
-      if (typeof healthData.water !== 'number' && typeof healthData.waterGlasses !== 'number') return null;
-      const totalMl = Number(healthData.water) || ((Number(healthData.waterGlasses) || 0) * 250);
-      if (unitLower.includes('glass') || unitLower.includes('cup')) {
-        return Math.max(0, healthData.waterGlasses || Math.round(totalMl / 250));
-      }
-      if (unitLower === 'l' || unitLower.includes('liter')) {
-        return Math.max(0, Math.round((totalMl / 1000) * 10) / 10);
-      }
-      return Math.max(0, Math.round(totalMl));
-    }
-
-    case 'meditation':
-      return typeof healthData.mindfulMinutes === 'number' ? Math.max(0, Math.round(healthData.mindfulMinutes)) : null;
-
     default:
       return null;
   }
 }
 
 /**
- * Determines which health metric a habit or Together shared goal corresponds to
+ * Determines which fitness metric a habit or Together shared goal corresponds to:
+ * ONLY steps, calories, or distance.
  */
 function identifyHealthMetric(item) {
   const idLower = (item.id || '').toLowerCase();
@@ -328,50 +292,7 @@ function identifyHealthMetric(item) {
     return 'steps';
   }
 
-  // 2. Water / Hydration
-  if (
-    idLower === 'water' ||
-    unitLower.includes('glass') ||
-    unitLower.includes('cup') ||
-    unitLower === 'ml' ||
-    unitLower === 'l' ||
-    unitLower.includes('liter') ||
-    nameLower.includes('water') ||
-    nameLower.includes('hydrat') ||
-    nameLower.includes('drink')
-  ) {
-    return 'water';
-  }
-
-  // 3. Sleep
-  if (
-    idLower === 'sleep' ||
-    unitLower.includes('hour') ||
-    unitLower === 'hrs' ||
-    unitLower === 'hr' ||
-    unitLower === 'h' ||
-    nameLower.includes('sleep') ||
-    nameLower.includes('bed') ||
-    nameLower.includes('rest')
-  ) {
-    return 'sleep';
-  }
-
-  // 4. Workouts / Exercise
-  if (
-    idLower === 'workouts' ||
-    idLower.includes('exercise') ||
-    ((unitLower.includes('min') || unitLower === 'm') &&
-      (nameLower.includes('workout') ||
-        nameLower.includes('exercise') ||
-        nameLower.includes('gym') ||
-        nameLower.includes('active') ||
-        nameLower.includes('fitness')))
-  ) {
-    return 'workouts';
-  }
-
-  // 5. Active Calories
+  // 2. Calories
   if (
     idLower.includes('calorie') ||
     unitLower === 'kcal' ||
@@ -383,7 +304,7 @@ function identifyHealthMetric(item) {
     return 'calories';
   }
 
-  // 6. Distance
+  // 3. Distance
   if (
     idLower.includes('distance') ||
     unitLower === 'km' ||
@@ -395,21 +316,11 @@ function identifyHealthMetric(item) {
     return 'distance';
   }
 
-  // 7. Meditation / Mindfulness
-  if (
-    idLower === 'meditation' ||
-    nameLower.includes('meditat') ||
-    nameLower.includes('mindful') ||
-    nameLower.includes('breathe')
-  ) {
-    return 'meditation';
-  }
-
   return null;
 }
 
 /**
- * Automatically applies imported health & fitness data (Steps, Water, Sleep, Workouts, Calories, Distance, Mindful)
+ * Automatically applies imported fitness data (Steps, Calories, Distance)
  * to any matching habits and Together pod goals.
  */
 export const syncHealthDataToHabitsAndPod = async ({
@@ -463,11 +374,10 @@ export const syncHealthDataToHabitsAndPod = async ({
   if (!silent && typeof triggerIslandNotification === 'function') {
     if (healthData.steps) summaryItems.push(`${healthData.steps.toLocaleString()} steps`);
     if (healthData.calories) summaryItems.push(`${healthData.calories} kcal`);
-    if (healthData.water) summaryItems.push(`${healthData.water}ml water`);
-    if (healthData.sleep) summaryItems.push(`${healthData.sleep}h sleep`);
+    if (healthData.distanceKm) summaryItems.push(`${healthData.distanceKm} km`);
     const summaryMsg = summaryItems.length > 0
-      ? `Synced: ${summaryItems.slice(0, 3).join(', ')}`
-      : 'Synced health & fitness data';
+      ? `Synced: ${summaryItems.join(', ')}`
+      : 'Synced fitness data';
     triggerIslandNotification(summaryMsg, 'check');
   }
 
