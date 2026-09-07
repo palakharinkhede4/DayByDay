@@ -5589,6 +5589,9 @@ button:active {
   opacity: 0.45;
   transition: opacity 0.2s, color 0.2s;
   flex-shrink: 0;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .habit-drag-handle:active {
@@ -5651,6 +5654,59 @@ button:active {
   background: var(--primary, #2563EB) !important;
   color: #ffffff !important;
   border-color: var(--primary, #2563EB) !important;
+}
+
+/* REORDER HABITS MODAL ACTION BUTTONS */
+.reorder-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary, #f8fafc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reorder-action-btn:hover:not(:disabled) {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+  border-color: var(--primary, #2563EB);
+  transform: translateY(-1px);
+}
+
+.reorder-action-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.reorder-action-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+[data-theme-mode="light"] .reorder-action-btn {
+  background: #F1F5F9;
+  border-color: #E2E8F0;
+  color: #1E293B;
+}
+
+[data-theme-mode="light"] .reorder-action-btn:hover:not(:disabled) {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+}
+
+.reorder-modal-item.is-dragging {
+  opacity: 0.5;
+  border-style: dashed !important;
+}
+
+.reorder-modal-item.is-target {
+  background: rgba(37, 99, 235, 0.15) !important;
+  border-color: #3B82F6 !important;
 }
 
 .habit-card-top {

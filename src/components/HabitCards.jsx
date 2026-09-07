@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { HabitDetailModal } from './HabitDetailModal';
 import { ManageCategoriesModal } from './ManageCategoriesModal';
+import { ReorderHabitsModal } from './ReorderHabitsModal';
 import { sound } from '../utils/sound';
 
 function formatDays(days) {
@@ -112,6 +113,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   const [showAddCatInput, setShowAddCatInput] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [isReorderMode, setIsReorderMode] = useState(false);
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
   const [selectedHabitForEdit, setSelectedHabitForEdit] = useState(null);
   const [draggedHabitId, setDraggedHabitId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -181,55 +183,125 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   const [longPressCat, setLongPressCat] = useState(null);
   const catLongPressTimerRef = useRef(null);
 
-  // Continuous RAF-driven auto-scroll loop for desktop mouse & mobile touch
+  const pointerPosRef = useRef({ x: null, y: null });
+  const dragOverIndexRef = useRef(null);
+  const isDraggingActiveRef = useRef(false);
+
+  // Universal continuous auto-scroll and pointer tracking across all 3 OS
   useEffect(() => {
-    if (!draggedHabitId) return;
+    if (!draggedHabitId) {
+      isDraggingActiveRef.current = false;
+      pointerPosRef.current = { x: null, y: null };
+      return;
+    }
 
+    isDraggingActiveRef.current = true;
     let rafId = null;
-    let currentPointerY = null;
 
-    const onPointerMove = (e) => {
-      if (e.touches && e.touches.length > 0) {
-        currentPointerY = e.touches[0].clientY;
-      } else if (e.clientY !== undefined) {
-        currentPointerY = e.clientY;
+    const scrollContainerOrWindow = (speed) => {
+      // 1. Primary window scroll
+      window.scrollBy({ top: speed, behavior: 'instant' });
+
+      // 2. Document scrolling element
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      if (scroller) {
+        scroller.scrollTop += speed;
+      }
+
+      // 3. Fallback to any scrollable ancestor in DOM
+      const candidates = document.querySelectorAll(
+        '.app-main-content, .screen-habits-container, .screen-content, .app-container'
+      );
+      candidates.forEach((el) => {
+        if (el && el.scrollHeight > el.clientHeight) {
+          el.scrollTop += speed;
+        }
+      });
+    };
+
+    const updateHoverTarget = (x, y) => {
+      if (typeof x !== 'number' || typeof y !== 'number') return;
+      const elem = document.elementFromPoint(x, y);
+      const card = elem?.closest('.modern-habit-card');
+      if (card && card.dataset.index !== undefined) {
+        const idx = parseInt(card.dataset.index, 10);
+        if (!isNaN(idx) && dragOverIndexRef.current !== idx) {
+          dragOverIndexRef.current = idx;
+          setDragOverIndex(idx);
+          sound.dragOver();
+        }
       }
     };
 
-    const scrollThreshold = 120;
-    const maxSpeed = 22;
-
     const loop = () => {
-      if (currentPointerY !== null) {
-        if (currentPointerY < scrollThreshold) {
-          const intensity = Math.min(1, (scrollThreshold - currentPointerY) / scrollThreshold);
-          const speed = Math.max(4, Math.round(intensity * maxSpeed));
-          window.scrollBy(0, -speed);
-          if (document.scrollingElement) {
-            document.scrollingElement.scrollTop -= speed;
-          }
-        } else if (currentPointerY > window.innerHeight - scrollThreshold) {
-          const intensity = Math.min(1, (currentPointerY - (window.innerHeight - scrollThreshold)) / scrollThreshold);
-          const speed = Math.max(4, Math.round(intensity * maxSpeed));
-          window.scrollBy(0, speed);
-          if (document.scrollingElement) {
-            document.scrollingElement.scrollTop += speed;
-          }
+      const pos = pointerPosRef.current;
+      if (pos && pos.y !== null) {
+        const vh = window.innerHeight || document.documentElement.clientHeight || 800;
+        const topThreshold = 140; // top trigger zone (px)
+        const bottomThreshold = vh - 150; // bottom trigger zone (px, clears bottom nav bar)
+
+        if (pos.y > bottomThreshold) {
+          const ratio = Math.min(1, Math.max(0.1, (pos.y - bottomThreshold) / 120));
+          const speed = Math.round(6 + ratio * 24); // 6px to 30px per tick
+          scrollContainerOrWindow(speed);
+          updateHoverTarget(pos.x, pos.y);
+        } else if (pos.y < topThreshold) {
+          const ratio = Math.min(1, Math.max(0.1, (topThreshold - pos.y) / 120));
+          const speed = Math.round(6 + ratio * 24);
+          scrollContainerOrWindow(-speed);
+          updateHoverTarget(pos.x, pos.y);
         }
       }
       rafId = requestAnimationFrame(loop);
     };
 
-    window.addEventListener('dragover', onPointerMove, { passive: true });
+    const onPointerMove = (e) => {
+      let x = null;
+      let y = null;
+      if (e.touches && e.touches.length > 0) {
+        x = e.touches[0].clientX;
+        y = e.touches[0].clientY;
+      } else if (e.clientY !== undefined) {
+        x = e.clientX;
+        y = e.clientY;
+      }
+      if (y !== null) {
+        pointerPosRef.current = { x, y };
+        updateHoverTarget(x, y);
+      }
+    };
+
+    const onGlobalDragOver = (e) => {
+      e.preventDefault(); // REQUIRED for HTML5 dragover to stream continuously
+      if (e.clientY !== undefined) {
+        pointerPosRef.current = { x: e.clientX, y: e.clientY };
+        updateHoverTarget(e.clientX, e.clientY);
+      }
+    };
+
+    const onPointerRelease = () => {
+      if (isDraggingActiveRef.current) {
+        handleDrop(dragOverIndexRef.current);
+      }
+    };
+
+    window.addEventListener('dragover', onGlobalDragOver, { passive: false });
     window.addEventListener('mousemove', onPointerMove, { passive: true });
     window.addEventListener('touchmove', onPointerMove, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerup', onPointerRelease);
+    window.addEventListener('touchend', onPointerRelease);
+
     rafId = requestAnimationFrame(loop);
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
-      window.removeEventListener('dragover', onPointerMove);
+      window.removeEventListener('dragover', onGlobalDragOver);
       window.removeEventListener('mousemove', onPointerMove);
       window.removeEventListener('touchmove', onPointerMove);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerRelease);
+      window.removeEventListener('touchend', onPointerRelease);
     };
   }, [draggedHabitId]);
 
@@ -247,26 +319,38 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   };
 
   // Drag-and-drop reorder handlers with synchronized dual-haptics
-  const handleDragStart = (habitId) => {
+  const handleDragStart = (habitId, index = null) => {
     setDraggedHabitId(habitId);
+    if (index !== null) {
+      setDragOverIndex(index);
+      dragOverIndexRef.current = index;
+    }
     sound.dragStart();
   };
 
   const handleDragEnter = (targetIdx) => {
-    if (dragOverIndex !== targetIdx) {
+    if (dragOverIndexRef.current !== targetIdx) {
       setDragOverIndex(targetIdx);
+      dragOverIndexRef.current = targetIdx;
       sound.dragOver();
     }
   };
 
   const handleDrop = (targetIdx) => {
-    if (!draggedHabitId) return;
+    const finalTarget = targetIdx !== undefined && targetIdx !== null ? targetIdx : dragOverIndexRef.current;
+    if (!draggedHabitId || finalTarget === null || finalTarget === undefined) {
+      setDraggedHabitId(null);
+      setDragOverIndex(null);
+      dragOverIndexRef.current = null;
+      pointerPosRef.current = { x: null, y: null };
+      return;
+    }
     const sourceIdx = habits.findIndex((h) => h.id === draggedHabitId);
-    if (sourceIdx !== -1 && sourceIdx !== targetIdx) {
+    if (sourceIdx !== -1 && sourceIdx !== finalTarget) {
       if (reorderHabitToIndex) {
-        reorderHabitToIndex(draggedHabitId, targetIdx);
+        reorderHabitToIndex(draggedHabitId, finalTarget);
       } else if (reorderHabit) {
-        const diff = targetIdx - sourceIdx;
+        const diff = finalTarget - sourceIdx;
         const direction = diff > 0 ? 'down' : 'up';
         for (let i = 0; i < Math.abs(diff); i++) {
           reorderHabit(draggedHabitId, direction);
@@ -276,11 +360,15 @@ export const HabitCards = ({ onOpenAddGoal }) => {
     }
     setDraggedHabitId(null);
     setDragOverIndex(null);
+    dragOverIndexRef.current = null;
+    pointerPosRef.current = { x: null, y: null };
   };
 
   const handleDragEnd = () => {
     setDraggedHabitId(null);
     setDragOverIndex(null);
+    dragOverIndexRef.current = null;
+    pointerPosRef.current = { x: null, y: null };
   };
 
   return (
@@ -375,15 +463,15 @@ export const HabitCards = ({ onOpenAddGoal }) => {
               </button>
               <button
                 type="button"
-                className={`category-chip reorder-category-chip font-medium ${isReorderMode ? 'active' : ''}`}
+                className={`category-chip reorder-category-chip font-medium ${isReorderMode || isReorderModalOpen ? 'active' : ''}`}
                 onClick={() => {
                   sound.tap();
-                  setIsReorderMode(!isReorderMode);
+                  setIsReorderModalOpen(true);
                 }}
-                title={isReorderMode ? 'Finish reordering' : 'Reorder habits up or down'}
+                title="Reorder habits (drag, move up/down, or send to top/bottom)"
               >
                 <ArrowUpDown size={13} />
-                <span>{isReorderMode ? 'Done' : 'Reorder'}</span>
+                <span>Reorder</span>
               </button>
               <button
                 type="button"
@@ -418,7 +506,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             pageMounted={pageMounted}
             isDragging={draggedHabitId === habit.id}
             isDragOver={dragOverIndex === index}
-            onDragStart={() => handleDragStart(habit.id)}
+            onDragStart={() => handleDragStart(habit.id, index)}
             onDragEnter={() => handleDragEnter(index)}
             onDrop={() => handleDrop(index)}
             onDragEnd={handleDragEnd}
@@ -460,6 +548,12 @@ export const HabitCards = ({ onOpenAddGoal }) => {
       <ManageCategoriesModal
         isOpen={isManageCatOpen}
         onClose={() => setIsManageCatOpen(false)}
+      />
+
+      {/* Dedicated Reorder Habits Modal */}
+      <ReorderHabitsModal
+        isOpen={isReorderModalOpen}
+        onClose={() => setIsReorderModalOpen(false)}
       />
     </div>
   );
@@ -602,26 +696,19 @@ const ModernHabitCard = ({
           </button>
         </div>
 
-        {/* Long-press or touch drag handle grip */}
+        {/* Universal Touch & Pointer Drag Handle */}
         <div
           className="habit-drag-handle"
-          title="Hold and drag to reorder"
-          onTouchStart={(e) => {
+          title="Drag to reorder"
+          onPointerDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onDragStart();
           }}
-          onTouchMove={(e) => {
+          onTouchStart={(e) => {
+            e.preventDefault();
             e.stopPropagation();
-            const touch = e.touches[0];
-            const elem = document.elementFromPoint(touch.clientX, touch.clientY);
-            const card = elem?.closest('.modern-habit-card');
-            if (card && card.dataset.index !== undefined) {
-              onDragEnter(Number(card.dataset.index));
-            }
-          }}
-          onTouchEnd={(e) => {
-            e.stopPropagation();
-            onDrop();
+            onDragStart();
           }}
         >
           <GripVertical size={16} className="text-slate-500" />
