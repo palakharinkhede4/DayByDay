@@ -58,7 +58,6 @@ export const requestHealthPermission = async () => {
       try {
         const response = await DeviceMotionEvent.requestPermission();
         if (response === 'granted') {
-          startMotionPedometer();
           return true;
         }
         return false;
@@ -73,60 +72,6 @@ export const requestHealthPermission = async () => {
     return false;
   }
 };
-
-// Web / iOS Pedometer Motion Detection
-let motionListenerActive = false;
-let lastMagnitude = 0;
-let lastStepTime = 0;
-
-function startMotionPedometer() {
-  if (motionListenerActive || typeof window === 'undefined' || !window.addEventListener) return;
-  try {
-    window.addEventListener('devicemotion', (e) => {
-      const acc = e.accelerationIncludingGravity || e.acceleration;
-      if (!acc) return;
-      const x = acc.x || 0;
-      const y = acc.y || 0;
-      const z = acc.z || 0;
-      const magnitude = Math.sqrt(x * x + y * y + z * z);
-      const now = Date.now();
-
-      // Step peak detection: magnitude spike > 12.5 and at least 320ms since last step
-      if (magnitude > 12.5 && lastMagnitude <= 12.5 && now - lastStepTime > 320) {
-        lastStepTime = now;
-        incrementStoredSteps(1);
-      }
-      lastMagnitude = magnitude;
-    });
-    motionListenerActive = true;
-  } catch {}
-}
-
-function incrementStoredSteps(delta = 1) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    let data = raw ? JSON.parse(raw) : null;
-    const today = new Date().toISOString().slice(0, 10);
-
-    if (!data || !data.syncedAt || !data.syncedAt.startsWith(today)) {
-      data = {
-        steps: delta,
-        calories: Math.round(delta * 0.04),
-        distanceKm: Math.round(delta * 0.000762 * 100) / 100,
-        activeMinutes: Math.round(delta / 100),
-        source: 'ios_motion_pedometer',
-        syncedAt: new Date().toISOString(),
-      };
-    } else {
-      data.steps = (Number(data.steps) || 0) + delta;
-      data.calories = Math.round(data.steps * 0.04);
-      data.distanceKm = Math.round(data.steps * 0.000762 * 100) / 100;
-      data.activeMinutes = Math.round(data.steps / 100);
-      data.syncedAt = new Date().toISOString();
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {}
-}
 
 export const importDeviceHealthStats = async () => {
   try {
@@ -149,7 +94,7 @@ export const importDeviceHealthStats = async () => {
       }
     }
 
-    // 2. iOS Web App & Browser Storage / Motion Gateway
+    // 2. iOS Web App & Browser Storage (Strictly accurate, no fabricated defaults)
     let lastSaved = null;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -158,22 +103,21 @@ export const importDeviceHealthStats = async () => {
 
     const todayDate = new Date().toISOString().slice(0, 10);
     const isToday = lastSaved?.syncedAt?.startsWith(todayDate);
-    const currentSteps = isToday && typeof lastSaved?.steps === 'number' ? lastSaved.steps : 8420;
+    // Never fabricate fake numbers like 8420. If not yet set, default to 0.
+    const currentSteps = isToday && typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : 0;
 
     const payload = {
       steps: currentSteps,
       calories: Math.round(currentSteps * 0.04),
       distanceKm: Math.round(currentSteps * 0.000762 * 100) / 100,
       activeMinutes: Math.round(currentSteps / 100),
-      source: isToday && lastSaved?.source ? lastSaved.source : 'device_health_app',
-      syncedAt: new Date().toISOString(),
+      source: isToday && lastSaved?.source ? lastSaved.source : 'apple_health',
+      syncedAt: isToday && lastSaved?.syncedAt ? lastSaved.syncedAt : new Date().toISOString(),
     };
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {}
-
-    startMotionPedometer();
 
     return { success: true, ...payload };
   } catch (err) {
@@ -195,7 +139,7 @@ export const updateCustomHealthStats = (customSteps) => {
     calories: Math.round(steps * 0.04),
     distanceKm: Math.round(steps * 0.000762 * 100) / 100,
     activeMinutes: Math.round(steps / 100),
-    source: 'apple_health_import',
+    source: 'apple_health',
     syncedAt: new Date().toISOString(),
   };
   try {

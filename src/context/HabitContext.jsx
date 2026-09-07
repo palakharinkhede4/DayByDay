@@ -419,6 +419,11 @@ export const HabitProvider = ({ children }) => {
   const [healthSyncEnabled, setHealthSyncEnabledState] = useState(() => isHealthSyncEnabled());
   const [healthStats, setHealthStats] = useState(() => getStoredHealthData());
 
+  // App Features & Onboarding Tour modal state
+  const [isFeaturesGuideOpen, setIsFeaturesGuideOpen] = useState(false);
+  const openFeaturesGuide = () => setIsFeaturesGuideOpen(true);
+  const closeFeaturesGuide = () => setIsFeaturesGuideOpen(false);
+
   // Custom Categories state (persisted)
   const [customCategories, setCustomCategories] = useState(() => {
     try {
@@ -1063,6 +1068,7 @@ export const HabitProvider = ({ children }) => {
 
     triggerCelebration();
     triggerIslandNotification(`Welcome @${newUser.username}!`, 'sparkles');
+    setIsFeaturesGuideOpen(true);
     return newUser;
   };
 
@@ -1154,6 +1160,7 @@ export const HabitProvider = ({ children }) => {
 
         triggerCelebration();
         triggerIslandNotification(`Welcome back @${res.user.username}!`, 'user');
+        setIsFeaturesGuideOpen(true);
         return res;
       }
     } catch (err) {
@@ -1175,6 +1182,7 @@ export const HabitProvider = ({ children }) => {
           if (parsed.preferences) applyPreferences(parsed.preferences);
           triggerCelebration();
           triggerIslandNotification(`Welcome back @${parsed.user.username}!`, 'user');
+          setIsFeaturesGuideOpen(true);
           return { user: parsed.user };
         } else {
           throw new Error('Incorrect password. Please verify and try again.');
@@ -1996,10 +2004,10 @@ export const HabitProvider = ({ children }) => {
     window.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
 
-    // 3. Periodic fetch every 5 minutes while active
+    // 3. Periodic fetch every 30 minutes while active (every half an hour)
     const interval = setInterval(() => {
       syncDeviceHealth({ silent: true, force: true });
-    }, 5 * 60 * 1000);
+    }, 30 * 60 * 1000);
 
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
@@ -2293,6 +2301,41 @@ export const HabitProvider = ({ children }) => {
     // Sync to user's habits in Neon DB if logged in
     if (user?.id && nextHabitsList.length > 0) {
       syncUserHabitsRemote(user.id, nextHabitsList).catch(() => {});
+    }
+
+    // Keep Health Stats and Together Pod goals synchronized with exact step habits
+    if (userId === 'user1' && computedNextValue !== null && typeof computedNextValue === 'number') {
+      const targetHabit = nextHabitsList.find((h) => h.id === habitId);
+      if (targetHabit) {
+        const u = (targetHabit.unit || '').toLowerCase();
+        const n = (targetHabit.name || '').toLowerCase();
+        const isStepHabit = u === 'steps' || n.includes('step') || n.includes('walk');
+        if (isStepHabit) {
+          const steps = Math.max(0, Math.round(computedNextValue));
+          const newHealthData = {
+            steps,
+            calories: Math.round(steps * 0.04),
+            distanceKm: Math.round(steps * 0.000762 * 100) / 100,
+            activeMinutes: Math.round(steps / 100),
+            source: 'habit_entry',
+            syncedAt: new Date().toISOString(),
+          };
+          setHealthStats(newHealthData);
+          try {
+            localStorage.setItem('daybyday_health_sync_data', JSON.stringify(newHealthData));
+          } catch {}
+
+          if (groupPod && Array.isArray(groupPod.sharedGoals)) {
+            for (const sg of groupPod.sharedGoals) {
+              const su = (sg.unit || '').toLowerCase();
+              const sn = (sg.name || '').toLowerCase();
+              if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
+                updateSharedGoalProgress(sg.id, 0, steps);
+              }
+            }
+          }
+        }
+      }
     }
   };
 
@@ -2621,6 +2664,10 @@ export const HabitProvider = ({ children }) => {
         enableHealthSync,
         disableHealthSync,
         setCustomHealthSteps,
+        isFeaturesGuideOpen,
+        setIsFeaturesGuideOpen,
+        openFeaturesGuide,
+        closeFeaturesGuide,
       }}
     >
       {children}

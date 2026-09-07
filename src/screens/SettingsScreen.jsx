@@ -64,6 +64,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     enableHealthSync,
     disableHealthSync,
     syncDeviceHealth,
+    setCustomHealthSteps,
+    openFeaturesGuide,
   } = useHabits();
 
   const fileInputRef = useRef(null);
@@ -80,14 +82,28 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [changelogData, setChangelogData] = useState(null);
   const [loadingChangelog, setLoadingChangelog] = useState(false);
   const [syncingHealth, setSyncingHealth] = useState(false);
+  const [showAppleHealthModal, setShowAppleHealthModal] = useState(false);
+  const [appleHealthStepsInput, setAppleHealthStepsInput] = useState('');
 
   const handleManualHealthSync = async () => {
-    setSyncingHealth(true);
-    try {
-      await syncDeviceHealth({ silent: false, force: true });
-    } finally {
-      setSyncingHealth(false);
+    if (window.Capacitor?.isNativePlatform?.()) {
+      setSyncingHealth(true);
+      try {
+        await syncDeviceHealth({ silent: false, force: true });
+      } finally {
+        setSyncingHealth(false);
+      }
+    } else {
+      setAppleHealthStepsInput(String(healthStats?.steps || ''));
+      setShowAppleHealthModal(true);
     }
+  };
+
+  const handleSaveAppleHealthSteps = async (e) => {
+    e?.preventDefault?.();
+    const val = Math.max(0, parseInt(appleHealthStepsInput, 10) || 0);
+    await setCustomHealthSteps(val);
+    setShowAppleHealthModal(false);
   };
 
 
@@ -429,6 +445,10 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 onChange={async (e) => {
                   if (e.target.checked) {
                     await enableHealthSync();
+                    if (!window.Capacitor?.isNativePlatform?.()) {
+                      setAppleHealthStepsInput(String(healthStats?.steps || ''));
+                      setShowAppleHealthModal(true);
+                    }
                   } else {
                     disableHealthSync();
                   }
@@ -483,8 +503,14 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 <div className="row-left">
                   <RefreshCw size={18} className={`text-emerald-400 ${syncingHealth ? 'animate-spin' : ''}`} />
                   <div>
-                    <span className="row-title font-semibold">Sync Health Stats Now</span>
-                    <span className="row-hint">Instantly fetch fresh OS stats & push to Together pod</span>
+                    <span className="row-title font-semibold">
+                      {window.Capacitor?.isNativePlatform?.() ? 'Sync Health Stats Now' : 'Update Apple Health Steps'}
+                    </span>
+                    <span className="row-hint">
+                      {window.Capacitor?.isNativePlatform?.()
+                        ? 'Instantly fetch fresh OS stats & push to Together pod'
+                        : 'Enter exact steps from iOS Health app & push to habits and pod'}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -493,11 +519,28 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                   style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', borderColor: 'rgba(16, 185, 129, 0.3)' }}
                   disabled={syncingHealth}
                 >
-                  {syncingHealth ? 'Syncing...' : 'Sync Now'}
+                  {syncingHealth ? 'Syncing...' : (window.Capacitor?.isNativePlatform?.() ? 'Sync Now' : 'Enter Steps')}
                 </button>
               </div>
             </>
           )}
+        </div>
+      </div>
+
+      {/* SECTION: APP FEATURES & GUIDE */}
+      <div className="settings-group">
+        <span className="group-label">APP GUIDE & FEATURES</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item clickable" onClick={openFeaturesGuide}>
+            <div className="row-left">
+              <Sparkles size={18} className="text-amber-400" />
+              <div>
+                <span className="row-title font-semibold">App Feature Guide</span>
+                <span className="row-hint">Complete 1-minute tour of Habits, Track, Together, Insights & Health Sync</span>
+              </div>
+            </div>
+            <ChevronRight size={18} />
+          </div>
         </div>
       </div>
 
@@ -695,6 +738,68 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
         updateInfo={updateInfo}
         isChecking={checkingUpdate}
       />
+
+      {/* APPLE HEALTH / IOS STEPS INPUT MODAL */}
+      {showAppleHealthModal && (
+        <div className="update-modal-backdrop" onClick={() => setShowAppleHealthModal(false)}>
+          <div className="update-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div className="update-modal-header">
+              <div className="update-icon-circle" style={{ background: 'rgba(0, 210, 132, 0.15)', color: '#00D284' }}>
+                <Activity size={24} />
+              </div>
+              <h3 className="update-modal-title font-extrabold">Sync Apple Health Steps</h3>
+              <p className="update-modal-subtitle">
+                Enter your exact step count from the iOS Health app today. We sync this exact number into your habits and shared pod goals.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveAppleHealthSteps} style={{ padding: '0 1.25rem 1.25rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label className="row-title font-bold" style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>
+                  Today's Step Count
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="150000"
+                    step="1"
+                    className="group-input-field font-bold"
+                    style={{ fontSize: '1.25rem', padding: '0.75rem 1rem', width: '100%', boxSizing: 'border-box' }}
+                    placeholder="e.g. 49"
+                    value={appleHealthStepsInput}
+                    onChange={(e) => setAppleHealthStepsInput(e.target.value)}
+                    autoFocus
+                  />
+                  <span style={{ position: 'absolute', right: '1rem', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600 }}>
+                    steps
+                  </span>
+                </div>
+                <span className="row-hint" style={{ fontSize: '0.75rem', marginTop: '0.35rem', display: 'block' }}>
+                  Open Apple Health on your iPhone to see your exact steps today.
+                </span>
+              </div>
+
+              <div className="confirm-btn-row">
+                <button
+                  type="button"
+                  className="confirm-btn cancel"
+                  onClick={() => setShowAppleHealthModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="confirm-btn font-bold"
+                  style={{ background: 'var(--primary, #10B981)', color: '#ffffff' }}
+                >
+                  Save & Sync
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* AVATAR OPTIONS ACTION MODAL */}
       {avatarModalOpen && (
         <div className="modal-backdrop" onClick={() => setAvatarModalOpen(false)}>

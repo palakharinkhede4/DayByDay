@@ -11,6 +11,7 @@ import { AddGoalModal } from './components/AddGoalModal';
 import { UpdateModal } from './components/UpdateModal';
 import { IosInstallPrompt } from './components/IosInstallPrompt';
 import { AuthScreen } from './screens/AuthScreen';
+import { FeaturesGuideModal } from './components/FeaturesGuideModal';
 import { useHabits } from './context/HabitContext';
 import { checkForAppUpdate } from './utils/updateChecker';
 
@@ -67,7 +68,7 @@ class ScreenErrorBoundary extends React.Component {
 }
 
 const MainAppContent = () => {
-  const { user, isSessionRestoring } = useHabits();
+  const { user, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide } = useHabits();
   const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
@@ -187,6 +188,12 @@ const MainAppContent = () => {
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
         updateInfo={updateInfo}
+      />
+
+      {/* App Features & Capabilities Tour */}
+      <FeaturesGuideModal
+        isOpen={isFeaturesGuideOpen}
+        onClose={closeFeaturesGuide}
       />
     </div>
   );

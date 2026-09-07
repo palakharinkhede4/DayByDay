@@ -228,41 +228,9 @@ export const TogetherScreen = () => {
     updateSharedGoalProgress,
     deleteSharedGoal,
     sendCheer,
-    syncDeviceHealth,
     triggerIslandNotification,
     triggerCelebration,
   } = useHabits();
-
-  const [syncingHealth, setSyncingHealth] = useState(false);
-
-  const handleSyncHealth = async () => {
-    sound.press();
-    setSyncingHealth(true);
-    try {
-      if (syncDeviceHealth) {
-        const res = await syncDeviceHealth();
-        if (res && res.success) {
-          sound.complete();
-          triggerIslandNotification?.(
-            `Synced ${res.stats?.steps?.toLocaleString() || 0} steps from device!`,
-            'health',
-            'success'
-          );
-        } else {
-          sound.step();
-          triggerIslandNotification?.(
-            res?.message || 'Device health synced',
-            'health',
-            'info'
-          );
-        }
-      }
-    } catch (e) {
-      console.warn('Health sync error:', e);
-    } finally {
-      setSyncingHealth(false);
-    }
-  };
 
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -506,16 +474,6 @@ export const TogetherScreen = () => {
               <div className="together-section-actions">
                 <button
                   type="button"
-                  className={`together-health-sync-btn ${syncingHealth ? 'loading' : ''}`}
-                  onClick={handleSyncHealth}
-                  title="Import steps and fitness data from device"
-                >
-                  <Activity size={14} className={syncingHealth ? 'animate-spin' : ''} />
-                  <span>{syncingHealth ? 'Syncing...' : 'Sync Health'}</span>
-                </button>
-
-                <button
-                  type="button"
                   className="add-shared-goal-btn"
                   onClick={() => setIsAddingGoal(!isAddingGoal)}
                 >
@@ -687,17 +645,6 @@ export const TogetherScreen = () => {
                             <span className="font-bold">{completedCount} of {members.length} Done</span>
                           )}
                         </div>
-
-                        {isStepGoal && (
-                          <button
-                            type="button"
-                            className="together-icon-btn sync"
-                            onClick={handleSyncHealth}
-                            title="Sync step data from device"
-                          >
-                            <Activity size={14} className="text-emerald-400" />
-                          </button>
-                        )}
 
                         <button
                           type="button"
