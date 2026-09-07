@@ -25,7 +25,9 @@ import {
   FileText,
   Flame,
   Activity,
+  Zap,
 } from 'lucide-react';
+import { sound } from '../utils/sound';
 import {
   checkForAppUpdate,
   openExternalUrl,
@@ -68,6 +70,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     openFeaturesGuide,
   } = useHabits();
 
+  const [hapticsEnabled, setHapticsEnabled] = useState(() => sound.hapticsEnabled);
   const fileInputRef = useRef(null);
   const avatarInputRef = useRef(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -419,6 +422,30 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               </label>
             </div>
           )}
+
+          {/* HAPTIC FEEDBACK TOGGLE */}
+          <div className="settings-row-item">
+            <div className="row-left">
+              <Zap size={18} className="text-amber-400" />
+              <div>
+                <span className="row-title">Haptic Feedback</span>
+                <span className="row-hint">Subtle vibrations for button taps and completed goals</span>
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={hapticsEnabled}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setHapticsEnabled(val);
+                  sound.setHapticsEnabled(val);
+                  if (val) sound.tap();
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
         </div>
       </div>
 

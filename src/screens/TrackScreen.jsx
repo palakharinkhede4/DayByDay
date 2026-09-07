@@ -8,15 +8,12 @@ import {
   ArrowRight,
   Flame,
   UserCheck,
-  Sparkles,
   X,
-  Target,
   CheckCircle2,
   Users,
   Plus,
-  Rocket,
-  Heart,
   Zap,
+  Award,
 } from 'lucide-react';
 
 export const TrackScreen = () => {

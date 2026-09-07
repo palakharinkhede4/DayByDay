@@ -19,6 +19,9 @@ import {
   GripVertical,
   X,
   Activity,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { HabitDetailModal } from './HabitDetailModal';
 import { ManageCategoriesModal } from './ManageCategoriesModal';
@@ -108,6 +111,7 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showAddCatInput, setShowAddCatInput] = useState(false);
   const [newCatName, setNewCatName] = useState('');
+  const [isReorderMode, setIsReorderMode] = useState(false);
   const [selectedHabitForEdit, setSelectedHabitForEdit] = useState(null);
   const [draggedHabitId, setDraggedHabitId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -371,6 +375,18 @@ export const HabitCards = ({ onOpenAddGoal }) => {
               </button>
               <button
                 type="button"
+                className={`category-chip reorder-category-chip font-medium ${isReorderMode ? 'active' : ''}`}
+                onClick={() => {
+                  sound.tap();
+                  setIsReorderMode(!isReorderMode);
+                }}
+                title={isReorderMode ? 'Finish reordering' : 'Reorder habits up or down'}
+              >
+                <ArrowUpDown size={13} />
+                <span>{isReorderMode ? 'Done' : 'Reorder'}</span>
+              </button>
+              <button
+                type="button"
                 className={`category-chip health-sync-chip font-medium ${isSyncingHealth ? 'loading' : ''}`}
                 onClick={handleSyncHealth}
                 title="Import steps and fitness data from device"
@@ -406,6 +422,19 @@ export const HabitCards = ({ onOpenAddGoal }) => {
             onDragEnter={() => handleDragEnter(index)}
             onDrop={() => handleDrop(index)}
             onDragEnd={handleDragEnd}
+            isReorderMode={isReorderMode}
+            onMoveUp={() => {
+              if (index > 0 && reorderHabit) {
+                sound.tap();
+                reorderHabit(habit.id, 'up');
+              }
+            }}
+            onMoveDown={() => {
+              if (index < filteredHabits.length - 1 && reorderHabit) {
+                sound.tap();
+                reorderHabit(habit.id, 'down');
+              }
+            }}
           />
         ))}
 
@@ -451,6 +480,9 @@ const ModernHabitCard = ({
   onDragEnter,
   onDrop,
   onDragEnd,
+  isReorderMode = false,
+  onMoveUp,
+  onMoveDown,
 }) => {
   const isBool = typeof habit.user1 === 'boolean' || habit.unit === 'check';
   const val = Number(habit.user1) || 0;
@@ -486,17 +518,38 @@ const ModernHabitCard = ({
     }
   };
 
-  // Long press detection for reordering
-  const handleCardTouchStart = () => {
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+
+  // Deliberate long-press detection for reordering (cancelled immediately on scroll)
+  const handleCardTouchStart = (e) => {
+    const touch = e.touches?.[0];
+    if (touch) {
+      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    }
     longPressTimerRef.current = setTimeout(() => {
       setIsLongPressing(true);
       sound.dragStart();
-    }, 380);
+    }, 650);
+  };
+
+  const handleCardTouchMove = (e) => {
+    const touch = e.touches?.[0];
+    if (touch && touchStartPosRef.current) {
+      const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      if (dx > 8 || dy > 8) {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
+    }
   };
 
   const handleCardTouchEnd = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
     setIsLongPressing(false);
   };
@@ -514,10 +567,41 @@ const ModernHabitCard = ({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       onTouchStart={handleCardTouchStart}
+      onTouchMove={handleCardTouchMove}
       onTouchEnd={handleCardTouchEnd}
       onTouchCancel={handleCardTouchEnd}
     >
       <div className="habit-card-top">
+        {/* Reorder Up / Down Controls (Accessible on all 3 OS) */}
+        <div className={`habit-reorder-controls ${isReorderMode ? 'visible' : ''}`}>
+          <button
+            type="button"
+            className="habit-reorder-btn up"
+            disabled={index === 0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveUp?.();
+            }}
+            title="Move up"
+            aria-label="Move habit up"
+          >
+            <ChevronUp size={15} />
+          </button>
+          <button
+            type="button"
+            className="habit-reorder-btn down"
+            disabled={index === totalCount - 1}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveDown?.();
+            }}
+            title="Move down"
+            aria-label="Move habit down"
+          >
+            <ChevronDown size={15} />
+          </button>
+        </div>
+
         {/* Long-press or touch drag handle grip */}
         <div
           className="habit-drag-handle"

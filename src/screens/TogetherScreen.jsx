@@ -10,15 +10,13 @@ import {
   ArrowRight,
   Flame,
   CheckCircle2,
-  Trophy,
   LogOut,
   Target,
   Trash2,
   Minus,
   X,
-  Sparkles,
   SlidersHorizontal,
-  Activity,
+  ChevronRight,
 } from 'lucide-react';
 const POD_GOAL_PRESETS = [
   { name: '10,000 Steps', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
@@ -360,17 +358,17 @@ export const TogetherScreen = () => {
         </p>
       </div>
 
-      {/* Group Pods Selector Bar (up to 5 pods) */}
-      <div className="track-partners-selector-section group-pods-selector-section">
-        <div className="partners-selector-header">
-          <div className="partners-count-badge">
+      {/* Group Pods List Section (up to 5 groups) */}
+      <div className="together-groups-list-section">
+        <div className="groups-list-header">
+          <div className="groups-count-badge">
             <Users size={16} className="text-primary" />
-            <span className="font-bold">Group Pods ({groupPods.length}/5)</span>
+            <span className="font-bold">Your Group Pods ({groupPods.length}/5)</span>
           </div>
           {groupPods.length < 5 && (
             <button
               type="button"
-              className="add-partner-toggle-btn"
+              className="add-group-btn"
               onClick={() => {
                 sound.press();
                 setError('');
@@ -385,26 +383,57 @@ export const TogetherScreen = () => {
         </div>
 
         {groupPods.length > 0 && (
-          <div className="partners-chips-scroll">
+          <div className="groups-entry-list">
             {groupPods.map((podItem) => {
               const isActive = (groupPod?.code?.toUpperCase() === (podItem.code || '').toUpperCase());
+              const memberCount = podItem.members?.length || 1;
+              const goalsCount = podItem.sharedGoals?.length || 0;
+
               return (
-                <button
+                <div
                   key={podItem.code}
-                  type="button"
-                  className={`partner-chip-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => selectGroupPod(podItem.code)}
+                  className={`group-entry-card ${isActive ? 'active-group' : ''}`}
+                  onClick={() => {
+                    sound.selection();
+                    selectGroupPod(podItem.code);
+                  }}
+                  role="button"
+                  tabIndex={0}
                 >
-                  <div className="chip-avatar">
-                    <Users size={14} />
+                  <div className="group-entry-left">
+                    <div className="group-entry-icon">
+                      <Users size={18} />
+                    </div>
+                    <div className="group-entry-details">
+                      <div className="group-entry-name-row">
+                        <span className="group-entry-name font-bold">{podItem.name}</span>
+                        {isActive && <span className="group-entered-badge font-semibold">Active</span>}
+                      </div>
+                      <div className="group-entry-meta">
+                        <span className="group-entry-code font-mono font-bold">{podItem.code}</span>
+                        <span className="meta-sep">·</span>
+                        <span className="group-entry-members">{memberCount} / {podItem.maxMembers || 10} Members</span>
+                        <span className="meta-sep">·</span>
+                        <span className="group-entry-goals">{goalsCount} {goalsCount === 1 ? 'goal' : 'goals'}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="chip-info">
-                    <span className="chip-name font-bold">{podItem.name}</span>
-                    <span className="chip-progress-pill font-semibold">
-                      {podItem.members?.length || 1}/10
-                    </span>
+
+                  <div className="group-entry-right">
+                    <button
+                      type="button"
+                      className={`group-enter-action-btn font-bold ${isActive ? 'entered' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sound.selection();
+                        selectGroupPod(podItem.code);
+                      }}
+                    >
+                      {isActive ? 'Entered' : 'Enter Group'}
+                      <ChevronRight size={15} />
+                    </button>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

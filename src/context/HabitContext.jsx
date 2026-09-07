@@ -2141,6 +2141,7 @@ export const HabitProvider = ({ children }) => {
         onUpdateHabit: updateHabit,
         onUpdateSharedGoal: updateSharedGoalProgress,
         triggerIslandNotification: silent ? null : triggerIslandNotification,
+        silent: Boolean(silent),
       });
       return healthData;
     } else {
@@ -2408,8 +2409,8 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Update Habit Value (Single Habit Change)
-  const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false) => {
-    sound.tap();
+  const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false, silent = false) => {
+    if (!silent) sound.tap();
     let computedNextValue = null;
     let nextHabitsList = [];
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -2454,7 +2455,7 @@ export const HabitProvider = ({ children }) => {
 
         const wasDone = typeof current === 'boolean' ? current : (current || 0) >= h.target;
         const nowDone = isCompleted;
-        if (!wasDone && nowDone) {
+        if (!wasDone && nowDone && !silent) {
           sound.complete();
           triggerIslandNotification(`${h.name} completed!`, 'check');
         }

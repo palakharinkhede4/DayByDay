@@ -159,6 +159,7 @@ export const syncHealthDataToHabitsAndPod = async ({
   onUpdateHabit,
   onUpdateSharedGoal,
   triggerIslandNotification,
+  silent = false,
 }) => {
   if (!healthData || typeof healthData.steps !== 'number') return null;
 
@@ -177,7 +178,7 @@ export const syncHealthDataToHabitsAndPod = async ({
       nameLower.includes('running');
 
     if (isStepHabit && typeof onUpdateHabit === 'function') {
-      onUpdateHabit(h.id, 'user1', steps, true);
+      onUpdateHabit(h.id, 'user1', steps, true, silent);
       updatedHabitsCount++;
     }
   }
@@ -194,8 +195,8 @@ export const syncHealthDataToHabitsAndPod = async ({
     }
   }
 
-  const msg = `Synced ${steps.toLocaleString()} steps from Health App! 🏃`;
-  if (typeof triggerIslandNotification === 'function') {
+  if (!silent && typeof triggerIslandNotification === 'function') {
+    const msg = `Synced ${steps.toLocaleString()} steps from Health App`;
     triggerIslandNotification(msg, 'check');
   }
 

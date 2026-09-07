@@ -5,8 +5,24 @@ class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;
+    this.hapticsEnabled = (() => {
+      try {
+        const saved = localStorage.getItem('daybyday_haptics_enabled');
+        return saved !== null ? saved === 'true' : true;
+      } catch {
+        return true;
+      }
+    })();
+    this.lastHapticTime = 0;
     this.idleTimer = null;
     this.setupLifecycleListeners();
+  }
+
+  setHapticsEnabled(enabled) {
+    this.hapticsEnabled = Boolean(enabled);
+    try {
+      localStorage.setItem('daybyday_haptics_enabled', String(this.hapticsEnabled));
+    } catch {}
   }
 
   // Hook visibility & first user touch to initialize audio hardware
@@ -164,6 +180,15 @@ class SoundEngine {
 
   // Hardware Haptics via Capacitor with Web Vibration Fallback
   async triggerHaptic(type = 'light', fallbackPattern = 35) {
+    if (!this.hapticsEnabled) return;
+
+    // Strict throttle guard: block vibration spam (at most once every 120ms)
+    const now = Date.now();
+    if (now - this.lastHapticTime < 120) {
+      return;
+    }
+    this.lastHapticTime = now;
+
     try {
       if (type === 'success') {
         await Haptics.notification({ type: NotificationType.Success }).catch(() => {});
@@ -246,9 +271,8 @@ class SoundEngine {
     this.playTone({ type: 'triangle', startFreq: 320, endFreq: 680, duration: 0.05, gainVal: 0.12 });
   }
 
-  // Micro-haptic tick when dragging over reorder slots (Micro Vibration + Sub-tick Sound)
+  // Micro-audio tick when dragging over reorder slots (Audio tick only, zero vibration spam)
   dragOver() {
-    this.triggerHaptic('light', 12);
     this.playTone({ type: 'sine', startFreq: 880, endFreq: 600, duration: 0.015, gainVal: 0.03 });
   }
 

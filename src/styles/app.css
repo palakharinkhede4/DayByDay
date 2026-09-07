@@ -5600,6 +5600,59 @@ button:active {
   color: var(--primary, #2563EB);
 }
 
+.habit-reorder-controls {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.habit-reorder-controls.visible {
+  display: flex;
+}
+
+.habit-reorder-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  color: var(--text-primary, #f8fafc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.habit-reorder-btn:hover:not(:disabled) {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+  border-color: var(--primary, #2563EB);
+}
+
+.habit-reorder-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+[data-theme-mode="light"] .habit-reorder-btn {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+[data-theme-mode="light"] .habit-reorder-btn:hover:not(:disabled) {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+}
+
+.reorder-category-chip.active {
+  background: var(--primary, #2563EB) !important;
+  color: #ffffff !important;
+  border-color: var(--primary, #2563EB) !important;
+}
+
 .habit-card-top {
   display: flex;
   align-items: center;
@@ -6491,6 +6544,208 @@ button:active {
 /* ==========================================================
    TOGETHER SCREEN (GROUP PODS UP TO 10 USERS)
    ========================================================== */
+.together-groups-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.groups-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.25rem;
+}
+
+.groups-count-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.add-group-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: var(--primary, #3B82F6);
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-group-btn:hover {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+}
+
+.groups-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.group-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--bg-surface, rgba(15, 23, 42, 0.65));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 1rem;
+  padding: 0.9rem 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.group-entry-card:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.group-entry-card.active-group {
+  border-color: var(--primary, #2563EB);
+  background: var(--bg-surface-container, rgba(37, 99, 235, 0.06));
+}
+
+.group-entry-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.group-entry-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.15);
+  color: var(--primary, #3B82F6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.group-entry-card.active-group .group-entry-icon {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+}
+
+.group-entry-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.group-entry-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.group-entry-name {
+  font-size: 1rem;
+  color: var(--text-primary, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-entered-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.group-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #94a3b8);
+  flex-wrap: wrap;
+}
+
+.group-entry-code {
+  color: var(--primary, #3B82F6);
+  font-weight: 700;
+}
+
+.meta-sep {
+  color: var(--text-tertiary, #64748b);
+}
+
+.group-entry-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.group-enter-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary, #f8fafc);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.group-enter-action-btn:hover,
+.group-enter-action-btn.entered {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+  border-color: var(--primary, #2563EB);
+}
+
+[data-theme-mode="light"] .group-entry-card {
+  background: #ffffff;
+  border-color: #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme-mode="light"] .group-entry-card:hover {
+  border-color: var(--primary, #2563EB);
+}
+
+[data-theme-mode="light"] .group-entry-card.active-group {
+  border-color: var(--primary, #2563EB);
+  background: #EFF6FF;
+}
+
+[data-theme-mode="light"] .group-entry-name {
+  color: #0F172A;
+}
+
+[data-theme-mode="light"] .group-enter-action-btn {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+[data-theme-mode="light"] .group-enter-action-btn.entered {
+  background: var(--primary, #2563EB);
+  color: #ffffff;
+  border-color: var(--primary, #2563EB);
+}
+
 .active-group-pod {
   display: flex;
   flex-direction: column;

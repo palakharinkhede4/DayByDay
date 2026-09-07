@@ -6,10 +6,9 @@ import {
   Bell,
   Trash2,
   Check,
-  Target,
-  Clock,
-  Sparkles,
   AlertTriangle,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 const DAYS_OF_WEEK = [
@@ -23,25 +22,24 @@ const DAYS_OF_WEEK = [
 ];
 
 export const HabitDetailModal = ({ habit, onClose }) => {
-  const { editHabit, removeGoal } = useHabits();
+  const { editHabit, removeGoal, reorderHabit, habits = [] } = useHabits();
 
-  if (!habit) return null;
-
-  const isBool = typeof habit.user1 === 'boolean' || habit.unit === 'check';
+  const currentIndex = habit ? habits.findIndex((h) => h.id === habit.id) : -1;
+  const isBool = habit ? (typeof habit.user1 === 'boolean' || habit.unit === 'check') : false;
 
   // Form state
-  const [name, setName] = useState(habit.name || '');
-  const [target, setTarget] = useState(habit.target || 1);
-  const [unit, setUnit] = useState(habit.unit || 'times');
-  const [delta, setDelta] = useState(habit.delta || (habit.unit === 'steps' ? 1000 : 1));
+  const [name, setName] = useState(habit?.name || '');
+  const [target, setTarget] = useState(habit?.target || 1);
+  const [unit, setUnit] = useState(habit?.unit || 'times');
+  const [delta, setDelta] = useState(habit?.delta || (habit?.unit === 'steps' ? 1000 : 1));
 
   // Reminder state
   const [reminderEnabled, setReminderEnabled] = useState(
-    Boolean(habit.reminderEnabled || habit.reminderTime)
+    Boolean(habit?.reminderEnabled || habit?.reminderTime)
   );
-  const [reminderTime, setReminderTime] = useState(habit.reminderTime || '08:00');
+  const [reminderTime, setReminderTime] = useState(habit?.reminderTime || '08:00');
   const [reminderDays, setReminderDays] = useState(
-    habit.reminderDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    habit?.reminderDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   );
 
   // Delete confirmation
@@ -49,12 +47,15 @@ export const HabitDetailModal = ({ habit, onClose }) => {
 
   // Lock background scroll while modal is active
   useEffect(() => {
+    if (!habit) return;
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = originalStyle;
     };
-  }, []);
+  }, [habit]);
+
+  if (!habit) return null;
 
   const handleToggleDay = (dayKey) => {
     sound.selection();
@@ -230,6 +231,67 @@ export const HabitDetailModal = ({ habit, onClose }) => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Section: List Position / Reorder */}
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">List Position</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              <button
+                type="button"
+                className="habit-modal-secondary-btn"
+                disabled={currentIndex <= 0}
+                onClick={() => {
+                  sound.tap();
+                  reorderHabit(habit.id, 'up');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '10px',
+                  background: 'var(--bg-surface-container, rgba(255, 255, 255, 0.05))',
+                  border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
+                  color: 'var(--text-primary, #f8fafc)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: currentIndex <= 0 ? 'not-allowed' : 'pointer',
+                  opacity: currentIndex <= 0 ? 0.4 : 1,
+                }}
+              >
+                <ChevronUp size={16} />
+                <span>Move Up</span>
+              </button>
+              <button
+                type="button"
+                className="habit-modal-secondary-btn"
+                disabled={currentIndex >= habits.length - 1}
+                onClick={() => {
+                  sound.tap();
+                  reorderHabit(habit.id, 'down');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '10px',
+                  background: 'var(--bg-surface-container, rgba(255, 255, 255, 0.05))',
+                  border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
+                  color: 'var(--text-primary, #f8fafc)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: currentIndex >= habits.length - 1 ? 'not-allowed' : 'pointer',
+                  opacity: currentIndex >= habits.length - 1 ? 0.4 : 1,
+                }}
+              >
+                <ChevronDown size={16} />
+                <span>Move Down</span>
+              </button>
+            </div>
           </div>
 
           {/* Section 4: Danger Zone / Delete Habit */}
