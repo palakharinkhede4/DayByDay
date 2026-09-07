@@ -26,6 +26,7 @@ import {
   Flame,
   Activity,
   Zap,
+  Smartphone,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import {
