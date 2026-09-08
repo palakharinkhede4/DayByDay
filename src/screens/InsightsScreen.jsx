@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useHabits } from '../context/HabitContext';
+import { useHabits, getLocalDateKey } from '../context/HabitContext';
 import {
   Flame,
   Award,
@@ -41,14 +41,14 @@ export const InsightsScreen = () => {
 
   // Calendar navigation state
   const [calDate, setCalDate] = useState(new Date());
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = getLocalDateKey();
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
 
   // Refresh calendar state on mount
   useEffect(() => {
     const now = new Date();
     setCalDate(now);
-    setSelectedDateKey(now.toISOString().slice(0, 10));
+    setSelectedDateKey(getLocalDateKey(now));
   }, []);
 
   const calYear = calDate.getFullYear();
@@ -65,7 +65,7 @@ export const InsightsScreen = () => {
   const handleJumpToday = () => {
     const today = new Date();
     setCalDate(today);
-    setSelectedDateKey(today.toISOString().slice(0, 10));
+    setSelectedDateKey(getLocalDateKey(today));
   };
 
   // 1. Last 7 Days Pulse
@@ -79,7 +79,7 @@ export const InsightsScreen = () => {
       d.setDate(d.getDate() - i);
       const dayName = daysLetters[d.getDay()];
       const isToday = i === 0;
-      const dateKey = d.toISOString().slice(0, 10);
+      const dateKey = getLocalDateKey(d);
 
       let completedOnDate = 0;
       habits.forEach((h) => {
@@ -116,7 +116,7 @@ export const InsightsScreen = () => {
     const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
     const totalDaysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = getLocalDateKey(now);
 
     const cells = [];
 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useHabits, enrichPartnerHabitsWithHealthAndGroup } from '../context/HabitContext';
+import { useHabits, enrichPartnerHabitsWithHealthAndGroup, getCleanDailyHabits, getLocalDateKey } from '../context/HabitContext';
 import { sound } from '../utils/sound';
 import {
   Copy,
@@ -41,11 +41,14 @@ export const TrackScreen = () => {
 
   const getPartnerDisplayHabits = (p) => {
     if (!p) return [];
+    const todayKey = getLocalDateKey();
+    const cleanHabits = getCleanDailyHabits(p.habits || [], todayKey);
     return enrichPartnerHabitsWithHealthAndGroup(
-      p.habits || [],
+      cleanHabits,
       p,
       p.preferences,
-      groupPod
+      groupPod,
+      todayKey
     );
   };
 

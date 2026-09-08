@@ -25,7 +25,24 @@ export const getStoredHealthData = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.syncedAt) {
+      const now = new Date();
+      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const d = new Date(parsed.syncedAt);
+      const syncDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (syncDate !== todayKey) {
+        // Stale from yesterday! Return clean 0
+        return {
+          ...parsed,
+          steps: 0,
+          calories: 0,
+          distanceKm: 0,
+          syncedAt: new Date().toISOString(),
+        };
+      }
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -199,12 +216,20 @@ export const importDeviceHealthStats = async (user = null) => {
       } catch {}
     }
 
-    const todayDate = new Date().toISOString().slice(0, 10);
-    const isToday = lastSaved?.syncedAt ? lastSaved.syncedAt.startsWith(todayDate) : true;
+    const now = new Date();
+    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    let isToday = false;
+    if (lastSaved?.syncedAt) {
+      const d = new Date(lastSaved.syncedAt);
+      const syncDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      isToday = (syncDate === todayDate);
+    }
 
-    const steps = typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : (Number(lastSaved?.steps) || 0);
-    const calories = Number(lastSaved?.calories) || Math.round(steps * 0.04);
-    const distanceKm = Number(lastSaved?.distanceKm) || Math.round(steps * 0.000762 * 100) / 100;
+    const steps = isToday
+      ? (typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : (Number(lastSaved?.steps) || 0))
+      : 0;
+    const calories = isToday ? (Number(lastSaved?.calories) || Math.round(steps * 0.04)) : 0;
+    const distanceKm = isToday ? (Number(lastSaved?.distanceKm) || Math.round(steps * 0.000762 * 100) / 100) : 0;
 
     const payload = {
       steps,
@@ -346,6 +371,17 @@ export const syncHealthDataToHabitsAndPod = async ({
   silent = false,
 }) => {
   if (!healthData || typeof healthData !== 'object') return null;
+
+  // If healthData has a syncedAt from prior date, skip syncing to today's habits
+  if (healthData.syncedAt) {
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const d = new Date(healthData.syncedAt);
+    const syncDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (syncDate !== todayKey) {
+      return null;
+    }
+  }
 
   let updatedHabitsCount = 0;
   let updatedGoalsCount = 0;

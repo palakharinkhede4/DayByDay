@@ -306,17 +306,23 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
   });
 }
 
-export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser, remotePrefs, groupPod) {
+export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser, remotePrefs, groupPod, targetDateKey = getLocalDateKey()) {
   let habitsList = Array.isArray(partnerHabits) ? [...partnerHabits] : [];
   const remoteHealth = remotePrefs?.healthData || remoteUser?.preferences?.healthData;
   const pId = remoteUser?.id ? String(remoteUser.id) : null;
   const pUsername = (remoteUser?.username || '').toLowerCase();
   const pCode = (remoteUser?.secretCode || remoteUser?.secret_code || '').toUpperCase();
 
-  // 1. Check preferences.healthData
-  let stepsVal = remoteHealth?.steps ? Number(remoteHealth.steps) : 0;
+  // 1. Check preferences.healthData ONLY IF synced today!
+  let stepsVal = 0;
+  if (remoteHealth?.steps && remoteHealth?.syncedAt) {
+    const syncDate = getLocalDateKey(new Date(remoteHealth.syncedAt));
+    if (syncDate === targetDateKey) {
+      stepsVal = Number(remoteHealth.steps) || 0;
+    }
+  }
 
-  // 2. Cross-reference groupPod.sharedGoals
+  // 2. Cross-reference groupPod.sharedGoals ONLY IF updated today!
   if (groupPod && Array.isArray(groupPod.sharedGoals)) {
     for (const sg of groupPod.sharedGoals) {
       const su = (sg.unit || '').toLowerCase();
@@ -330,9 +336,21 @@ export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser,
             : (pCode && memberProg[pCode] !== undefined)
               ? memberProg[pCode]
               : undefined;
-        const num = typeof entry === 'object' ? Number(entry.value) : Number(entry);
-        if (!isNaN(num) && num > stepsVal) {
-          stepsVal = num;
+        if (entry !== undefined && entry !== null) {
+          let isEntryToday = false;
+          let num = 0;
+          if (typeof entry === 'object') {
+            const entryDate = entry.updatedAt ? getLocalDateKey(new Date(entry.updatedAt)) : null;
+            isEntryToday = (entryDate === targetDateKey);
+            num = isEntryToday ? Number(entry.value) : 0;
+          } else {
+            const podDate = groupPod.updatedAt ? getLocalDateKey(new Date(groupPod.updatedAt)) : null;
+            isEntryToday = (podDate === targetDateKey);
+            num = isEntryToday ? Number(entry) : 0;
+          }
+          if (isEntryToday && !isNaN(num) && num > stepsVal) {
+            stepsVal = num;
+          }
         }
       }
     }
@@ -1202,7 +1220,7 @@ export const HabitProvider = ({ children }) => {
       const currentTime = `${hours}:${minutes}`;
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const currentDay = dayNames[now.getDay()];
-      const todayDate = now.toISOString().slice(0, 10);
+      const todayDate = getLocalDateKey(now);
 
       habits.forEach((h) => {
         if (!h.reminderTime) return;
@@ -1304,7 +1322,16 @@ export const HabitProvider = ({ children }) => {
           const loaded = [];
           results.forEach((remote, idx) => {
             if (remote && remote.user) {
-              const partnerHabits = remote.habits || [];
+              const todayKey = getLocalDateKey();
+              const rawHabits = remote.habits || [];
+              const cleanHabits = getCleanDailyHabits(rawHabits, todayKey);
+              const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
+                cleanHabits,
+                remote.user,
+                remote.preferences,
+                groupPodRef.current || groupPod,
+                todayKey
+              );
               const calcPct = calculatePartnerCompletionPercent(partnerHabits);
               const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
               const actualCode = missing[idx].toUpperCase();
@@ -1831,12 +1858,15 @@ export const HabitProvider = ({ children }) => {
         remote = await fetchUserRemote(cleanCode);
       }
       if (remote && remote.user) {
+        const todayKey = getLocalDateKey();
         const rawHabits = remote.habits || [];
+        const cleanHabits = getCleanDailyHabits(rawHabits, todayKey);
         const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
-          rawHabits,
+          cleanHabits,
           remote.user,
           remote.preferences,
-          groupPodRef.current || groupPod
+          groupPodRef.current || groupPod,
+          todayKey
         );
         const calcPct = calculatePartnerCompletionPercent(partnerHabits);
         const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
@@ -1930,12 +1960,15 @@ export const HabitProvider = ({ children }) => {
             let res = await fetchUserByCodeRemote(pCode);
             if (!res || !res.user) res = await fetchUserRemote(pCode);
             if (res && res.user) {
+              const todayKey = getLocalDateKey();
               const rawHabits = res.habits || [];
+              const cleanHabits = getCleanDailyHabits(rawHabits, todayKey);
               const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
-                rawHabits,
+                cleanHabits,
                 res.user,
                 res.preferences,
-                groupPodRef.current || groupPod
+                groupPodRef.current || groupPod,
+                todayKey
               );
               const calcPct = calculatePartnerCompletionPercent(partnerHabits);
               const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
@@ -2826,13 +2859,24 @@ export const HabitProvider = ({ children }) => {
               : Math.max(0, Number(partnerHabit.user1) || 0);
 
             if (matchingPartner?.preferences?.healthData?.steps && (sg.unit === 'steps' || sg.name?.toLowerCase().includes('step'))) {
-              partnerVal = Math.max(partnerVal, Number(matchingPartner.preferences.healthData.steps) || 0);
+              const hSynced = matchingPartner.preferences.healthData.syncedAt;
+              const isTodayHealth = hSynced ? (getLocalDateKey(new Date(hSynced)) === getLocalDateKey()) : false;
+              if (isTodayHealth) {
+                partnerVal = Math.max(partnerVal, Number(matchingPartner.preferences.healthData.steps) || 0);
+              }
             }
 
             const currentEntry = memberProgress[m.id] ?? memberProgress[m.username];
-            const curVal = typeof currentEntry === 'object' ? (Number(currentEntry?.value) || 0) : (Number(currentEntry) || 0);
+            const todayKey = getLocalDateKey();
+            let curVal = 0;
+            if (currentEntry && typeof currentEntry === 'object') {
+              const entryDate = currentEntry.updatedAt ? getLocalDateKey(new Date(currentEntry.updatedAt)) : null;
+              curVal = (entryDate === todayKey) ? (Number(currentEntry.value) || 0) : 0;
+            } else {
+              curVal = Number(currentEntry) || 0;
+            }
 
-            if (partnerVal > curVal) {
+            if (partnerVal !== curVal) {
               goalChanged = true;
               const isDone = partnerVal >= (Number(sg.target) || 1);
               const updatedEntry = {

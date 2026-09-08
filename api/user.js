@@ -50,23 +50,134 @@ function sanitizePartner(u) {
   return sanitized;
 }
 
+function getIstDateKey(date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(date));
+  } catch {
+    const d = new Date(date);
+    // Fallback +5:30 offset
+    const ist = new Date(d.getTime() + (330 * 60 * 1000));
+    return ist.toISOString().slice(0, 10);
+  }
+}
+
 function formatHabitFromRow(row) {
   if (!row) return null;
+  const todayKey = getIstDateKey();
+  const history = parseSafeJson(row.history, {});
+
+  // Determine if this habit row was updated today in IST
+  let wasUpdatedToday = false;
+  let lastUpdatedDateKey = null;
+  if (row.updated_at) {
+    try {
+      lastUpdatedDateKey = getIstDateKey(new Date(row.updated_at));
+      wasUpdatedToday = (lastUpdatedDateKey === todayKey);
+    } catch {
+      wasUpdatedToday = false;
+    }
+  }
+
+  const isBool = row.unit === 'check';
+  const target = Number(row.target) || 1;
+
+  // Preserve prior active value into history under lastUpdatedDateKey if not already archived
+  if (!wasUpdatedToday && lastUpdatedDateKey && history[lastUpdatedDateKey] === undefined && row.today_value !== undefined && row.today_value !== null) {
+    const prevVal = Number(row.today_value) || 0;
+    if (prevVal > 0 || row.completed) {
+      history[lastUpdatedDateKey] = isBool ? Boolean(row.completed) : prevVal;
+    }
+  }
+
+  // Authoritative today's value:
+  // 1. If explicit entry exists in history for today, that is authoritative.
+  // 2. Otherwise, if habit was updated today, take Math.max(row.today_value, history[todayKey]).
+  // 3. If NOT updated today, today's value is 0.
+  let todayVal;
+  if (history[todayKey] !== undefined) {
+    todayVal = isBool
+      ? Boolean(history[todayKey])
+      : Math.max(Number(history[todayKey]) || 0, wasUpdatedToday ? (Number(row.today_value) || 0) : 0);
+  } else if (wasUpdatedToday) {
+    todayVal = isBool ? Boolean(row.completed) : (Number(row.today_value) || 0);
+  } else {
+    todayVal = isBool ? false : 0;
+  }
+
+  const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= target;
+
   return {
     id: row.habit_id || String(row.id),
     name: row.name || 'Habit',
     category: row.category || 'Daily',
     description: row.description || '',
-    target: Number(row.target) || 1,
+    target,
     unit: row.unit || '',
     icon: row.icon || 'star',
-    user1: Number(row.today_value) || 0,
+    user1: todayVal,
     user2: 0,
-    completed: Boolean(row.completed),
+    completed: isCompleted,
     reminderTime: row.reminder_time || '',
     reminderDays: row.reminder_days ? row.reminder_days.split(',') : [],
     streak: Number(row.streak) || 0,
-    history: parseSafeJson(row.history, {}),
+    history,
+  };
+}
+
+function formatGroupPodFromRow(row) {
+  if (!row) return null;
+  const todayKey = getIstDateKey();
+  const rawGoals = parseSafeJson(row.shared_goals, []);
+  const cleanGoals = (Array.isArray(rawGoals) ? rawGoals : []).map((sg) => {
+    const memberProgress = { ...(sg.memberProgress || {}) };
+    let activeTotal = 0;
+    const cleanMemberProg = {};
+
+    for (const [k, v] of Object.entries(memberProgress)) {
+      let isToday = false;
+      let val = 0;
+      let isDone = false;
+
+      if (v && typeof v === 'object') {
+        const updateDate = v.updatedAt ? getIstDateKey(new Date(v.updatedAt)) : null;
+        isToday = (updateDate === todayKey);
+        val = isToday ? (Number(v.value) || 0) : 0;
+        isDone = isToday ? Boolean(v.completed) : false;
+        cleanMemberProg[k] = {
+          ...v,
+          value: val,
+          completed: isDone,
+        };
+      } else {
+        const podUpdateDate = row.updated_at ? getIstDateKey(new Date(row.updated_at)) : null;
+        isToday = (podUpdateDate === todayKey);
+        val = isToday ? (Number(v) || 0) : 0;
+        cleanMemberProg[k] = val;
+      }
+      activeTotal += val;
+    }
+
+    return {
+      ...sg,
+      current: activeTotal,
+      memberProgress: cleanMemberProg,
+    };
+  });
+
+  return {
+    id: row.id,
+    name: row.name,
+    code: (row.code || '').toUpperCase(),
+    members: parseSafeJson(row.members, []),
+    sharedGoals: cleanGoals,
+    maxMembers: row.max_members || 10,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -202,7 +313,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
     `;
 
     if (steps > 0) {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getIstDateKey();
       try {
         const stepHabits = await sql`
           SELECT * FROM daybyday_habits 
@@ -252,6 +363,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
     if (!targetUser.preferences) targetUser.preferences = {};
     targetUser.preferences.healthData = normalized;
     if (steps > 0) {
+      const todayStr = getIstDateKey();
       const habits = memoryDb.getUserHabits(targetUser.id);
       let stepH = habits.find(h => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
       if (stepH) {
@@ -259,7 +371,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
         stepH.user1 = steps;
         stepH.completed = steps >= (Number(stepH.target) || 10000);
         if (!stepH.history) stepH.history = {};
-        stepH.history[new Date().toISOString().slice(0, 10)] = steps;
+        stepH.history[todayStr] = steps;
       } else {
         stepH = {
           id: 'steps',
@@ -275,7 +387,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
           user2: 0,
           completed: steps >= 10000,
           streak: 1,
-          history: { [new Date().toISOString().slice(0, 10)]: steps },
+          history: { [todayStr]: steps },
         };
         habits.unshift(stepH);
       }
@@ -338,6 +450,21 @@ export default async function handler(req, res) {
             if (rows.length > 0) user = rows[0];
           }
           if (user && user.preferences && user.preferences.healthData) {
+            const hData = user.preferences.healthData;
+            const todayKey = getIstDateKey();
+            const syncedDate = hData.syncedAt ? getIstDateKey(new Date(hData.syncedAt)) : null;
+            if (syncedDate !== todayKey) {
+              return res.status(200).json({
+                success: true,
+                healthData: {
+                  ...hData,
+                  steps: 0,
+                  calories: 0,
+                  distanceKm: 0,
+                  syncedAt: new Date().toISOString(),
+                }
+              });
+            }
             return res.status(200).json({ success: true, healthData: user.preferences.healthData });
           }
         }
@@ -346,6 +473,21 @@ export default async function handler(req, res) {
         const lookup = (cleanCode || cleanUser || userId || '').trim().replace(/^@/, '');
         const memUser = memoryDb.getUser(lookup);
         if (memUser && memUser.preferences && memUser.preferences.healthData) {
+          const hData = memUser.preferences.healthData;
+          const todayKey = getIstDateKey();
+          const syncedDate = hData.syncedAt ? getIstDateKey(new Date(hData.syncedAt)) : null;
+          if (syncedDate !== todayKey) {
+            return res.status(200).json({
+              success: true,
+              healthData: {
+                ...hData,
+                steps: 0,
+                calories: 0,
+                distanceKm: 0,
+                syncedAt: new Date().toISOString(),
+              }
+            });
+          }
           return res.status(200).json({ success: true, healthData: memUser.preferences.healthData });
         }
 
@@ -465,15 +607,7 @@ export default async function handler(req, res) {
             LIMIT 5
           `;
           if (groupRows.length > 0) {
-            groupPods = groupRows.map((gr) => ({
-              id: gr.id,
-              name: gr.name,
-              code: gr.code,
-              members: parseSafeJson(gr.members, []),
-              sharedGoals: parseSafeJson(gr.shared_goals, []),
-              createdAt: gr.created_at,
-              maxMembers: 10,
-            }));
+            groupPods = groupRows.map(formatGroupPodFromRow);
 
             // Enrich members with latest profilePicture & secretCode so avatars load instantly
             const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
@@ -512,20 +646,27 @@ export default async function handler(req, res) {
           console.warn('Notice querying user group pods:', gpErr.message);
         }
 
-        const todayDateStr = new Date().toISOString().slice(0, 10);
+        const todayDateStr = getIstDateKey();
         const remoteHealthData = user.preferences?.healthData;
+        let remoteHealthSteps = 0;
+        if (remoteHealthData?.steps && remoteHealthData?.syncedAt) {
+          const syncedDate = getIstDateKey(new Date(remoteHealthData.syncedAt));
+          if (syncedDate === todayDateStr) {
+            remoteHealthSteps = Number(remoteHealthData.steps) || 0;
+          }
+        }
 
         let formattedHabits = habits.map(formatHabitFromRow).map((h) => {
-          if (remoteHealthData?.steps) {
+          if (remoteHealthSteps > 0) {
             const isStep = (h.id || '').toLowerCase() === 'steps' ||
                            (h.unit || '').toLowerCase() === 'steps' ||
                            (h.name || '').toLowerCase().includes('step') ||
                            (h.name || '').toLowerCase().includes('walk');
-            if (isStep && (Number(h.user1) || 0) < remoteHealthData.steps) {
+            if (isStep && (Number(h.user1) || 0) < remoteHealthSteps) {
               return {
                 ...h,
-                user1: remoteHealthData.steps,
-                completed: remoteHealthData.steps >= (Number(h.target) || 10000),
+                user1: remoteHealthSteps,
+                completed: remoteHealthSteps >= (Number(h.target) || 10000),
               };
             }
           }
@@ -538,7 +679,7 @@ export default async function handler(req, res) {
           (h.unit || '').toLowerCase() === 'steps' ||
           (h.name || '').toLowerCase().includes('step')
         );
-        if (!hasStepHabit && remoteHealthData?.steps > 0) {
+        if (!hasStepHabit && remoteHealthSteps > 0) {
           formattedHabits.unshift({
             id: 'steps',
             name: 'Steps',
@@ -547,11 +688,11 @@ export default async function handler(req, res) {
             target: 10000,
             unit: 'steps',
             icon: 'steps',
-            user1: remoteHealthData.steps,
+            user1: remoteHealthSteps,
             user2: 0,
-            completed: remoteHealthData.steps >= 10000,
+            completed: remoteHealthSteps >= 10000,
             streak: 1,
-            history: { [todayDateStr]: remoteHealthData.steps },
+            history: { [todayDateStr]: remoteHealthSteps },
           });
         }
 
@@ -563,33 +704,30 @@ export default async function handler(req, res) {
             if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
               const memberProg = sg.memberProgress || {};
               const entry = memberProg[user.id] ?? (user.username ? memberProg[user.username] : undefined);
-              const pVal = typeof entry === 'object' ? Number(entry.value) : Number(entry);
-              if (!isNaN(pVal) && pVal > 0) {
-                const stepH = formattedHabits.find((h) =>
-                  (h.id || '').toLowerCase() === 'steps' ||
-                  (h.unit || '').toLowerCase() === 'steps' ||
-                  (h.name || '').toLowerCase().includes('step')
-                );
-                if (stepH) {
-                  if ((Number(stepH.user1) || 0) < pVal) {
-                    stepH.user1 = pVal;
-                    stepH.completed = pVal >= (Number(stepH.target) || 10000);
-                  }
+              if (entry) {
+                let isEntryToday = false;
+                let pVal = 0;
+                if (typeof entry === 'object') {
+                  const entryDate = entry.updatedAt ? getIstDateKey(new Date(entry.updatedAt)) : null;
+                  isEntryToday = (entryDate === todayDateStr);
+                  pVal = isEntryToday ? Number(entry.value) : 0;
                 } else {
-                  formattedHabits.unshift({
-                    id: 'steps',
-                    name: 'Steps',
-                    category: 'Daily',
-                    description: 'Daily steps from pod',
-                    target: Number(sg.target) || 10000,
-                    unit: 'steps',
-                    icon: 'steps',
-                    user1: pVal,
-                    user2: 0,
-                    completed: pVal >= (Number(sg.target) || 10000),
-                    streak: 1,
-                    history: { [todayDateStr]: pVal },
-                  });
+                  const podDate = groupPod.updatedAt ? getIstDateKey(new Date(groupPod.updatedAt)) : null;
+                  isEntryToday = (podDate === todayDateStr);
+                  pVal = isEntryToday ? Number(entry) : 0;
+                }
+                if (isEntryToday && !isNaN(pVal) && pVal > 0) {
+                  const stepH = formattedHabits.find((h) =>
+                    (h.id || '').toLowerCase() === 'steps' ||
+                    (h.unit || '').toLowerCase() === 'steps' ||
+                    (h.name || '').toLowerCase().includes('step')
+                  );
+                  if (stepH) {
+                    if ((Number(stepH.user1) || 0) < pVal) {
+                      stepH.user1 = pVal;
+                      stepH.completed = pVal >= (Number(stepH.target) || 10000);
+                    }
+                  }
                 }
               }
             }
@@ -803,7 +941,7 @@ export default async function handler(req, res) {
 
             // Also keep user's step habit row in daybyday_habits in perfect sync
             try {
-              const todayKey = new Date().toISOString().slice(0, 10);
+              const todayKey = getIstDateKey();
               const userHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id}`;
               for (const h of userHabits) {
                 const isStep = (h.habit_id || '').toLowerCase() === 'steps' ||
@@ -926,15 +1064,7 @@ export default async function handler(req, res) {
               LIMIT 5
             `;
             if (groupRows.length > 0) {
-              groupPods = groupRows.map((gr) => ({
-                id: gr.id,
-                name: gr.name,
-                code: gr.code,
-                members: parseSafeJson(gr.members, []),
-                sharedGoals: parseSafeJson(gr.shared_goals, []),
-                createdAt: gr.created_at,
-                maxMembers: 10,
-              }));
+              groupPods = groupRows.map(formatGroupPodFromRow);
 
               // Enrich members with latest profilePicture & secretCode so avatars load instantly
               const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
@@ -1150,6 +1280,14 @@ export default async function handler(req, res) {
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
             const historyObj = parseSafeJson(h.history, {});
+            const todayStr = getIstDateKey();
+            const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+            const habitVal = h.user1 ?? h.todayValue ?? (historyObj[todayStr] !== undefined ? historyObj[todayStr] : 0);
+            const numOrBoolVal = isBool ? Boolean(habitVal) : (Number(habitVal) || 0);
+            if (numOrBoolVal !== undefined && numOrBoolVal !== null) {
+              historyObj[todayStr] = numOrBoolVal;
+            }
+
             await sql`
               INSERT INTO daybyday_habits (
                 user_id, habit_id, name, description, target, unit, icon, category,
@@ -1157,7 +1295,7 @@ export default async function handler(req, res) {
               )
               VALUES (
                 ${userId}, ${h.id}, ${h.name}, ${h.description || ''}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
-                ${h.user1 ?? h.todayValue ?? 0}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
+                ${isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
                 ${h.streak || 0}, ${JSON.stringify(historyObj)}::jsonb, CURRENT_TIMESTAMP
               )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
@@ -1382,16 +1520,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = formatGroupPodFromRow(rows[0]);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1487,16 +1616,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = formatGroupPodFromRow(rows[0]);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1572,15 +1692,7 @@ export default async function handler(req, res) {
             ORDER BY updated_at DESC
             LIMIT 5
           `;
-          pods = groupRows.map((r) => ({
-            id: r.id,
-            name: r.name,
-            code: r.code,
-            members: r.members || [],
-            sharedGoals: r.shared_goals || [],
-            createdAt: r.created_at,
-            maxMembers: 10,
-          }));
+          pods = groupRows.map(formatGroupPodFromRow);
 
           // Enrich members with latest profilePicture & secretCode
           if (pods.length > 0) {
@@ -1772,16 +1884,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = formatGroupPodFromRow(rows[0]);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1789,15 +1892,24 @@ export default async function handler(req, res) {
 
         if (!pod) return res.status(404).json({ error: 'Pod not found' });
 
+        const todayKey = getIstDateKey();
         const updatedGoals = (pod.sharedGoals || []).map((g) => {
           if (g.id === goalId) {
             const memberProgress = { ...(g.memberProgress || {}) };
 
             if (userId) {
               const currentMemberData = memberProgress[userId] || { value: 0, completed: false };
+              let curMemberVal = 0;
+              if (currentMemberData && typeof currentMemberData === 'object') {
+                const entryDate = currentMemberData.updatedAt ? getIstDateKey(new Date(currentMemberData.updatedAt)) : null;
+                curMemberVal = (entryDate === todayKey) ? (Number(currentMemberData.value) || 0) : 0;
+              } else {
+                curMemberVal = Number(currentMemberData) || 0;
+              }
+
               let nextMemberVal = value !== undefined
                 ? Math.max(0, Number(value))
-                : Math.max(0, (Number(currentMemberData.value) || 0) + (Number(delta) || 0));
+                : Math.max(0, curMemberVal + (Number(delta) || 0));
 
               const isCompleted = completed !== undefined
                 ? Boolean(completed)
@@ -1810,11 +1922,14 @@ export default async function handler(req, res) {
               };
             }
 
-            // Total aggregated current value across members
-            const totalSum = Object.values(memberProgress).reduce(
-              (acc, m) => acc + (Number(m.value) || 0),
-              0
-            );
+            // Total aggregated current value across members for today
+            const totalSum = Object.values(memberProgress).reduce((acc, m) => {
+              if (m && typeof m === 'object') {
+                const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
+                return acc + (entryDate === todayKey ? (Number(m.value) || 0) : 0);
+              }
+              return acc;
+            }, 0);
 
             return {
               ...g,
@@ -1852,16 +1967,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = formatGroupPodFromRow(rows[0]);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1900,16 +2006,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = formatGroupPodFromRow(rows[0]);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1967,15 +2064,7 @@ export default async function handler(req, res) {
               SET name = ${cleanName}, updated_at = CURRENT_TIMESTAMP
               WHERE UPPER(code) = ${cleanCode}
             `;
-            pod = {
-              id: r.id,
-              name: cleanName,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = { ...formatGroupPodFromRow(r), name: cleanName };
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
