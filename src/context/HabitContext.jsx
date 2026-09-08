@@ -41,6 +41,10 @@ import {
   dispatchHabitNotification,
   dispatchCheerNotification,
   getOrRegisterServiceWorker,
+  getNotificationPermissionStatus,
+  isIosStandalone,
+  isIosSafariBrowser,
+  dispatchTestNotification,
 } from '../utils/notifications';
 import {
   initPersistentStorage,
@@ -1318,7 +1322,36 @@ export const HabitProvider = ({ children }) => {
       profilePicture: null,
       activeFocusHabitId: '',
       beyondGoals: [],
+      groupPodCode: null,
+      groupPodCodes: [],
+      trackedPartnerCodes: [],
     };
+
+    // Thoroughly flush any previous account group pods, partner data, and cached sessions
+    setGroupPods([]);
+    setActiveGroupPodCode('');
+    setTrackedPartners([]);
+    setTrackedPartner(null);
+    setActiveTrackedCode('');
+    setPartner(null);
+    setProfilePicture(null);
+
+    const oldSessionKeys = [
+      'daybyday_group_pod',
+      'daybyday_group_pods',
+      'daybyday_active_group_pod_code',
+      'daybyday_partner',
+      'daybyday_tracked_partner',
+      'daybyday_tracked_partners',
+      'daybyday_active_tracked_code',
+      'daybyday_profile_pic',
+      'daybyday_profile_picture',
+      'daybyday_health_sync_data',
+      'daybyday_seen_cheer_ids',
+    ];
+    oldSessionKeys.forEach((k) => {
+      try { localStorage.removeItem(k); } catch {}
+    });
 
     // Clear any stale local account records for this username
     localStorage.removeItem(`daybyday_local_acc_${cleanUsername}`);
@@ -1363,15 +1396,22 @@ export const HabitProvider = ({ children }) => {
     } catch {}
 
     setUser(newUser);
-    setPod((prev) => ({
-      ...prev,
+    setPod({
+      isPaired: false,
       code: newUser.secretCode,
       user1: {
         name: newUser.displayName || newUser.username,
         email: `${newUser.username}@daybyday.invalid`,
         initial: (newUser.displayName || newUser.username)[0].toUpperCase(),
-      }
-    }));
+      },
+      user2: null,
+      daysTogether: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      podHealth: 100,
+      healthStatus: 'ACTIVE',
+      yesterdayPercent: 0,
+    });
 
     triggerCelebration();
     triggerIslandNotification(`Welcome @${newUser.username}!`, 'sparkles');
@@ -1566,10 +1606,23 @@ export const HabitProvider = ({ children }) => {
     setTrackedPartner(null);
     setTrackedPartners([]);
     setActiveTrackedCode('');
-    setGroupPod(null);
+    setGroupPods([]);
+    setActiveGroupPodCode('');
     setProfilePicture(null);
     setActiveFocusHabitId('');
     setBeyondGoals([]);
+    setPod({
+      isPaired: false,
+      code: 'DAY-1000',
+      user1: { name: 'You', email: '', initial: 'Y' },
+      user2: null,
+      daysTogether: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      podHealth: 100,
+      healthStatus: 'ACTIVE',
+      yesterdayPercent: 0,
+    });
 
     // 2. Clear all user storage keys (both daybyday_ and legacy duotrack_)
     const keysToRemove = [
@@ -1579,6 +1632,8 @@ export const HabitProvider = ({ children }) => {
       'daybyday_tracked_partners',
       'daybyday_active_tracked_code',
       'daybyday_group_pod',
+      'daybyday_group_pods',
+      'daybyday_active_group_pod_code',
       'daybyday_profile_picture',
       'daybyday_profile_pic',
       'daybyday_active_focus_habit',
@@ -1591,6 +1646,8 @@ export const HabitProvider = ({ children }) => {
       'daybyday_categories',
       'daybyday_habits',
       'daybyday_pod',
+      'daybyday_health_sync_data',
+      'daybyday_seen_cheer_ids',
       'duotrack_user',
       'duotrack_partner',
       'duotrack_tracked_partner',
@@ -1603,9 +1660,13 @@ export const HabitProvider = ({ children }) => {
       try { localStorage.removeItem(k); } catch {}
     });
 
-    // Wipe cached local account credentials
+    // Wipe cached local account credentials and avatar images
     Object.keys(localStorage).forEach((k) => {
-      if (k.startsWith('daybyday_local_acc_') || k.startsWith('duotrack_local_acc_')) {
+      if (
+        k.startsWith('daybyday_local_acc_') ||
+        k.startsWith('duotrack_local_acc_') ||
+        k.startsWith('daybyday_avatar_')
+      ) {
         try { localStorage.removeItem(k); } catch {}
       }
     });
@@ -3569,6 +3630,10 @@ export const HabitProvider = ({ children }) => {
         deleteAccountPermanently,
         triggerCelebration,
         requestNotificationPermission,
+        getNotificationPermissionStatus,
+        isIosStandalone,
+        isIosSafariBrowser,
+        dispatchTestNotification,
         exportData,
         importData,
         resetAllData,

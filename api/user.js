@@ -691,14 +691,20 @@ export default async function handler(req, res) {
             return res.status(409).json({ error: 'Username is already taken. Please choose another username or sign in.' });
           }
 
+          const initialPreferences = {
+            groupPodCode: null,
+            groupPodCodes: [],
+            trackedPartnerCodes: [],
+          };
+
           const created = await sql`
             INSERT INTO daybyday_users (
               id, username, secret_code, display_name, avatar,
-              password_hash, salt, security_question, security_answer_hash
+              password_hash, salt, security_question, security_answer_hash, preferences
             )
             VALUES (
               ${userId}, ${cleanUsername}, ${secretCode}, ${displayName}, ${avatar},
-              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}
+              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}, ${JSON.stringify(initialPreferences)}::jsonb
             )
             RETURNING *
           `;
@@ -1320,13 +1326,16 @@ export default async function handler(req, res) {
         };
 
         if (sql) {
+          const existingPod = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (existingPod.length > 0) {
+            const randSuffix = Math.floor(1000 + Math.random() * 9000);
+            cleanCode = `${cleanCode.slice(0, 4)}-${randSuffix}`;
+            podRecord.code = cleanCode;
+          }
           await sql`
             INSERT INTO daybyday_group_pods (id, name, code, members, shared_goals, created_at, updated_at)
             VALUES (${id}, ${cleanName}, ${cleanCode}, ${JSON.stringify(podRecord.members)}::jsonb, ${JSON.stringify(goals)}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (code) DO UPDATE SET
-              name = EXCLUDED.name,
-              members = EXCLUDED.members,
-              shared_goals = EXCLUDED.shared_goals,
               updated_at = CURRENT_TIMESTAMP
           `;
         }

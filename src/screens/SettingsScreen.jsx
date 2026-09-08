@@ -27,6 +27,7 @@ import {
   Activity,
   Zap,
   Smartphone,
+  BellRing,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import {
@@ -71,7 +72,16 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     syncDeviceHealth,
     setCustomHealthSteps,
     openFeaturesGuide,
+    requestNotificationPermission,
+    getNotificationPermissionStatus,
+    isIosSafariBrowser,
+    dispatchTestNotification,
+    triggerIslandNotification,
+    triggerCelebration,
   } = useHabits();
+
+  const [notifStatus, setNotifStatus] = useState(() => getNotificationPermissionStatus?.() || 'granted');
+  const [enablingNotifs, setEnablingNotifs] = useState(false);
 
   const [hapticsEnabled, setHapticsEnabled] = useState(() => sound.hapticsEnabled);
   const fileInputRef = useRef(null);
@@ -115,6 +125,32 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const handleManualHealthEntry = async ({ steps, calories, distanceKm }) => {
     if (!setCustomHealthSteps) return;
     await setCustomHealthSteps({ steps, calories, distanceKm, source: 'manual_entry' });
+  };
+
+  const handleNotificationAction = async () => {
+    sound.press();
+    setEnablingNotifs(true);
+    try {
+      if (notifStatus === 'granted' || notifStatus === 'native') {
+        await dispatchTestNotification?.();
+        triggerIslandNotification?.('Test cheer sent! Check your notification center 🔥', 'sparkles');
+      } else {
+        const granted = await requestNotificationPermission?.();
+        if (granted) {
+          sound.complete();
+          setNotifStatus('granted');
+          triggerCelebration?.();
+          triggerIslandNotification?.('Notifications enabled! 🔥', 'sparkles');
+          await dispatchTestNotification?.();
+        } else {
+          setNotifStatus(getNotificationPermissionStatus?.() || 'denied');
+        }
+      }
+    } catch (err) {
+      console.warn('Notification action notice:', err);
+    } finally {
+      setEnablingNotifs(false);
+    }
   };
 
 
@@ -294,6 +330,79 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* SECTION: PUSH NOTIFICATIONS & CHEER ALERTS */}
+      <div className="settings-group">
+        <span className="group-label">NOTIFICATIONS & CHEER ALERTS</span>
+        <div className="settings-group-content">
+          <div className="settings-row-item">
+            <div className="row-left">
+              <BellRing size={18} className="text-amber-400" />
+              <div>
+                <span className="row-title">Push Notifications</span>
+                <span className="row-hint">Encouragement cheers from pod members & daily habit reminders</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              {notifStatus === 'granted' || notifStatus === 'native' ? (
+                <span className="notif-badge-active">
+                  <Check size={12} /> Enabled
+                </span>
+              ) : notifStatus === 'denied' ? (
+                <span className="notif-badge-blocked">
+                  <AlertCircle size={12} /> Blocked
+                </span>
+              ) : (
+                <span className="notif-badge-pending">
+                  <BellRing size={12} /> Not Enabled
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-row-item">
+            <div className="row-left">
+              <Sparkles size={18} className="text-orange-400" />
+              <div>
+                <span className="row-title">
+                  {notifStatus === 'granted' || notifStatus === 'native' ? 'Test Cheer Alert' : 'Enable Notifications'}
+                </span>
+                <span className="row-hint">
+                  {notifStatus === 'granted' || notifStatus === 'native'
+                    ? 'Send a live test cheer notification with banner and sound'
+                    : 'Grant notification permission for iOS Web App & browser'}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="notif-enable-btn font-bold"
+              onClick={handleNotificationAction}
+              disabled={enablingNotifs}
+            >
+              {notifStatus === 'granted' || notifStatus === 'native' ? (
+                <>
+                  <Flame size={14} />
+                  <span>{enablingNotifs ? 'Sending...' : 'Test Cheer'}</span>
+                </>
+              ) : (
+                <>
+                  <BellRing size={14} />
+                  <span>{enablingNotifs ? 'Enabling...' : 'Enable Now'}</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {isIosSafariBrowser?.() && notifStatus !== 'granted' && (
+            <div style={{ padding: '0.85rem 1.1rem', background: 'rgba(59, 130, 246, 0.08)', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.45, display: 'block' }}>
+                💡 <strong>iOS Web App Tip</strong>: Web push on iPhone/iPad requires DayByDay to be added to your Home Screen. Tap <strong>Share 􀈂</strong> in Safari, tap <strong>'Add to Home Screen' 􀎶</strong>, then open DayByDay from your Home Screen.
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

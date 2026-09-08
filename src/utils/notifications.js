@@ -1,4 +1,4 @@
-﻿// Cross-Platform Native & Web Notification Gateway for DayByDay
+// Cross-Platform Native & Web Notification Gateway for DayByDay
 // iOS web app requires: (1) service worker registered, (2) permission granted via user gesture,
 // (3) registration.showNotification() — never new Notification() which is unsupported on iOS.
 
@@ -105,8 +105,41 @@ export function getOrRegisterServiceWorker() {
   return _swRegistrationPromise;
 }
 
+// ─── Permission Status & Detection Helpers ─────────────────────────────────
+export function getNotificationPermissionStatus() {
+  if (Capacitor.isNativePlatform()) {
+    return 'native';
+  }
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'unsupported';
+  }
+  return Notification.permission; // 'granted', 'denied', or 'default'
+}
+
+export function isIosStandalone() {
+  if (typeof window === 'undefined') return false;
+  const isIos =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone =
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  return isIos && isStandalone;
+}
+
+export function isIosSafariBrowser() {
+  if (typeof window === 'undefined') return false;
+  const isIos =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone =
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  return isIos && !isStandalone;
+}
+
 // ─── Request notification permission ──────────────────────────────────────
-// MUST be called from a user gesture (e.g. button click) for iOS to grant it.
+// MUST be called directly within a user gesture (e.g. button click) for iOS to grant it.
 export async function requestAppNotificationPermission() {
   // Native Android / iOS APK
   if (Capacitor.isNativePlatform()) {
@@ -120,15 +153,30 @@ export async function requestAppNotificationPermission() {
     }
   }
 
-  // Web / iOS Web App
+  // Web / iOS Web App (iOS 16.4+ in standalone PWA or standard modern browsers)
   if (typeof window !== 'undefined' && 'Notification' in window) {
     try {
-      if (Notification.permission === 'granted') return true;
+      if (Notification.permission === 'granted') {
+        await getOrRegisterServiceWorker();
+        return true;
+      }
       if (Notification.permission === 'denied') return false;
-      // 'default' — request it (needs user gesture)
-      const result = await Notification.requestPermission();
+
+      // Request permission with promise + callback fallback for cross-engine compatibility
+      let result;
+      try {
+        const p = Notification.requestPermission();
+        if (p && typeof p.then === 'function') {
+          result = await p;
+        } else {
+          result = await new Promise((resolve) => Notification.requestPermission(resolve));
+        }
+      } catch {
+        result = await new Promise((resolve) => Notification.requestPermission(resolve));
+      }
+
       if (result === 'granted') {
-        // Kick off SW registration now so it is ready for future notifications
+        // Immediately kick off and activate service worker for iOS web app
         await getOrRegisterServiceWorker();
       }
       return result === 'granted';
@@ -139,6 +187,14 @@ export async function requestAppNotificationPermission() {
   }
 
   return false;
+}
+
+// ─── Test Notification Trigger ─────────────────────────────────────────────
+export async function dispatchTestNotification() {
+  return dispatchCheerNotification({
+    title: 'DayByDay Notifications Active! 🔥',
+    body: 'You are all set to receive cheers and habit reminders in real time.',
+  });
 }
 
 // ─── Safe notification delivery via Service Worker ─────────────────────────

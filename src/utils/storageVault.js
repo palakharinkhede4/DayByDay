@@ -168,8 +168,12 @@ export async function clearVaultSession() {
   try {
     const keys = [
       'daybyday_user', 'daybyday_partner', 'daybyday_habits', 'daybyday_pod', 'daybyday_group_pod',
+      'daybyday_group_pods', 'daybyday_active_group_pod_code',
       'daybyday_tracked_partner', 'daybyday_tracked_partners', 'daybyday_active_tracked_code',
-      'duotrack_user', 'duotrack_partner', 'duotrack_habits', 'duotrack_pod', 'duotrack_tracked_partner'
+      'daybyday_profile_picture', 'daybyday_profile_pic', 'daybyday_active_focus_habit',
+      'daybyday_focus_habit_id', 'daybyday_beyond_goals', 'daybyday_beyond',
+      'daybyday_health_sync_data', 'daybyday_seen_cheer_ids',
+      'duotrack_user', 'duotrack_partner', 'duotrack_habits', 'duotrack_pod', 'duotrack_tracked_partner', 'duotrack_group_pod'
     ];
     keys.forEach((k) => {
       try { localStorage.removeItem(k); } catch {}
@@ -183,6 +187,17 @@ export async function clearVaultSession() {
       await removeVaultItem(k);
     }
     await setVaultItem('daybyday_signed_out', 'true');
+
+    // Clean service worker caches on explicit sign-out if available
+    if (typeof caches !== 'undefined' && caches.keys) {
+      caches.keys().then((keysList) => {
+        keysList.forEach((cName) => {
+          if (cName.startsWith('daybyday-')) {
+            caches.delete(cName).catch(() => {});
+          }
+        });
+      }).catch(() => {});
+    }
   } catch (err) {
     console.warn('Session clear notice:', err.message);
   }

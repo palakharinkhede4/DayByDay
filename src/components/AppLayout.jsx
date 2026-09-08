@@ -13,6 +13,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { BottomNavBar } from './BottomNavBar';
+import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 
 export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) => {
   const {
@@ -200,6 +201,7 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
       {/* MAIN CONTENT AREA */}
       <main className={`app-main-content ${isMobile ? 'mobile-main' : 'desktop-main'}`}>
         <div className="content-inner-wrapper">
+          <NotificationPermissionBanner />
           {children}
         </div>
       </main>
