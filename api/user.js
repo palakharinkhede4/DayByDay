@@ -66,9 +66,21 @@ function getIstDateKey(date = new Date()) {
   }
 }
 
-function formatHabitFromRow(row) {
+function getIstYesterdayKey(date = new Date()) {
+  try {
+    const d = new Date(date);
+    d.setDate(d.getDate() - 1);
+    return getIstDateKey(d);
+  } catch {
+    return null;
+  }
+}
+
+function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
   if (!row) return null;
+  const sql = (typeof explicitSql === 'function') ? explicitSql : getDb();
   const todayKey = getIstDateKey();
+  const yesterdayKey = getIstYesterdayKey();
   const history = parseSafeJson(row.history, {});
 
   // Determine if this habit row was updated today in IST
@@ -85,31 +97,71 @@ function formatHabitFromRow(row) {
 
   const isBool = row.unit === 'check';
   const target = Number(row.target) || 1;
+  const rowTodayVal = (row.today_value !== undefined && row.today_value !== null) ? (Number(row.today_value) || 0) : 0;
+  let needsDbSelfHeal = false;
 
-  // Preserve prior active value into history under lastUpdatedDateKey if not already archived
-  if (!wasUpdatedToday && lastUpdatedDateKey && history[lastUpdatedDateKey] === undefined && row.today_value !== undefined && row.today_value !== null) {
-    const prevVal = Number(row.today_value) || 0;
-    if (prevVal > 0 || row.completed) {
-      history[lastUpdatedDateKey] = isBool ? Boolean(row.completed) : prevVal;
+  // 1. If row was NOT updated today in IST:
+  // Any value in row.today_value belongs to lastUpdatedDateKey (yesterday or earlier)
+  if (!wasUpdatedToday && lastUpdatedDateKey) {
+    if (history[lastUpdatedDateKey] === undefined && (rowTodayVal > 0 || row.completed)) {
+      history[lastUpdatedDateKey] = isBool ? Boolean(row.completed) : rowTodayVal;
+      needsDbSelfHeal = true;
+    }
+    // And today's history entry cannot hold yesterday's lingering value
+    if (history[todayKey] !== undefined && history[todayKey] !== 0 && history[todayKey] !== false) {
+      history[todayKey] = isBool ? false : 0;
+      needsDbSelfHeal = true;
     }
   }
 
-  // Authoritative today's value:
-  // 1. If explicit entry exists in history for today, that is authoritative.
-  // 2. Otherwise, if habit was updated today, take Math.max(row.today_value, history[todayKey]).
-  // 3. If NOT updated today, today's value is 0.
+  // 2. SELF-HEAL MIGRATION FOR YESTERDAY'S LINGERING VALUE:
+  // If history[todayKey] has a value, but history[yesterdayKey] is completely missing:
+  // Any non-zero value that was recorded without an entry for yesterday belongs to yesterday!
+  if (yesterdayKey && history[yesterdayKey] === undefined && history[todayKey] !== undefined) {
+    const candidateVal = Number(history[todayKey]) || (isBool ? (history[todayKey] ? 1 : 0) : 0);
+    if (candidateVal > 0) {
+      history[yesterdayKey] = isBool ? true : candidateVal;
+      history[todayKey] = isBool ? false : 0;
+      needsDbSelfHeal = true;
+    }
+  }
+
+  // 3. Authoritative today's value:
+  // If row was NOT updated today, todayVal is strictly 0.
+  // If row was updated today, but today's entry was reset to 0, todayVal is 0.
   let todayVal;
-  if (history[todayKey] !== undefined) {
-    todayVal = isBool
-      ? Boolean(history[todayKey])
-      : Math.max(Number(history[todayKey]) || 0, wasUpdatedToday ? (Number(row.today_value) || 0) : 0);
-  } else if (wasUpdatedToday) {
-    todayVal = isBool ? Boolean(row.completed) : (Number(row.today_value) || 0);
-  } else {
+  if (!wasUpdatedToday) {
     todayVal = isBool ? false : 0;
+  } else if (history[todayKey] !== undefined) {
+    todayVal = isBool ? Boolean(history[todayKey]) : (Number(history[todayKey]) || 0);
+  } else {
+    todayVal = isBool ? Boolean(row.completed) : rowTodayVal;
   }
 
   const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= target;
+
+  // If DB's today_value column holds a positive number while today is 0, self-heal it
+  if (rowTodayVal > 0 && todayVal === 0) {
+    needsDbSelfHeal = true;
+  }
+
+  // Self-heal the database row in PostgreSQL if stale/un-reset states were resolved
+  if (needsDbSelfHeal && sql && row.id) {
+    const cleanDbVal = isBool ? (todayVal ? 1 : 0) : (Number(todayVal) || 0);
+    const p = sql`
+      UPDATE daybyday_habits
+      SET today_value = ${cleanDbVal},
+          completed = ${Boolean(isCompleted)},
+          history = ${JSON.stringify(history)}::jsonb,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${row.id}
+    `.catch((err) => {
+      console.warn('Notice self-healing habit row in DB:', err.message);
+    });
+    if (pendingPromises && Array.isArray(pendingPromises)) {
+      pendingPromises.push(p);
+    }
+  }
 
   return {
     id: row.habit_id || String(row.id),
@@ -295,12 +347,17 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
     ? Math.max(0, Math.round(Number(healthPayload.distanceKm) * 100) / 100)
     : Math.round(steps * 0.000762 * 100) / 100;
 
+  const todayStr = getIstDateKey();
+  const payloadDate = healthPayload.date || (healthPayload.syncedAt ? getIstDateKey(new Date(healthPayload.syncedAt)) : todayStr);
+  const isToday = (payloadDate === todayStr);
+  const isReset = healthPayload.source === 'reset' || (steps === 0 && isToday);
+
   const normalized = {
-    steps,
-    calories,
-    distanceKm,
+    steps: isToday ? steps : 0,
+    calories: isToday ? calories : 0,
+    distanceKm: isToday ? distanceKm : 0,
     source: healthPayload.source || 'apple_health',
-    syncedAt: new Date().toISOString(),
+    syncedAt: healthPayload.syncedAt || new Date().toISOString(),
   };
 
   if (sql && targetUser?.id) {
@@ -312,20 +369,20 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
       WHERE id = ${targetUser.id}
     `;
 
-    if (steps > 0) {
-      const todayStr = getIstDateKey();
-      try {
-        const stepHabits = await sql`
-          SELECT * FROM daybyday_habits 
-          WHERE user_id = ${targetUser.id} 
-            AND (LOWER(habit_id) = 'steps' OR LOWER(unit) = 'steps' OR LOWER(name) LIKE '%step%' OR LOWER(name) LIKE '%walk%')
-        `;
-        if (stepHabits.length > 0) {
-          for (const sh of stepHabits) {
-            const target = Number(sh.target) || 10000;
+    try {
+      const stepHabits = await sql`
+        SELECT * FROM daybyday_habits 
+        WHERE user_id = ${targetUser.id} 
+          AND (LOWER(habit_id) = 'steps' OR LOWER(unit) = 'steps' OR LOWER(name) LIKE '%step%' OR LOWER(name) LIKE '%walk%')
+      `;
+      if (stepHabits.length > 0) {
+        for (const sh of stepHabits) {
+          const target = Number(sh.target) || 10000;
+          const history = typeof sh.history === 'object' && sh.history !== null ? { ...sh.history } : {};
+          history[payloadDate] = steps;
+
+          if (isToday) {
             const completed = steps >= target;
-            const history = typeof sh.history === 'object' && sh.history !== null ? { ...sh.history } : {};
-            history[todayStr] = steps;
             await sql`
               UPDATE daybyday_habits
               SET today_value = ${steps},
@@ -334,30 +391,43 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${sh.id}
             `;
+          } else {
+            // Stale sync from yesterday: archive to payloadDate, ensure today remains 0
+            if (history[todayStr] === undefined) {
+              history[todayStr] = 0;
+            }
+            await sql`
+              UPDATE daybyday_habits
+              SET history = ${JSON.stringify(history)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${sh.id}
+            `;
           }
-        } else {
-          // If user doesn't have a step habit row yet, create one
-          const history = { [todayStr]: steps };
-          const completed = steps >= 10000;
-          await sql`
-            INSERT INTO daybyday_habits (
-              user_id, habit_id, name, description, target, unit, icon, category,
-              today_value, completed, reminder_time, reminder_days, streak, history, updated_at
-            )
-            VALUES (
-              ${targetUser.id}, 'steps', 'Steps', 'Daily steps from device', 10000, 'steps', 'steps', 'Daily',
-              ${steps}, ${completed}, null, null, 1, ${JSON.stringify(history)}::jsonb, CURRENT_TIMESTAMP
-            )
-            ON CONFLICT (user_id, habit_id) DO UPDATE SET
-              today_value = EXCLUDED.today_value,
-              completed = EXCLUDED.completed,
-              history = EXCLUDED.history,
-              updated_at = CURRENT_TIMESTAMP
-          `;
         }
-      } catch (hErr) {
-        console.warn('Notice updating step habit in health_sync:', hErr.message);
+      } else {
+        // If user doesn't have a step habit row yet, create one
+        const history = { [payloadDate]: steps };
+        if (!isToday) history[todayStr] = 0;
+        const completed = isToday ? (steps >= 10000) : false;
+        const todayVal = isToday ? steps : 0;
+        await sql`
+          INSERT INTO daybyday_habits (
+            user_id, habit_id, name, description, target, unit, icon, category,
+            today_value, completed, reminder_time, reminder_days, streak, history, updated_at
+          )
+          VALUES (
+            ${targetUser.id}, 'steps', 'Steps', 'Daily steps from device', 10000, 'steps', 'steps', 'Daily',
+            ${todayVal}, ${completed}, null, null, 1, ${JSON.stringify(history)}::jsonb, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (user_id, habit_id) DO UPDATE SET
+            today_value = EXCLUDED.today_value,
+            completed = EXCLUDED.completed,
+            history = EXCLUDED.history,
+            updated_at = CURRENT_TIMESTAMP
+        `;
       }
+    } catch (hErr) {
+      console.warn('Notice updating step habit in health_sync:', hErr.message);
     }
   } else if (targetUser) {
     if (!targetUser.preferences) targetUser.preferences = {};
@@ -588,7 +658,11 @@ export default async function handler(req, res) {
           const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
           const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
-            partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
+            const pPending = [];
+            partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql, pPending)) };
+            if (pPending.length > 0) {
+              try { await Promise.all(pPending); } catch {}
+            }
           }
         }
 
@@ -656,7 +730,8 @@ export default async function handler(req, res) {
           }
         }
 
-        let formattedHabits = habits.map(formatHabitFromRow).map((h) => {
+        const pendingHeals = [];
+        let formattedHabits = habits.map((h) => formatHabitFromRow(h, sql, pendingHeals)).map((h) => {
           if (remoteHealthSteps > 0) {
             const isStep = (h.id || '').toLowerCase() === 'steps' ||
                            (h.unit || '').toLowerCase() === 'steps' ||
@@ -740,6 +815,14 @@ export default async function handler(req, res) {
         }).length;
         const todayPercent = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
         const streak = formattedHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+
+        if (pendingHeals.length > 0) {
+          try {
+            await Promise.all(pendingHeals);
+          } catch (healErr) {
+            console.warn('Notice awaiting habit self-heals in GET /api/user:', healErr.message);
+          }
+        }
 
         return res.status(200).json({
           user: sanitizeUser(user),
@@ -941,6 +1024,9 @@ export default async function handler(req, res) {
             // Also keep user's step habit row in daybyday_habits in perfect sync
             try {
               const todayKey = getIstDateKey();
+              const syncDate = (healthData && healthData.date) ? healthData.date : (cleanHealthData.syncedAt ? getIstDateKey(new Date(cleanHealthData.syncedAt)) : todayKey);
+              const isToday = (syncDate === todayKey);
+
               const userHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id}`;
               for (const h of userHabits) {
                 const isStep = (h.habit_id || '').toLowerCase() === 'steps' ||
@@ -949,14 +1035,23 @@ export default async function handler(req, res) {
                                (h.name || '').toLowerCase().includes('walk');
                 if (isStep) {
                   const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
-                  history[todayKey] = cleanHealthData.steps;
-                  const targetNum = Number(h.target) || 10000;
-                  const isDone = cleanHealthData.steps >= targetNum;
-                  await sql`
-                    UPDATE daybyday_habits 
-                    SET today_value = ${cleanHealthData.steps}, history = ${JSON.stringify(history)}::jsonb, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ${h.id}
-                  `;
+                  history[syncDate] = cleanHealthData.steps;
+                  if (isToday) {
+                    const targetNum = Number(h.target) || 10000;
+                    const isDone = cleanHealthData.steps >= targetNum;
+                    await sql`
+                      UPDATE daybyday_habits 
+                      SET today_value = ${cleanHealthData.steps}, history = ${JSON.stringify(history)}::jsonb, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
+                      WHERE id = ${h.id}
+                    `;
+                  } else {
+                    if (history[todayKey] === undefined) history[todayKey] = 0;
+                    await sql`
+                      UPDATE daybyday_habits 
+                      SET today_value = 0, completed = false, history = ${JSON.stringify(history)}::jsonb, updated_at = CURRENT_TIMESTAMP
+                      WHERE id = ${h.id}
+                    `;
+                  }
                 }
               }
             } catch (hSyncErr) {
@@ -1044,7 +1139,11 @@ export default async function handler(req, res) {
             const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
             const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
             if (partnerRows.length > 0) {
-              partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map(formatHabitFromRow) };
+              const pPending = [];
+              partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql, pPending)) };
+              if (pPending.length > 0) {
+                try { await Promise.all(pPending); } catch {}
+              }
             }
           }
 
@@ -1102,9 +1201,15 @@ export default async function handler(req, res) {
             console.warn('Notice querying user group pods on login:', gpErr.message);
           }
 
+          const uPending = [];
+          const userHabitsFormatted = habits.map((h) => formatHabitFromRow(h, sql, uPending));
+          if (uPending.length > 0) {
+            try { await Promise.all(uPending); } catch {}
+          }
+
           return res.status(200).json({
             user: sanitizeUser(user),
-            habits: habits.map(formatHabitFromRow),
+            habits: userHabitsFormatted,
             preferences: parseSafeJson(user.preferences, {}),
             partner,
             podCode,
@@ -1266,7 +1371,7 @@ export default async function handler(req, res) {
 
     // ACTION: SYNC HABITS (Save user's habits & preferences)
     if (action === 'sync_habits') {
-      const { userId, habits, preferences } = req.body;
+      const { userId, habits, preferences, lastActiveDate } = req.body;
       if (!userId || !Array.isArray(habits)) {
         return res.status(400).json({ error: 'User ID and habits array required' });
       }
@@ -1276,15 +1381,59 @@ export default async function handler(req, res) {
           if (preferences) {
             await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
           }
+          const todayStr = getIstDateKey();
+          const yesterdayStr = getIstYesterdayKey();
+          const clientActiveDate = lastActiveDate || (preferences && preferences.lastActiveDate);
+          const isPriorDaySync = Boolean(clientActiveDate && clientActiveDate !== todayStr);
+
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
             const historyObj = parseSafeJson(h.history, {});
-            const todayStr = getIstDateKey();
             const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
             const habitVal = h.user1 ?? h.todayValue ?? (historyObj[todayStr] !== undefined ? historyObj[todayStr] : 0);
             const numOrBoolVal = isBool ? Boolean(habitVal) : (Number(habitVal) || 0);
-            if (numOrBoolVal !== undefined && numOrBoolVal !== null) {
-              historyObj[todayStr] = numOrBoolVal;
+
+            let todayValueToSave;
+            let completedToSave;
+
+            if (isPriorDaySync) {
+              // The incoming habit data is from clientActiveDate (yesterday or earlier).
+              // Archive value to clientActiveDate
+              historyObj[clientActiveDate] = numOrBoolVal;
+              // Today must be reset to 0
+              historyObj[todayStr] = isBool ? false : 0;
+              todayValueToSave = isBool ? 0 : 0;
+              completedToSave = false;
+            } else {
+              // The sync is for today. But if the client sent no record in history for todayStr:
+              if (historyObj[todayStr] === undefined) {
+                // If yesterday has no entry, archive numOrBoolVal to yesterdayStr and reset today to 0!
+                if (yesterdayStr && historyObj[yesterdayStr] === undefined && numOrBoolVal > 0) {
+                  historyObj[yesterdayStr] = numOrBoolVal;
+                  historyObj[todayStr] = isBool ? false : 0;
+                  todayValueToSave = 0;
+                  completedToSave = false;
+                } else {
+                  historyObj[todayStr] = isBool ? false : 0;
+                  todayValueToSave = 0;
+                  completedToSave = false;
+                }
+              } else {
+                // Check if historyObj[todayStr] has yesterday's lingering value with yesterday missing
+                if (yesterdayStr && historyObj[yesterdayStr] === undefined && Number(historyObj[todayStr]) > 0) {
+                  historyObj[yesterdayStr] = historyObj[todayStr];
+                  historyObj[todayStr] = isBool ? false : 0;
+                  todayValueToSave = 0;
+                  completedToSave = false;
+                } else {
+                  todayValueToSave = isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal;
+                  completedToSave = Boolean(h.completed);
+                }
+              }
+            }
+
+            if (yesterdayStr && historyObj[yesterdayStr] === undefined && isPriorDaySync) {
+              historyObj[yesterdayStr] = numOrBoolVal;
             }
 
             await sql`
@@ -1294,7 +1443,7 @@ export default async function handler(req, res) {
               )
               VALUES (
                 ${userId}, ${h.id}, ${h.name}, ${h.description || ''}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
-                ${isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
+                ${todayValueToSave}, ${completedToSave}, ${h.reminderTime || null}, ${reminderDaysStr},
                 ${h.streak || 0}, ${JSON.stringify(historyObj)}::jsonb, CURRENT_TIMESTAMP
               )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
@@ -1314,7 +1463,12 @@ export default async function handler(req, res) {
             `;
           }
           const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;
-          return res.status(200).json({ success: true, habits: savedHabits.map(formatHabitFromRow) });
+          const sPending = [];
+          const formattedSaved = savedHabits.map((h) => formatHabitFromRow(h, sql, sPending));
+          if (sPending.length > 0) {
+            try { await Promise.all(sPending); } catch {}
+          }
+          return res.status(200).json({ success: true, habits: formattedSaved });
         }
 
         memoryDb.saveUserHabits(userId, habits);

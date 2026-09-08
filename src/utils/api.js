@@ -410,7 +410,7 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
   }
 };
 
-export const syncHabitsRemote = async (userId, habits, preferences) => {
+export const syncHabitsRemote = async (userId, habits, preferences, lastActiveDate = null) => {
   if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
   try {
@@ -422,6 +422,7 @@ export const syncHabitsRemote = async (userId, habits, preferences) => {
         userId,
         habits,
         preferences,
+        lastActiveDate,
       }),
     });
     if (!res.ok) return null;

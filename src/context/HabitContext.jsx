@@ -258,6 +258,15 @@ export function getLocalDateKey(date = new Date()) {
   }
 }
 export const getIstDateKey = getLocalDateKey;
+export function getIstYesterdayKey(date = new Date()) {
+  try {
+    const d = new Date(date);
+    d.setDate(d.getDate() - 1);
+    return getLocalDateKey(d);
+  } catch {
+    return null;
+  }
+}
 
 export function getMsUntilIstMidnight(testDate = new Date()) {
   try {
@@ -314,15 +323,30 @@ export function calculateConsecutiveStreak(history, target, isBoolean) {
 
 export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey(), priorDateKey = null) {
   if (!rawHabits || !Array.isArray(rawHabits)) return INITIAL_HABITS;
+  const yesterdayKey = getIstYesterdayKey();
   return rawHabits.map((h) => {
     const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
     const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
 
     // Archive prior day's info into history if it existed and wasn't archived yet
-    if (priorDateKey && priorDateKey !== targetDateKey && history[priorDateKey] === undefined && h.user1 !== undefined && h.user1 !== null) {
-      const val = isBool ? Boolean(h.user1) : (Number(h.user1) || 0);
-      if (val > 0 || h.completed) {
-        history[priorDateKey] = val;
+    if (priorDateKey && priorDateKey !== targetDateKey) {
+      if (history[priorDateKey] === undefined && h.user1 !== undefined && h.user1 !== null) {
+        const val = isBool ? Boolean(h.user1) : (Number(h.user1) || 0);
+        if (val > 0 || h.completed) {
+          history[priorDateKey] = val;
+        }
+      }
+      // On day rollover, reset today's value strictly to 0
+      history[targetDateKey] = isBool ? false : 0;
+    }
+
+    // Self-heal: If today has a positive value but yesterday has no entry at all:
+    // Any value recorded without an entry for yesterday belongs to yesterday, and today must be 0!
+    if (yesterdayKey && history[yesterdayKey] === undefined && history[targetDateKey] !== undefined) {
+      const candidate = isBool ? (history[targetDateKey] ? 1 : 0) : (Number(history[targetDateKey]) || 0);
+      if (candidate > 0) {
+        history[yesterdayKey] = isBool ? true : candidate;
+        history[targetDateKey] = isBool ? false : 0;
       }
     }
 
@@ -800,7 +824,7 @@ export const HabitProvider = ({ children }) => {
           } catch {}
           return cleanList;
         }
-        return parsed;
+        return getCleanDailyHabits(parsed, todayKey);
       } catch (e) { }
     }
     try { localStorage.setItem('daybyday_last_active_date', todayKey); } catch {}
@@ -1087,12 +1111,14 @@ export const HabitProvider = ({ children }) => {
 
               if (remoteData.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
                 const todayKey = getLocalDateKey();
-                const cleanRemote = getCleanDailyHabits(remoteData.habits, todayKey);
+                const lastActive = localStorage.getItem('daybyday_last_active_date') || todayKey;
+                const cleanRemote = getCleanDailyHabits(remoteData.habits, todayKey, lastActive);
                 setHabits(cleanRemote);
                 habitsRef.current = cleanRemote;
                 localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
+                localStorage.setItem('daybyday_last_active_date', todayKey);
                 if (activeUser.id) {
-                  syncUserHabitsRemote(activeUser.id, cleanRemote).catch(() => {});
+                  syncUserHabitsRemote(activeUser.id, cleanRemote, null, todayKey).catch(() => {});
                 }
               }
               if (remoteData.preferences) {
@@ -2106,6 +2132,9 @@ export const HabitProvider = ({ children }) => {
           history[prevDateKey] = h.user1;
         }
 
+        // Today strictly starts at 0
+        history[todayKey] = isBool ? false : 0;
+
         const streak = calculateConsecutiveStreak(history, h.target, isBool);
 
         let extra = {};
@@ -2131,7 +2160,7 @@ export const HabitProvider = ({ children }) => {
       } catch {}
 
       if (user?.id) {
-        syncUserHabitsRemote(user.id, cleanList).catch(() => {});
+        syncUserHabitsRemote(user.id, cleanList, null, todayKey).catch(() => {});
       }
 
       return cleanList;
@@ -3521,7 +3550,7 @@ export const HabitProvider = ({ children }) => {
 
     // Sync to user's habits in Neon DB if logged in
     if (user?.id && updatedList.length > 0) {
-      syncUserHabitsRemote(user.id, updatedList).catch(() => {});
+      syncUserHabitsRemote(user.id, updatedList, null, todayKey).catch(() => {});
     }
 
     // Keep Health Stats and Together Pod goals synchronized with exact habits
@@ -3610,7 +3639,7 @@ export const HabitProvider = ({ children }) => {
     setHabits((prev) => {
       const next = [...prev, safeGoal];
       if (user?.id) {
-        syncUserHabitsRemote(user.id, next).catch(() => {});
+        syncUserHabitsRemote(user.id, next, null, getLocalDateKey()).catch(() => {});
       }
       return next;
     });
@@ -3648,7 +3677,7 @@ export const HabitProvider = ({ children }) => {
         return h;
       });
       if (user?.id) {
-        syncUserHabitsRemote(user.id, next).catch(() => {});
+        syncUserHabitsRemote(user.id, next, null, getLocalDateKey()).catch(() => {});
       }
       return next;
     });

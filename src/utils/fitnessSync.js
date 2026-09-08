@@ -41,15 +41,15 @@ export const getStoredHealthData = () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && parsed.syncedAt) {
+    if (parsed) {
       const todayKey = getIstDateKey();
-      const syncDate = getIstDateKey(new Date(parsed.syncedAt));
-      if (syncDate !== todayKey) {
-        // Stale from yesterday! Archive previous day's info if not already saved
+      const syncDate = parsed.syncedAt ? getIstDateKey(new Date(parsed.syncedAt)) : null;
+      if (!syncDate || syncDate !== todayKey) {
+        // Stale from yesterday or un-timestamped! Archive previous day's info if not already saved
         if (parsed.steps > 0 || parsed.calories > 0) {
           try {
             localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
-              date: syncDate,
+              date: syncDate || 'previous',
               steps: parsed.steps || 0,
               calories: parsed.calories || 0,
               distanceKm: parsed.distanceKm || 0,
@@ -432,11 +432,11 @@ export const syncHealthDataToHabitsAndPod = async ({
     if (targetVal === null || targetVal === undefined) continue;
 
     const curVal = Number(h[activeUserId]) || 0;
-    const hasTodayRecord = h.history && h.history[todayKey] !== undefined;
+    const hasTodayActiveLog = h.history && (Number(h.history[todayKey]) > 0 || h.history[todayKey] === true);
 
     // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an empty device sync during the active day!
-    // BUT if the user has NO record for today (meaning curVal is lingering from yesterday), allow resetting to 0!
-    if (targetVal <= 0 && curVal > 0 && hasTodayRecord) continue;
+    // BUT if the user has NO active record for today (meaning curVal is lingering from yesterday), or if healthData is a daily reset, allow resetting to 0!
+    if (targetVal <= 0 && curVal > 0 && hasTodayActiveLog && healthData.source !== 'reset') continue;
 
     if (curVal !== targetVal && typeof onUpdateHabit === 'function') {
       onUpdateHabit(h.id, activeUserId, targetVal, true, silent);
