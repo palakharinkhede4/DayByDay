@@ -1,10 +1,7 @@
-// Neon PostgreSQL Database Layer for DayByDay
-// Storage-Optimized Architecture: Designed for <= 0.5 GB Free Tier
-// Supports 50-500+ active users for 1+ years within < 5 MB total storage footprint
+// PostgreSQL Database Layer for DayByDay (Hosted on Oracle Cloud Always Free VM)
+import postgres from 'postgres';
 
-import { neon } from '@neondatabase/serverless';
-
-let neonSql = null;
+let sqlClient = null;
 let tablesInitialized = false;
 let tableInitPromise = null;
 
@@ -21,10 +18,16 @@ export function getDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) return null;
 
-  if (!neonSql) {
-    neonSql = neon(dbUrl);
+  if (!sqlClient) {
+    const isSsl = dbUrl.includes('sslmode=require');
+    sqlClient = postgres(dbUrl, {
+      ssl: isSsl ? 'require' : false,
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
   }
-  return neonSql;
+  return sqlClient;
 }
 
 export function isTablesInitialized() {
