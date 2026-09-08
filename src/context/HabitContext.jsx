@@ -999,6 +999,10 @@ export const HabitProvider = ({ children }) => {
               if (remoteData.preferences) {
                 applyPreferences(remoteData.preferences);
               }
+              if (remoteData.user?.profilePicture) {
+                setProfilePictureState(remoteData.user.profilePicture);
+                try { localStorage.setItem('daybyday_profile_pic', remoteData.user.profilePicture); } catch {}
+              }
               if (remoteData.partner) {
                 setPartner(remoteData.partner);
                 localStorage.setItem('daybyday_partner', JSON.stringify(remoteData.partner));
@@ -1211,7 +1215,16 @@ export const HabitProvider = ({ children }) => {
   }, [habits]);
 
   // Apply all user preferences & customizations from remote DB or local vault
-  const applyPreferences = (prefs) => {
+  const applyPreferences = (rawPrefs) => {
+    let prefs = rawPrefs;
+    if (typeof prefs === 'string') {
+      try {
+        prefs = JSON.parse(prefs);
+        if (typeof prefs === 'string') prefs = JSON.parse(prefs);
+      } catch {
+        return;
+      }
+    }
     if (!prefs || typeof prefs !== 'object') return;
 
     if (prefs.themeColor) {
@@ -1241,7 +1254,7 @@ export const HabitProvider = ({ children }) => {
       localStorage.setItem('daybyday_categories', JSON.stringify(prefs.customCategories));
     }
     if (prefs.profilePicture !== undefined) {
-      setProfilePictureState(prefs.profilePicture);
+      setProfilePictureState(prefs.profilePicture || null);
       if (prefs.profilePicture) {
         localStorage.setItem('daybyday_profile_pic', prefs.profilePicture);
       } else {
@@ -1260,9 +1273,12 @@ export const HabitProvider = ({ children }) => {
       setBeyondGoals(prefs.beyondGoals);
       localStorage.setItem('daybyday_beyond', JSON.stringify(prefs.beyondGoals));
     }
-    if (prefs.trackedPartnerCodes && Array.isArray(prefs.trackedPartnerCodes) && prefs.trackedPartnerCodes.length) {
+    const partnerCodes = Array.isArray(prefs.trackedPartnerCodes)
+      ? prefs.trackedPartnerCodes
+      : (typeof prefs.trackedPartnerCodes === 'string' ? JSON.parse(prefs.trackedPartnerCodes || '[]') : []);
+    if (partnerCodes && partnerCodes.length) {
       const currentCodes = trackedPartners.map((p) => (p.secretCode || p.secret_code || '').toUpperCase());
-      const missing = prefs.trackedPartnerCodes.filter((c) => c && !currentCodes.includes(c.toUpperCase()) && !untrackedCodesRef.current.has(c.toUpperCase()));
+      const missing = partnerCodes.filter((c) => c && !currentCodes.includes(c.toUpperCase()) && !untrackedCodesRef.current.has(c.toUpperCase()));
       if (missing.length > 0) {
         Promise.all(missing.map((c) => fetchUserByCodeRemote(c))).then((results) => {
           const loaded = [];
@@ -1288,12 +1304,18 @@ export const HabitProvider = ({ children }) => {
             setTrackedPartners((prev) => {
               const merged = [...prev];
               loaded.forEach((item) => {
-                if (!merged.some((p) => (p.secretCode || p.secret_code || '').toUpperCase() === item.secretCode.toUpperCase())) {
+                const itemCode = (item.secretCode || item.secret_code || '').toUpperCase();
+                const idx = merged.findIndex((p) => (p.secretCode || p.secret_code || '').toUpperCase() === itemCode);
+                if (idx >= 0) {
+                  merged[idx] = { ...merged[idx], ...item };
+                } else {
                   merged.push(item);
                 }
               });
               const capped = merged.slice(0, 5);
-              localStorage.setItem('daybyday_tracked_partners', JSON.stringify(capped));
+              try {
+                localStorage.setItem('daybyday_tracked_partners', JSON.stringify(capped));
+              } catch {}
               return capped;
             });
           }
@@ -1568,6 +1590,11 @@ export const HabitProvider = ({ children }) => {
         // 2. Restore all Preferences & Customizations from DB
         const prefs = res.preferences || loggedInUser.preferences || {};
         applyPreferences(prefs);
+        if (res.user?.profilePicture || loggedInUser.profilePicture) {
+          const pic = res.user?.profilePicture || loggedInUser.profilePicture;
+          setProfilePictureState(pic);
+          try { localStorage.setItem('daybyday_profile_pic', pic); } catch {}
+        }
 
         if (res.partner) {
           setPartner(res.partner);

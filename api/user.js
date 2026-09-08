@@ -30,6 +30,9 @@ function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, ...safe } = u;
   safe.preferences = parseSafeJson(safe.preferences, {});
+  if (safe.preferences.profilePicture) {
+    safe.profilePicture = safe.preferences.profilePicture;
+  }
   const code = safe.secretCode || safe.secret_code;
   safe.secretCode = code;
   safe.secret_code = code;
@@ -604,7 +607,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           user: sanitizeUser(user),
           habits: formattedHabits,
-          preferences: user.preferences || {},
+          preferences: parseSafeJson(user.preferences, {}),
           partner,
           podCode,
           groupPod,
@@ -655,9 +658,11 @@ export default async function handler(req, res) {
       return res.status(200).json({
         user: sanitizeUser(user),
         habits,
-        preferences: user.preferences || {},
+        preferences: parseSafeJson(user.preferences, {}),
         partner: null,
-        podCode: null,
+        podCode: user.secretCode || user.secret_code || 'DAY-1000',
+        groupPod: null,
+        groupPods: [],
         isSolo: true,
         todayPercent,
         streak,
@@ -741,6 +746,7 @@ export default async function handler(req, res) {
           salt,
           security_question: securityQuestion,
           security_answer_hash: answerHash,
+          preferences: {},
           createdAt: new Date().toISOString()
         };
         memoryDb.saveUser(user);
@@ -788,12 +794,12 @@ export default async function handler(req, res) {
           }
 
           if (user) {
-            const currentPrefs = user.preferences || {};
+            const currentPrefs = parseSafeJson(user.preferences, {});
             const updatedPrefs = {
               ...currentPrefs,
               healthData: cleanHealthData,
             };
-            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)} WHERE id = ${user.id}`;
+            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${user.id}`;
 
             // Also keep user's step habit row in daybyday_habits in perfect sync
             try {
@@ -828,7 +834,7 @@ export default async function handler(req, res) {
         const lookup = (secretCode || username || userId || '').trim().replace(/^@/, '');
         const memUser = memoryDb.getUser(lookup);
         if (memUser) {
-          memUser.preferences = memUser.preferences || {};
+          memUser.preferences = parseSafeJson(memUser.preferences, {});
           memUser.preferences.healthData = cleanHealthData;
           memoryDb.saveUser(memUser);
         }
@@ -970,7 +976,7 @@ export default async function handler(req, res) {
           return res.status(200).json({
             user: sanitizeUser(user),
             habits: habits.map(formatHabitFromRow),
-            preferences: user.preferences || {},
+            preferences: parseSafeJson(user.preferences, {}),
             partner,
             podCode,
             groupPod,
@@ -994,7 +1000,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           user: sanitizeUser(user),
           habits,
-          preferences: user.preferences || {},
+          preferences: parseSafeJson(user.preferences, {}),
           partner: null,
           podCode: null,
           isSolo: true
@@ -1139,7 +1145,7 @@ export default async function handler(req, res) {
       try {
         if (sql) {
           if (preferences) {
-            await sql`UPDATE daybyday_users SET preferences = ${parseSafeJson(preferences, {})}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
+            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
           }
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
@@ -1152,7 +1158,7 @@ export default async function handler(req, res) {
               VALUES (
                 ${userId}, ${h.id}, ${h.name}, ${h.description || ''}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
                 ${h.user1 ?? h.todayValue ?? 0}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
-                ${h.streak || 0}, ${historyObj}::jsonb, CURRENT_TIMESTAMP
+                ${h.streak || 0}, ${JSON.stringify(historyObj)}::jsonb, CURRENT_TIMESTAMP
               )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
                 today_value = EXCLUDED.today_value,
@@ -1177,7 +1183,7 @@ export default async function handler(req, res) {
         memoryDb.saveUserHabits(userId, habits);
         if (preferences) {
           const u = memoryDb.getUser(userId);
-          if (u) u.preferences = preferences;
+          if (u) u.preferences = parseSafeJson(preferences, {});
         }
         return res.status(200).json({ success: true, habits });
       } catch (err) {
@@ -1196,16 +1202,16 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_users 
-            SET preferences = ${JSON.stringify(preferences)}::jsonb, last_active = CURRENT_TIMESTAMP 
+            SET preferences = ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP 
             WHERE id = ${userId}
           `;
           const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
-          return res.status(200).json({ success: true, preferences: rows[0]?.preferences || {} });
+          return res.status(200).json({ success: true, preferences: parseSafeJson(rows[0]?.preferences, {}) });
         }
 
         const u = memoryDb.getUser(userId);
-        if (u) u.preferences = preferences;
-        return res.status(200).json({ success: true, preferences });
+        if (u) u.preferences = parseSafeJson(preferences, {});
+        return res.status(200).json({ success: true, preferences: parseSafeJson(preferences, {}) });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
@@ -1304,7 +1310,7 @@ export default async function handler(req, res) {
               username: u.username,
               displayName: u.display_name || u.username,
               avatar: u.avatar || 'star',
-              profilePicture: u.preferences?.profilePicture || null,
+              profilePicture: parseSafeJson(u.preferences, {}).profilePicture || null,
               role: 'Owner',
               todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
               streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
@@ -1318,7 +1324,7 @@ export default async function handler(req, res) {
               username: u.username,
               displayName: u.displayName || u.username,
               avatar: u.avatar || 'star',
-              profilePicture: u.preferences?.profilePicture || null,
+              profilePicture: parseSafeJson(u.preferences, {}).profilePicture || null,
               role: 'Owner',
               todayPercent: 0,
               streak: 0,
@@ -1423,7 +1429,7 @@ export default async function handler(req, res) {
               username: u.username,
               displayName: u.display_name || u.username,
               avatar: u.avatar || 'star',
-              profilePicture: u.preferences?.profilePicture || null,
+              profilePicture: parseSafeJson(u.preferences, {}).profilePicture || null,
               role: 'Member',
               todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
               streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
@@ -1437,7 +1443,7 @@ export default async function handler(req, res) {
               username: u.username,
               displayName: u.displayName || u.username,
               avatar: u.avatar || 'star',
-              profilePicture: u.preferences?.profilePicture || null,
+              profilePicture: parseSafeJson(u.preferences, {}).profilePicture || null,
               role: 'Member',
               todayPercent: 0,
               streak: 0,
@@ -1598,7 +1604,7 @@ export default async function handler(req, res) {
                         displayName: u.display_name || u.username || m.displayName,
                         avatar: u.avatar || m.avatar || 'star',
                         secretCode: u.secret_code || m.secretCode,
-                        profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                        profilePicture: parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
                       };
                     }
                     return m;
