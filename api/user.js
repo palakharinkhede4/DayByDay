@@ -797,7 +797,27 @@ export default async function handler(req, res) {
                     (h.name || '').toLowerCase().includes('step')
                   );
                   if (stepH) {
-                    if ((Number(stepH.user1) || 0) < pVal) {
+                    const habitTodayHistory = stepH.history ? stepH.history[todayDateStr] : undefined;
+                    const habitIsResetToday = habitTodayHistory === 0 || habitTodayHistory === false;
+                    if (habitIsResetToday) {
+                      // Do NOT overwrite stepH.user1! Habit is strictly 0 for today.
+                      // Also reset lingering progress for this user in the group pod so it doesn't linger!
+                      if (typeof entry === 'object' && entry !== null) {
+                        entry.value = 0;
+                        entry.completed = false;
+                      }
+                      if (sql && groupPod.id) {
+                        const gpPromise = sql`
+                          UPDATE daybyday_group_pods
+                          SET shared_goals = ${JSON.stringify(groupPod.sharedGoals)}::jsonb,
+                              updated_at = CURRENT_TIMESTAMP
+                          WHERE id = ${groupPod.id}
+                        `.catch((gpErr) => {
+                          console.warn('Notice resetting group pod steps in DB:', gpErr.message);
+                        });
+                        pendingHeals.push(gpPromise);
+                      }
+                    } else if ((Number(stepH.user1) || 0) < pVal) {
                       stepH.user1 = pVal;
                       stepH.completed = pVal >= (Number(stepH.target) || 10000);
                     }
