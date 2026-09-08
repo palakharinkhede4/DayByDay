@@ -514,18 +514,38 @@ export const HabitProvider = ({ children }) => {
   // Untracked partner codes ref to prevent in-flight network queries from re-adding untracked friends
   const untrackedCodesRef = useRef(new Set());
 
-  // Multiple Group Pods (up to 5 pods simultaneously)
+  // Group Pods State (up to 5 pods)
   const [groupPods, setGroupPods] = useState(() => {
     try {
+      const cleanPodItem = (p) => {
+        if (!p) return null;
+        let sg = p.sharedGoals ?? p.shared_goals;
+        if (typeof sg === 'string') {
+          try { sg = JSON.parse(sg); } catch { sg = []; }
+        }
+        let mem = p.members;
+        if (typeof mem === 'string') {
+          try { mem = JSON.parse(mem); } catch { mem = []; }
+        }
+        return {
+          ...p,
+          sharedGoals: Array.isArray(sg) ? sg : [],
+          members: Array.isArray(mem) ? mem : [],
+        };
+      };
+
       const savedMulti = localStorage.getItem('daybyday_group_pods');
       if (savedMulti) {
         const parsed = JSON.parse(savedMulti);
-        if (Array.isArray(parsed) && parsed.length) return parsed;
+        if (Array.isArray(parsed) && parsed.length) return parsed.map(cleanPodItem).filter(Boolean);
       }
       const savedSingle = localStorage.getItem('daybyday_group_pod');
       if (savedSingle) {
         const parsed = JSON.parse(savedSingle);
-        if (parsed) return [parsed];
+        if (parsed) {
+          const cleaned = cleanPodItem(parsed);
+          if (cleaned) return [cleaned];
+        }
       }
     } catch (e) { }
     return [];
@@ -542,11 +562,26 @@ export const HabitProvider = ({ children }) => {
   // Derived currently selected group pod
   const groupPod = useMemo(() => {
     if (!groupPods || !groupPods.length) return null;
+    let found = null;
     if (activeGroupPodCode) {
-      const found = groupPods.find((p) => (p.code || '').toUpperCase() === activeGroupPodCode.toUpperCase());
-      if (found) return found;
+      found = groupPods.find((p) => (p.code || '').toUpperCase() === activeGroupPodCode.toUpperCase());
     }
-    return groupPods[0];
+    const raw = found || groupPods[0];
+    if (!raw) return null;
+
+    let sg = raw.sharedGoals ?? raw.shared_goals;
+    if (typeof sg === 'string') {
+      try { sg = JSON.parse(sg); } catch { sg = []; }
+    }
+    let mem = raw.members;
+    if (typeof mem === 'string') {
+      try { mem = JSON.parse(mem); } catch { mem = []; }
+    }
+    return {
+      ...raw,
+      sharedGoals: Array.isArray(sg) ? sg : [],
+      members: Array.isArray(mem) ? mem : [],
+    };
   }, [groupPods, activeGroupPodCode]);
 
   const selectGroupPod = useCallback((code) => {

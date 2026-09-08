@@ -839,9 +839,9 @@ export const TogetherScreen = () => {
 
             {/* Shared Goals List */}
             <div className="together-goals-list">
-              {(groupPod.sharedGoals || []).map((sg) => {
+              {(Array.isArray(groupPod?.sharedGoals) ? groupPod.sharedGoals : []).map((sg) => {
                 const target = Number(sg.target) || 1;
-                const members = groupPod.members || [];
+                const members = Array.isArray(groupPod?.members) ? groupPod.members : [];
                 const memberProgressMap = sg.memberProgress || {};
                 const deltaAmount = Number(sg.delta) || (sg.unit === 'steps' ? 1000 : 1);
                 const isStepGoal = sg.unit === 'steps' || sg.name?.toLowerCase().includes('step');
@@ -1070,7 +1070,7 @@ export const TogetherScreen = () => {
                 );
               })}
 
-              {(!groupPod.sharedGoals || groupPod.sharedGoals.length === 0) && (
+              {(!Array.isArray(groupPod?.sharedGoals) || groupPod.sharedGoals.length === 0) && (
                 <div className="empty-shared-goals text-center py-8">
                   <Target size={36} className="text-slate-500 mx-auto mb-2 opacity-60" />
                   <p className="font-bold text-slate-300">No shared goals yet</p>
