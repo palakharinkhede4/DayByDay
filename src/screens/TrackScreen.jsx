@@ -167,6 +167,10 @@ export const TrackScreen = () => {
           <div className="partners-count-badge">
             <Users size={16} className="text-primary" />
             <span className="font-bold">Tracked Partners ({trackedPartners.length}/5)</span>
+            <span className="realtime-badge" style={{ marginLeft: '0.5rem' }}>
+              <span className="live-indicator-bullet"></span>
+              <span>Live</span>
+            </span>
           </div>
           {trackedPartners.length < 5 && !showAddForm && (
             <button

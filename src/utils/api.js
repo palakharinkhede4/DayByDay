@@ -854,3 +854,55 @@ export const getUserGroupPodRemote = async (userId, username, secretCode) => {
   return pods?.[0] || null;
 };
 
+export const fetchPodActivitiesRemote = async (podCode, limit = 25) => {
+  if (!hasRemoteBackend() || !podCode) return [];
+  const baseUrl = getApiBaseUrl();
+  const clean = String(podCode).trim().toUpperCase();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/activity?podCode=${encodeURIComponent(clean)}&limit=${limit}`);
+    if (!res.ok) return [];
+    const data = await parseJsonSafe(res);
+    return Array.isArray(data?.activities) ? data.activities : [];
+  } catch {
+    return [];
+  }
+};
+
+export const logActivityRemote = async ({
+  userId,
+  username,
+  displayName,
+  avatar,
+  profilePicture,
+  type,
+  podCode,
+  title,
+  description,
+  metadata
+}) => {
+  if (!hasRemoteBackend() || !userId || !title) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/activity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        username,
+        displayName,
+        avatar,
+        profilePicture,
+        type,
+        podCode,
+        title,
+        description,
+        metadata
+      }),
+    });
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch {
+    return null;
+  }
+};
+

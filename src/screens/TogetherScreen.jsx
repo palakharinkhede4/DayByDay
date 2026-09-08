@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Pencil,
+  Activity,
 } from 'lucide-react';
 const POD_GOAL_PRESETS = [
   { name: '10,000 Steps', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
@@ -431,6 +432,8 @@ export const TogetherScreen = () => {
     triggerCelebration,
     trackedPartners = [],
     profilePicture,
+    podActivities = [],
+    refreshPodActivities,
   } = useHabits();
 
   const [createName, setCreateName] = useState('');
@@ -1084,6 +1087,67 @@ export const TogetherScreen = () => {
                     <Plus size={14} />
                     <span>Create First Goal</span>
                   </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Live Pod Activity Feed (DayByDay v4.0.0 Real-Time Social Stream) */}
+          <div className="together-activity-section">
+            <div className="together-section-header">
+              <div className="together-section-title-wrap">
+                <Activity size={18} className="text-emerald-400 flex-shrink-0" />
+                <div>
+                  <h3 className="together-section-title font-bold">Live Activity Feed</h3>
+                  <span className="together-section-hint">Teammate milestones & real-time cheer alerts</span>
+                </div>
+              </div>
+
+              <div className="realtime-badge">
+                <span className="live-indicator-bullet"></span>
+                <span>Live</span>
+              </div>
+            </div>
+
+            <div className="together-activity-list">
+              {podActivities && podActivities.length > 0 ? (
+                podActivities.map((act) => (
+                  <div key={act.id} className="activity-card">
+                    <div className="activity-avatar-wrap">
+                      {act.profilePicture ? (
+                        <img src={act.profilePicture} alt={act.displayName || act.username} className="activity-avatar-img" />
+                      ) : (
+                        <div className="activity-avatar-initial">
+                          {(act.displayName || act.username || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="activity-type-badge">
+                        {act.type === 'cheer_sent' ? '🔥' : '✓'}
+                      </div>
+                    </div>
+                    <div className="activity-content">
+                      <div className="activity-header">
+                        <span className="activity-user font-bold">{act.displayName || act.username}</span>
+                        <span className="activity-time">
+                          {(() => {
+                            if (!act.createdAt) return 'Just now';
+                            const diff = Math.floor((Date.now() - new Date(act.createdAt).getTime()) / 1000);
+                            if (diff < 60) return 'Just now';
+                            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+                            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+                            return `${Math.floor(diff / 86400)}d ago`;
+                          })()}
+                        </span>
+                      </div>
+                      <p className="activity-title font-semibold">{act.title}</p>
+                      {act.description && <p className="activity-desc font-normal">{act.description}</p>}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-activity-feed">
+                  <Activity size={24} className="opacity-40 mb-1 text-slate-400" />
+                  <p className="font-semibold text-xs text-slate-400">Activity will appear live as team members check off habits!</p>
                 </div>
               )}
             </div>

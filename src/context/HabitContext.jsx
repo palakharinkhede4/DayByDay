@@ -31,6 +31,8 @@ import {
   sendCheerRemote,
   fetchCheersRemote,
   markCheersReadRemote,
+  fetchPodActivitiesRemote,
+  logActivityRemote,
   hasRemoteBackend,
   getApiBaseUrl,
   formatErrorMessage,
@@ -639,6 +641,21 @@ export const HabitProvider = ({ children }) => {
     });
   }, [activeGroupPodCode]);
 
+  // Live Activity Stream (DayByDay v4.0.0 Real-Time Social Feed)
+  const [podActivities, setPodActivities] = useState([]);
+
+  const refreshPodActivities = useCallback(async (podCodeOverride) => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const targetCode = podCodeOverride || activeGroupPodCode || groupPod?.code;
+    if (!targetCode) return;
+    try {
+      const acts = await fetchPodActivitiesRemote(targetCode, 25);
+      if (Array.isArray(acts)) {
+        setPodActivities(acts);
+      }
+    } catch {}
+  }, [activeGroupPodCode, groupPod?.code]);
+
   // Multi-Partner Accountability Track (up to 5 partners)
   const [trackedPartners, setTrackedPartners] = useState(() => {
     try {
@@ -1144,8 +1161,11 @@ export const HabitProvider = ({ children }) => {
       }
     };
 
-    // 35-second idle poll (conserves Neon DB compute units)
-    const syncInterval = setInterval(performSync, 35000);
+    // Real-Time adaptive poll (Unmetered Oracle Cloud Always Free VM - 10s)
+    const syncInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      performSync();
+    }, 10000);
 
     // Immediate sync on tab visibility or window focus
     const handleVisibilityOrFocus = () => {
@@ -1946,11 +1966,14 @@ export const HabitProvider = ({ children }) => {
     });
   }, []);
 
-  // Auto-refresh tracked friends' progress on focus and periodically
+  // Auto-refresh tracked friends' progress on focus and periodically (Real-Time 10s)
   useEffect(() => {
     if (!trackedPartners || !trackedPartners.length) return;
     refreshTrackedPartners();
-    const interval = setInterval(refreshTrackedPartners, 45000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      refreshTrackedPartners();
+    }, 10000);
     const onFocus = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
         refreshTrackedPartners();
@@ -2182,6 +2205,26 @@ export const HabitProvider = ({ children }) => {
         message: msg,
         goalName,
       });
+
+      // Log cheer to live activity stream
+      if (user?.id && groupPod?.code) {
+        logActivityRemote({
+          userId: user.id,
+          username: user.username,
+          displayName: user.displayName || user.username,
+          avatar: user.avatar || 'flame',
+          profilePicture: profilePicture || user.profilePicture || null,
+          type: 'cheer_sent',
+          podCode: groupPod.code,
+          title: `Cheered @${toUname || 'teammate'}`,
+          description: goalName ? `For ${goalName}` : (customMessage || 'Sent encouragement 🔥'),
+          metadata: { targetUsername: toUname, goalName }
+        }).then((res) => {
+          if (res?.activity) {
+            setPodActivities((prev) => [res.activity, ...prev].slice(0, 30));
+          }
+        }).catch(() => {});
+      }
     } catch (e) {
       console.warn('Cheer delivery notice:', e);
     }
@@ -2272,7 +2315,10 @@ export const HabitProvider = ({ children }) => {
     };
 
     checkCheers();
-    const interval = setInterval(checkCheers, 15000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      checkCheers();
+    }, 8000);
 
     const handleFocus = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
@@ -3124,11 +3170,17 @@ export const HabitProvider = ({ children }) => {
     };
 
     refreshPodAndCheers();
-    const interval = setInterval(refreshPodAndCheers, 35000);
+    refreshPodActivities();
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      refreshPodAndCheers();
+      refreshPodActivities();
+    }, 12000);
 
     const handleFocus = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
         refreshPodAndCheers();
+        refreshPodActivities();
       }
     };
     window.addEventListener('focus', handleFocus);
@@ -3301,6 +3353,24 @@ export const HabitProvider = ({ children }) => {
       if (!wasDone && nowDone && !silent) {
         sound.complete();
         triggerIslandNotification(`${h.name} completed!`, 'check');
+        if (user?.id && groupPod?.code) {
+          logActivityRemote({
+            userId: user.id,
+            username: user.username,
+            displayName: user.displayName || user.username,
+            avatar: user.avatar || 'star',
+            profilePicture: profilePicture || user.profilePicture || null,
+            type: 'habit_completed',
+            podCode: groupPod.code,
+            title: `Completed ${h.name}`,
+            description: newStreak > 1 ? `${newStreak}-day streak! 🔥` : 'Habit checked off for today',
+            metadata: { habitId: h.id, streak: newStreak }
+          }).then((res) => {
+            if (res?.activity) {
+              setPodActivities((prev) => [res.activity, ...prev].slice(0, 30));
+            }
+          }).catch(() => {});
+        }
       }
 
       return updated;
@@ -3707,6 +3777,8 @@ export const HabitProvider = ({ children }) => {
         syncTogetherPodWithHabits,
         fetchUserGroupPods,
         syncAllStats,
+        podActivities,
+        refreshPodActivities,
         serverUrl,
         setServerUrl,
         syncStatus,

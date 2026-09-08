@@ -22,8 +22,8 @@ export function getDb() {
     const isSsl = dbUrl.includes('sslmode=require');
     sqlClient = postgres(dbUrl, {
       ssl: isSsl ? 'require' : false,
-      max: 10,
-      idle_timeout: 20,
+      max: 20,
+      idle_timeout: 30,
       connect_timeout: 10,
     });
   }
@@ -138,17 +138,38 @@ export async function ensureTables(force = false) {
       `;
       await sql`ALTER TABLE daybyday_cheers ADD COLUMN IF NOT EXISTS goal_name VARCHAR(64);`;
 
-      // Optimized indexes for fast lookups
+      // 6. Live Activity Stream table (Real-time social milestones for Together & Friends)
+      await sql`
+        CREATE TABLE IF NOT EXISTS daybyday_activity (
+          id VARCHAR(48) PRIMARY KEY,
+          user_id VARCHAR(48) NOT NULL,
+          username VARCHAR(32) NOT NULL,
+          display_name VARCHAR(64),
+          avatar VARCHAR(32) DEFAULT 'star',
+          profile_picture TEXT,
+          type VARCHAR(32) NOT NULL,
+          pod_code VARCHAR(24),
+          title VARCHAR(128) NOT NULL,
+          description VARCHAR(256),
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `;
+
+      // Optimized indexes for high-frequency real-time lookups
       await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_username ON daybyday_users(LOWER(username));`;
       await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_secret ON daybyday_users(UPPER(secret_code));`;
       await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user ON daybyday_habits(user_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user_habit ON daybyday_habits(user_id, habit_id);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_group_pods_code ON daybyday_group_pods(UPPER(code));`;
       await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_to ON daybyday_cheers(to_user_id, is_read);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_created ON daybyday_cheers(created_at DESC);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_activity_pod ON daybyday_activity(pod_code, created_at DESC);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_activity_user ON daybyday_activity(user_id, created_at DESC);`;
 
       tablesInitialized = true;
     } catch (err) {
-      console.warn('Neon DB migration notice:', err.message);
-      // Mark initialized to avoid repeating failed DDL on every subsequent request
+      console.warn('Oracle DB schema initialization notice:', err.message);
       tablesInitialized = true;
     } finally {
       tableInitPromise = null;
