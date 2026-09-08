@@ -40,6 +40,7 @@ import {
   requestAppNotificationPermission,
   dispatchHabitNotification,
   dispatchCheerNotification,
+  getOrRegisterServiceWorker,
 } from '../utils/notifications';
 import {
   initPersistentStorage,
@@ -3346,7 +3347,13 @@ export const HabitProvider = ({ children }) => {
 
   // Request Notifications (Native Android channel & prompt, iOS Web App & Web)
   const requestNotificationPermission = async () => {
-    return await requestAppNotificationPermission();
+    const granted = await requestAppNotificationPermission();
+    // If permission granted on web/iOS, ensure service worker is ready for future delivery
+    const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+    if (granted && !isNative) {
+      getOrRegisterServiceWorker().catch(() => {});
+    }
+    return granted;
   };
 
   // Export local backup file
