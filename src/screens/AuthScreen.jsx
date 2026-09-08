@@ -29,6 +29,7 @@ export const AuthScreen = () => {
     loginUser,
     getSecurityQuestion,
     resetPassword,
+    wipeAllUserData,
     osMode,
   } = useHabits();
 
@@ -115,6 +116,7 @@ export const AuthScreen = () => {
     setLoading(true);
     setError(null);
     try {
+      await wipeAllUserData?.();
       await registerUser(
         cleanUsername,
         password,
@@ -239,12 +241,13 @@ export const AuthScreen = () => {
             <button
               type="button"
               className={`auth-segment-pill ${mode === 'register' ? 'active' : ''}`}
-              onClick={() => {
+              onClick={async () => {
                 setMode('register');
                 setPassword('');
                 setConfirmPassword('');
                 setError(null);
                 setSuccessMsg(null);
+                await wipeAllUserData?.();
               }}
             >
               Create Account

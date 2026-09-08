@@ -12,7 +12,7 @@ const PRESET_SECURITY_QUESTIONS = [
 ];
 
 export const OnboardingModal = () => {
-  const { user, isSessionRestoring, registerUser, loginUser, getSecurityQuestion, resetPassword, pairWithPartner } = useHabits();
+  const { user, isSessionRestoring, registerUser, loginUser, getSecurityQuestion, resetPassword, pairWithPartner, wipeAllUserData } = useHabits();
 
   // Mode: 'login' | 'register' | 'forgot'
   const [mode, setMode] = useState('login');
@@ -95,6 +95,7 @@ export const OnboardingModal = () => {
     setError(null);
 
     try {
+      await wipeAllUserData?.();
       await registerUser(
         cleanUsername,
         password,
@@ -196,9 +197,10 @@ export const OnboardingModal = () => {
             <button
               type="button"
               className={`auth-tab-btn ${mode === 'register' ? 'active' : ''}`}
-              onClick={() => {
+              onClick={async () => {
                 setMode('register');
                 setError(null);
+                await wipeAllUserData?.();
               }}
             >
               Create Account

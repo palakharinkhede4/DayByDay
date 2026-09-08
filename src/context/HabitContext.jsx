@@ -374,6 +374,8 @@ export const HabitProvider = ({ children }) => {
   const firedRemindersRef = useRef(new Set());
   const isCrossSyncingRef = useRef(false);
   const isHealthSyncRunningRef = useRef(false);
+  const seenCheerIdsRef = useRef(new Set());
+  const receivedCheerIdsRef = useRef(new Set());
 
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
@@ -1294,9 +1296,93 @@ export const HabitProvider = ({ children }) => {
     return () => clearTimeout(timer);
   }, [themeColor, themeMode, useMaterial3Theme, customCategories, profilePicture, activeFocusHabitId, beyondGoals, trackedPartners, groupPod?.code, user?.id]);
 
+  // 100% Clean Slate: Purges ALL user data, credentials, cached pods, partner data, habits, health stats & preferences
+  const wipeAllLocalUserData = async () => {
+    // 1. Immediately mark user as explicitly signed out
+    try {
+      localStorage.setItem('daybyday_signed_out', 'true');
+    } catch {}
+
+    // 2. Reset every piece of React state to virgin clean slate
+    setUser(null);
+    setPartner(null);
+    setTrackedPartner(null);
+    setTrackedPartners([]);
+    setActiveTrackedCode('');
+    setGroupPods([]);
+    setActiveGroupPodCode('');
+    setProfilePicture(null);
+    setActiveFocusHabitId('');
+    setBeyondGoals([]);
+    setHealthStats(null);
+    try {
+      setHealthSyncEnabled(false);
+      setHealthSyncEnabledState(false);
+    } catch {}
+    try {
+      setLiveActivityEnabled(false);
+    } catch {}
+    setUseMaterial3Theme(false);
+    setThemeColor('sunset');
+    setThemeMode('dark');
+    try {
+      document.documentElement.setAttribute('data-theme', 'sunset');
+      document.documentElement.setAttribute('data-theme-mode', 'dark');
+    } catch {}
+    setCustomCategories(['Daily', 'Health', 'Fitness', 'Mind']);
+    setHabits(INITIAL_HABITS);
+    setPod({
+      isPaired: false,
+      code: 'DAY-1000',
+      user1: { name: 'You', email: '', initial: 'Y' },
+      user2: null,
+      daysTogether: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      podHealth: 100,
+      healthStatus: 'ACTIVE',
+      yesterdayPercent: 0,
+    });
+
+    // 3. Purge ALL user-specific local storage keys (preserving only global client-device settings like daybyday_os, daybyday_server_url, daybyday_signed_out, daybyday_last_username)
+    const preserveKeys = new Set(['daybyday_os', 'daybyday_server_url', 'daybyday_signed_out', 'daybyday_last_username']);
+    try {
+      Object.keys(localStorage).forEach((k) => {
+        if ((k.startsWith('daybyday_') || k.startsWith('duotrack_')) && !preserveKeys.has(k)) {
+          try { localStorage.removeItem(k); } catch {}
+        }
+      });
+    } catch {}
+
+    // 4. Completely clear IndexedDB storage vault
+    await clearVaultSession();
+
+    // 5. Purge service worker caches
+    if (typeof caches !== 'undefined' && caches.keys) {
+      try {
+        const cKeys = await caches.keys();
+        await Promise.all(cKeys.map((ck) => caches.delete(ck)));
+      } catch {}
+    }
+
+    // 6. Reset all in-memory mutable refs to prevent stale closure reads across accounts
+    try {
+      if (habitsRef) habitsRef.current = INITIAL_HABITS;
+      if (groupPodRef) groupPodRef.current = null;
+      if (untrackedCodesRef) untrackedCodesRef.current = new Set();
+      if (firedRemindersRef) firedRemindersRef.current = new Set();
+      if (seenCheerIdsRef) seenCheerIdsRef.current = new Set();
+      if (receivedCheerIdsRef) receivedCheerIdsRef.current = new Set();
+    } catch {}
+  };
+
   // Register New User (Supports remote Neon DB backend with automatic local Storage Vault fallback)
   const registerUser = async (username, password, displayName = '', avatar = '', securityQuestion = '', securityAnswer = '') => {
     sound.complete();
+
+    // 100% Clean Slate: thoroughly wipe any previous user data before creating new account
+    await wipeAllLocalUserData();
+
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
     const cleanDisplay = displayName || cleanUsername;
     const cleanAvatar = (!avatar || avatar === 'star' || avatar === 'user') ? '' : avatar;
@@ -1326,32 +1412,6 @@ export const HabitProvider = ({ children }) => {
       groupPodCodes: [],
       trackedPartnerCodes: [],
     };
-
-    // Thoroughly flush any previous account group pods, partner data, and cached sessions
-    setGroupPods([]);
-    setActiveGroupPodCode('');
-    setTrackedPartners([]);
-    setTrackedPartner(null);
-    setActiveTrackedCode('');
-    setPartner(null);
-    setProfilePicture(null);
-
-    const oldSessionKeys = [
-      'daybyday_group_pod',
-      'daybyday_group_pods',
-      'daybyday_active_group_pod_code',
-      'daybyday_partner',
-      'daybyday_tracked_partner',
-      'daybyday_tracked_partners',
-      'daybyday_active_tracked_code',
-      'daybyday_profile_pic',
-      'daybyday_profile_picture',
-      'daybyday_health_sync_data',
-      'daybyday_seen_cheer_ids',
-    ];
-    oldSessionKeys.forEach((k) => {
-      try { localStorage.removeItem(k); } catch {}
-    });
 
     // Clear any stale local account records for this username
     localStorage.removeItem(`daybyday_local_acc_${cleanUsername}`);
@@ -1392,6 +1452,7 @@ export const HabitProvider = ({ children }) => {
 
     try {
       localStorage.removeItem('daybyday_signed_out');
+      localStorage.setItem('daybyday_last_username', cleanUsername);
       removeVaultItem('daybyday_signed_out').catch(() => {});
     } catch {}
 
@@ -1423,6 +1484,14 @@ export const HabitProvider = ({ children }) => {
   const loginUser = async (username, password) => {
     sound.complete();
     const cleanUsername = username.toLowerCase().trim().replace(/^@/, '');
+    const prevUser = (user?.username || localStorage.getItem('daybyday_last_username') || '').toLowerCase().trim();
+    const isSameAccount = Boolean(prevUser && prevUser === cleanUsername);
+
+    // If logging into a DIFFERENT account, immediately flush all old data to guarantee zero leakage!
+    if (!isSameAccount) {
+      await wipeAllLocalUserData();
+    }
+
     let remoteError = null;
 
     // Flush any cached credentials from other accounts
@@ -1444,6 +1513,7 @@ export const HabitProvider = ({ children }) => {
 
         try {
           localStorage.removeItem('daybyday_signed_out');
+          localStorage.setItem('daybyday_last_username', cleanUsername);
           removeVaultItem('daybyday_signed_out').catch(() => {});
         } catch {}
 
@@ -1528,6 +1598,11 @@ export const HabitProvider = ({ children }) => {
       try {
         const parsed = JSON.parse(localAcc);
         if (parsed.password === password) {
+          try {
+            localStorage.removeItem('daybyday_signed_out');
+            localStorage.setItem('daybyday_last_username', cleanUsername);
+            removeVaultItem('daybyday_signed_out').catch(() => {});
+          } catch {}
           setUser(parsed.user);
           if (parsed.preferences) applyPreferences(parsed.preferences);
           triggerCelebration();
@@ -1595,92 +1670,13 @@ export const HabitProvider = ({ children }) => {
   // Logout / Switch Account: Cleanly flush all user-specific cache and reset preferences to defaults
   const logoutUser = async () => {
     sound.tap();
-
-    // 1. Immediately mark user as explicitly signed out so page reloads NEVER auto-login
-    try {
-      localStorage.setItem('daybyday_signed_out', 'true');
-    } catch {}
-
-    setUser(null);
-    setPartner(null);
-    setTrackedPartner(null);
-    setTrackedPartners([]);
-    setActiveTrackedCode('');
-    setGroupPods([]);
-    setActiveGroupPodCode('');
-    setProfilePicture(null);
-    setActiveFocusHabitId('');
-    setBeyondGoals([]);
-    setPod({
-      isPaired: false,
-      code: 'DAY-1000',
-      user1: { name: 'You', email: '', initial: 'Y' },
-      user2: null,
-      daysTogether: 0,
-      currentStreak: 0,
-      bestStreak: 0,
-      podHealth: 100,
-      healthStatus: 'ACTIVE',
-      yesterdayPercent: 0,
-    });
-
-    // 2. Clear all user storage keys (both daybyday_ and legacy duotrack_)
-    const keysToRemove = [
-      'daybyday_user',
-      'daybyday_partner',
-      'daybyday_tracked_partner',
-      'daybyday_tracked_partners',
-      'daybyday_active_tracked_code',
-      'daybyday_group_pod',
-      'daybyday_group_pods',
-      'daybyday_active_group_pod_code',
-      'daybyday_profile_picture',
-      'daybyday_profile_pic',
-      'daybyday_active_focus_habit',
-      'daybyday_focus_habit_id',
-      'daybyday_beyond_goals',
-      'daybyday_beyond',
-      'daybyday_theme',
-      'daybyday_theme_mode',
-      'daybyday_custom_categories',
-      'daybyday_categories',
-      'daybyday_habits',
-      'daybyday_pod',
-      'daybyday_health_sync_data',
-      'daybyday_seen_cheer_ids',
-      'duotrack_user',
-      'duotrack_partner',
-      'duotrack_tracked_partner',
-      'duotrack_habits',
-      'duotrack_pod',
-      'duotrack_group_pod',
-    ];
-
-    keysToRemove.forEach((k) => {
-      try { localStorage.removeItem(k); } catch {}
-    });
-
-    // Wipe cached local account credentials and avatar images
-    Object.keys(localStorage).forEach((k) => {
-      if (
-        k.startsWith('daybyday_local_acc_') ||
-        k.startsWith('duotrack_local_acc_') ||
-        k.startsWith('daybyday_avatar_')
-      ) {
-        try { localStorage.removeItem(k); } catch {}
-      }
-    });
-
-    // Reset preferences to default Sunset theme
-    setThemeColor('sunset');
-    setThemeMode('dark');
-    document.documentElement.setAttribute('data-theme', 'sunset');
-    document.documentElement.setAttribute('data-theme-mode', 'dark');
-    setCustomCategories(['Daily', 'Health', 'Fitness', 'Mind']);
-    setHabits(INITIAL_HABITS);
-
-    // Completely clear persistent vault
-    await clearVaultSession();
+    const currentUsername = user?.username ? user.username.toLowerCase().trim() : '';
+    if (currentUsername) {
+      try {
+        localStorage.setItem('daybyday_last_username', currentUsername);
+      } catch {}
+    }
+    await wipeAllLocalUserData();
     triggerIslandNotification('Signed out', 'user');
   };
 
@@ -2131,7 +2127,6 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Incoming Cheer Notification Listener (Notifies user when teammates encourage them)
-  const seenCheerIdsRef = useRef(new Set());
 
   // Load previously seen cheer IDs from localStorage on mount so force-closing the app doesn't re-trigger them
   useEffect(() => {
@@ -3038,9 +3033,8 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Adaptive sync of Group Pod roster, shared goals & incoming cheers (35s idle poll, zero polling when hidden)
-  const receivedCheerIdsRef = useRef(new Set());
   useEffect(() => {
-    if (!groupPod?.code && !user?.id) return;
+    if (!user?.id || !groupPod?.code) return;
     let isMounted = true;
 
     const refreshPodAndCheers = async () => {
@@ -3456,12 +3450,10 @@ export const HabitProvider = ({ children }) => {
   const resetAllData = async () => {
     sound.tap();
     unpinHabitForLiveTracking();
-    wipeLocalData();
-    setUser(null);
-    setPartner(null);
-    setHabits(INITIAL_HABITS);
-    setBeyondGoals(INITIAL_BEYOND);
-    await clearVaultSession();
+    await wipeAllLocalUserData();
+    try {
+      localStorage.removeItem('daybyday_last_username');
+    } catch {}
   };
 
   // Wipe data AND delete account permanently from Neon DB & Cloud
@@ -3485,25 +3477,10 @@ export const HabitProvider = ({ children }) => {
     }
 
     unpinHabitForLiveTracking();
-    wipeLocalData();
+    await wipeAllLocalUserData();
     try {
-      localStorage.removeItem('daybyday_pinned_habit_id');
-      localStorage.removeItem('daybyday_profile_pic');
-      localStorage.removeItem('daybyday_custom_categories');
-      localStorage.removeItem('daybyday_active_focus_habit');
-      localStorage.removeItem('daybyday_focus_habit_id');
-      localStorage.removeItem('daybyday_user');
-      localStorage.removeItem('daybyday_habits');
-      localStorage.removeItem('daybyday_pod');
+      localStorage.removeItem('daybyday_last_username');
     } catch {}
-
-    setUser(null);
-    setPartner(null);
-    setHabits(INITIAL_HABITS);
-    setBeyondGoals(INITIAL_BEYOND);
-    setProfilePicture(null);
-    setCustomCategories(['Daily', 'Health', 'Fitness', 'Mind', 'Work']);
-    await clearVaultSession();
     triggerIslandNotification('Account and all data wiped permanently', 'trash');
   };
 
@@ -3588,6 +3565,9 @@ export const HabitProvider = ({ children }) => {
         getSecurityQuestion,
         resetPassword,
         logoutUser,
+        cleanSlateReset: wipeAllLocalUserData,
+        wipeAllUserData: wipeAllLocalUserData,
+        wipeAllLocalUserData,
         partner,
         isSolo,
         pairWithPartner,
