@@ -4255,22 +4255,67 @@ button:active {
 }
 
 [data-theme-mode="light"] .desktop-navbar {
-  background: #000000 !important;
-  border-bottom: 1px solid #1E293B !important;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-[data-theme-mode="light"] .desktop-navbar .brand-name {
-  color: #FFFFFF !important;
-  -webkit-text-fill-color: #FFFFFF !important;
+[data-theme-mode="light"] .desktop-navbar .brand-name,
+[data-theme-mode="light"] .brand-name {
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+  background: none !important;
+  font-weight: 800 !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .brand-logo-badge {
+  background: #FEF3C7 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .brand-logo-flame {
+  color: #D97706 !important;
 }
 
 [data-theme-mode="light"] .desktop-navbar .theme-mode-btn {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #334155 !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .desktop-nav-links {
+  background: #F1F5F9 !important;
+  border: 1px solid #E2E8F0 !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .nav-tab-btn {
+  color: #475569 !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .nav-tab-btn:hover {
+  color: #0F172A !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .nav-tab-btn.active {
+  background: #1A56C4 !important;
   color: #FFFFFF !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .desktop-add-btn {
+  background: #1A56C4 !important;
+  color: #FFFFFF !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .desktop-profile-pill {
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+[data-theme-mode="light"] .desktop-navbar .profile-pill-name {
+  color: #0F172A !important;
 }
 
 [data-theme-mode="dark"] .desktop-navbar {
@@ -4515,25 +4560,44 @@ button:active {
 }
 
 [data-theme-mode="light"] .mobile-app-header {
-  background: #000000 !important;
-  border-bottom: 1px solid #1E293B !important;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-[data-theme-mode="light"] .mobile-app-header .mobile-brand-title {
-  color: #FFFFFF !important;
+[data-theme-mode="light"] .mobile-app-header .mobile-brand-title,
+[data-theme-mode="light"] .mobile-brand-title {
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+  font-weight: 800 !important;
+}
+
+[data-theme-mode="light"] .mobile-app-header .mobile-brand-badge {
+  background: #FEF3C7 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+}
+
+[data-theme-mode="light"] .mobile-app-header .mobile-brand-flame {
+  color: #D97706 !important;
 }
 
 [data-theme-mode="light"] .mobile-app-header .mobile-theme-btn {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  color: #FFFFFF !important;
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #334155 !important;
 }
 
 [data-theme-mode="light"] .mobile-app-header .mobile-avatar-badge {
-  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+[data-theme-mode="light"] .mobile-app-header .mobile-avatar-char {
+  color: #0F172A !important;
+  font-weight: 800 !important;
 }
 
 [data-theme-mode="dark"] .mobile-app-header {
@@ -11086,39 +11150,210 @@ button:active {
 }
 
 /* ==========================================================================
-   LIGHT MODE OVERRIDES: SOLID BLACK HEADER & TOGETHER PROGRESS CARDS
-   Eliminates translucent / washed out appearance with crisp contrast
+   LIGHT MODE HEADER BRANDING: HIGH CONTRAST ACROSS ALL 3 OS (iOS, Android, Web)
+   Clean, premium solid light surface with crystal clear title & flame branding
    ========================================================================== */
 
 [data-theme-mode="light"] .mobile-app-header,
 [data-theme-mode="light"] .desktop-navbar {
-  background: #000000 !important;
+  background: #FFFFFF !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border-bottom: 1px solid #1e293b !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
 [data-theme-mode="light"] .mobile-brand-title,
+[data-theme-mode="light"] .brand-name,
 [data-theme-mode="light"] .desktop-brand-title {
-  color: #ffffff !important;
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+  background: none !important;
+  font-weight: 800 !important;
+}
+
+[data-theme-mode="light"] .mobile-brand-badge,
+[data-theme-mode="light"] .brand-logo-badge {
+  background: #FEF3C7 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+}
+
+[data-theme-mode="light"] .mobile-brand-flame,
+[data-theme-mode="light"] .brand-logo-flame {
+  color: #D97706 !important;
 }
 
 [data-theme-mode="light"] .mobile-theme-btn,
 [data-theme-mode="light"] .theme-mode-btn {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: #f8fafc !important;
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #334155 !important;
 }
 
 [data-theme-mode="light"] .mobile-avatar-badge,
 [data-theme-mode="light"] .desktop-profile-pill {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #0F172A !important;
 }
 
-[data-theme-mode="light"] .profile-pill-name {
-  color: #ffffff !important;
+[data-theme-mode="light"] .profile-pill-name,
+[data-theme-mode="light"] .mobile-avatar-char {
+  color: #0F172A !important;
+  font-weight: 700 !important;
+}
+
+/* OS 1: iOS (Apple Health / Frosted Glass Light) */
+[data-os="ios"][data-theme-mode="light"] .mobile-app-header,
+[data-os="ios"] [data-theme-mode="light"] .mobile-app-header,
+[data-theme-mode="light"][data-os="ios"] .mobile-app-header {
+  background: rgba(255, 255, 255, 0.94) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-os="ios"][data-theme-mode="light"] .mobile-brand-title,
+[data-os="ios"] [data-theme-mode="light"] .mobile-brand-title,
+[data-theme-mode="light"][data-os="ios"] .mobile-brand-title {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", 'Plus Jakarta Sans', sans-serif !important;
+  font-weight: 800 !important;
+}
+
+[data-os="ios"][data-theme-mode="light"] .mobile-brand-badge,
+[data-os="ios"] [data-theme-mode="light"] .mobile-brand-badge,
+[data-theme-mode="light"][data-os="ios"] .mobile-brand-badge {
+  background: rgba(245, 158, 11, 0.16) !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  border-radius: 10px !important;
+}
+
+[data-os="ios"][data-theme-mode="light"] .mobile-theme-btn,
+[data-os="ios"] [data-theme-mode="light"] .mobile-theme-btn,
+[data-theme-mode="light"][data-os="ios"] .mobile-theme-btn {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  color: #1E293B !important;
+  border-radius: 10px !important;
+}
+
+[data-os="ios"][data-theme-mode="light"] .mobile-avatar-badge,
+[data-os="ios"] [data-theme-mode="light"] .mobile-avatar-badge,
+[data-theme-mode="light"][data-os="ios"] .mobile-avatar-badge {
+  border: 1.5px solid rgba(0, 0, 0, 0.12) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: #000000 !important;
+}
+
+[data-os="ios"][data-theme-mode="light"] .mobile-avatar-char,
+[data-os="ios"] [data-theme-mode="light"] .mobile-avatar-char,
+[data-theme-mode="light"][data-os="ios"] .mobile-avatar-char {
+  color: #000000 !important;
+}
+
+/* OS 2: Android (Material 3 Expressive Light) */
+[data-os="android"][data-theme-mode="light"] .mobile-app-header,
+[data-os="android"] [data-theme-mode="light"] .mobile-app-header,
+[data-theme-mode="light"][data-os="android"] .mobile-app-header {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-os="android"][data-theme-mode="light"] .mobile-brand-title,
+[data-os="android"] [data-theme-mode="light"] .mobile-brand-title,
+[data-theme-mode="light"][data-os="android"] .mobile-brand-title {
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+  font-family: 'Plus Jakarta Sans', 'Roboto Flex', sans-serif !important;
+  font-weight: 800 !important;
+}
+
+[data-os="android"][data-theme-mode="light"] .mobile-brand-badge,
+[data-os="android"] [data-theme-mode="light"] .mobile-brand-badge,
+[data-theme-mode="light"][data-os="android"] .mobile-brand-badge {
+  background: #FEF3C7 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+  border-radius: 12px !important;
+}
+
+[data-os="android"][data-theme-mode="light"] .mobile-theme-btn,
+[data-os="android"] [data-theme-mode="light"] .mobile-theme-btn,
+[data-theme-mode="light"][data-os="android"] .mobile-theme-btn {
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #334155 !important;
+  border-radius: 12px !important;
+}
+
+[data-os="android"][data-theme-mode="light"] .mobile-avatar-badge,
+[data-os="android"] [data-theme-mode="light"] .mobile-avatar-badge,
+[data-theme-mode="light"][data-os="android"] .mobile-avatar-badge {
+  border: 1px solid #CBD5E1 !important;
+  background: #F8FAFC !important;
+  border-radius: 9999px !important;
+}
+
+[data-os="android"][data-theme-mode="light"] .mobile-avatar-char,
+[data-os="android"] [data-theme-mode="light"] .mobile-avatar-char,
+[data-theme-mode="light"][data-os="android"] .mobile-avatar-char {
+  color: #0F172A !important;
+}
+
+/* OS 3: Web / Desktop Light */
+[data-os="web"][data-theme-mode="light"] .desktop-navbar,
+[data-os="web"] [data-theme-mode="light"] .desktop-navbar,
+[data-theme-mode="light"] .desktop-navbar {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-os="web"][data-theme-mode="light"] .brand-name,
+[data-os="web"] [data-theme-mode="light"] .brand-name,
+[data-theme-mode="light"] .brand-name,
+[data-theme-mode="light"] .desktop-navbar .brand-name {
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+  background: none !important;
+  font-weight: 800 !important;
+}
+
+[data-os="web"][data-theme-mode="light"] .mobile-app-header,
+[data-os="web"] [data-theme-mode="light"] .mobile-app-header {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-os="web"][data-theme-mode="light"] .mobile-brand-title,
+[data-os="web"] [data-theme-mode="light"] .mobile-brand-title {
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+  font-weight: 800 !important;
+}
+
+/* Auth Brand Header (Login / Signup Screen) in Light Mode */
+[data-theme-mode="light"] .auth-brand-title {
+  color: #0F172A !important;
+  -webkit-text-fill-color: #0F172A !important;
+}
+
+[data-theme-mode="light"] .auth-tagline {
+  color: #64748B !important;
+}
+
+[data-theme-mode="light"] .auth-version-pill {
+  background: #EFF6FF !important;
+  color: #1D4ED8 !important;
+  border-color: #BFDBFE !important;
 }
 
 /* ==========================================================================
