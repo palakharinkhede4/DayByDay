@@ -191,18 +191,39 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
           WHERE user_id = ${targetUser.id} 
             AND (LOWER(habit_id) = 'steps' OR LOWER(unit) = 'steps' OR LOWER(name) LIKE '%step%' OR LOWER(name) LIKE '%walk%')
         `;
-        for (const sh of stepHabits) {
-          const target = Number(sh.target) || 10000;
-          const completed = steps >= target;
-          const history = typeof sh.history === 'object' && sh.history !== null ? { ...sh.history } : {};
-          history[todayStr] = steps;
+        if (stepHabits.length > 0) {
+          for (const sh of stepHabits) {
+            const target = Number(sh.target) || 10000;
+            const completed = steps >= target;
+            const history = typeof sh.history === 'object' && sh.history !== null ? { ...sh.history } : {};
+            history[todayStr] = steps;
+            await sql`
+              UPDATE daybyday_habits
+              SET today_value = ${steps},
+                  completed = ${completed},
+                  history = ${JSON.stringify(history)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${sh.id}
+            `;
+          }
+        } else {
+          // If user doesn't have a step habit row yet, create one
+          const history = { [todayStr]: steps };
+          const completed = steps >= 10000;
           await sql`
-            UPDATE daybyday_habits
-            SET today_value = ${steps},
-                completed = ${completed},
-                history = ${JSON.stringify(history)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${sh.id}
+            INSERT INTO daybyday_habits (
+              user_id, habit_id, name, description, target, unit, icon, category,
+              today_value, completed, reminder_time, reminder_days, streak, history, updated_at
+            )
+            VALUES (
+              ${targetUser.id}, 'steps', 'Steps', 'Daily steps from device', 10000, 'steps', 'steps', 'Daily',
+              ${steps}, ${completed}, null, null, 1, ${JSON.stringify(history)}::jsonb, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (user_id, habit_id) DO UPDATE SET
+              today_value = EXCLUDED.today_value,
+              completed = EXCLUDED.completed,
+              history = EXCLUDED.history,
+              updated_at = CURRENT_TIMESTAMP
           `;
         }
       } catch (hErr) {
@@ -214,12 +235,31 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
     targetUser.preferences.healthData = normalized;
     if (steps > 0) {
       const habits = memoryDb.getUserHabits(targetUser.id);
-      const stepH = habits.find(h => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
+      let stepH = habits.find(h => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
       if (stepH) {
         stepH.today_value = steps;
+        stepH.user1 = steps;
         stepH.completed = steps >= (Number(stepH.target) || 10000);
         if (!stepH.history) stepH.history = {};
         stepH.history[new Date().toISOString().slice(0, 10)] = steps;
+      } else {
+        stepH = {
+          id: 'steps',
+          habit_id: 'steps',
+          name: 'Steps',
+          description: 'Daily steps from device',
+          target: 10000,
+          unit: 'steps',
+          icon: 'steps',
+          category: 'Daily',
+          today_value: steps,
+          user1: steps,
+          user2: 0,
+          completed: steps >= 10000,
+          streak: 1,
+          history: { [new Date().toISOString().slice(0, 10)]: steps },
+        };
+        habits.unshift(stepH);
       }
     }
   }
@@ -420,10 +460,9 @@ export default async function handler(req, res) {
 
         const todayDateStr = new Date().toISOString().slice(0, 10);
         const remoteHealthData = user.preferences?.healthData;
-        const isTodayHealthData = remoteHealthData?.syncedAt?.startsWith(todayDateStr);
 
-        const formattedHabits = habits.map(formatHabitFromRow).map((h) => {
-          if (isTodayHealthData && remoteHealthData?.steps) {
+        let formattedHabits = habits.map(formatHabitFromRow).map((h) => {
+          if (remoteHealthData?.steps) {
             const isStep = (h.id || '').toLowerCase() === 'steps' ||
                            (h.unit || '').toLowerCase() === 'steps' ||
                            (h.name || '').toLowerCase().includes('step') ||
@@ -438,6 +477,71 @@ export default async function handler(req, res) {
           }
           return h;
         });
+
+        // Ensure step habit exists if user has remote health steps
+        const hasStepHabit = formattedHabits.some((h) =>
+          (h.id || '').toLowerCase() === 'steps' ||
+          (h.unit || '').toLowerCase() === 'steps' ||
+          (h.name || '').toLowerCase().includes('step')
+        );
+        if (!hasStepHabit && remoteHealthData?.steps > 0) {
+          formattedHabits.unshift({
+            id: 'steps',
+            name: 'Steps',
+            category: 'Daily',
+            description: 'Daily steps from device',
+            target: 10000,
+            unit: 'steps',
+            icon: 'steps',
+            user1: remoteHealthData.steps,
+            user2: 0,
+            completed: remoteHealthData.steps >= 10000,
+            streak: 1,
+            history: { [todayDateStr]: remoteHealthData.steps },
+          });
+        }
+
+        // Cross-reference Together Group Pod shared goals for this user's steps!
+        if (groupPod && Array.isArray(groupPod.sharedGoals)) {
+          for (const sg of groupPod.sharedGoals) {
+            const su = (sg.unit || '').toLowerCase();
+            const sn = (sg.name || '').toLowerCase();
+            if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
+              const memberProg = sg.memberProgress || {};
+              const entry = memberProg[user.id] ?? (user.username ? memberProg[user.username] : undefined);
+              const pVal = typeof entry === 'object' ? Number(entry.value) : Number(entry);
+              if (!isNaN(pVal) && pVal > 0) {
+                const stepH = formattedHabits.find((h) =>
+                  (h.id || '').toLowerCase() === 'steps' ||
+                  (h.unit || '').toLowerCase() === 'steps' ||
+                  (h.name || '').toLowerCase().includes('step')
+                );
+                if (stepH) {
+                  if ((Number(stepH.user1) || 0) < pVal) {
+                    stepH.user1 = pVal;
+                    stepH.completed = pVal >= (Number(stepH.target) || 10000);
+                  }
+                } else {
+                  formattedHabits.unshift({
+                    id: 'steps',
+                    name: 'Steps',
+                    category: 'Daily',
+                    description: 'Daily steps from pod',
+                    target: Number(sg.target) || 10000,
+                    unit: 'steps',
+                    icon: 'steps',
+                    user1: pVal,
+                    user2: 0,
+                    completed: pVal >= (Number(sg.target) || 10000),
+                    streak: 1,
+                    history: { [todayDateStr]: pVal },
+                  });
+                }
+              }
+            }
+          }
+        }
+
         const totalHabits = formattedHabits.length;
         const completedCount = formattedHabits.filter(h => {
           const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
@@ -466,7 +570,28 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      const habits = memoryDb.getUserHabits(user.id);
+      let habits = memoryDb.getUserHabits(user.id);
+      const memHealth = user.preferences?.healthData;
+      if (memHealth?.steps > 0) {
+        const stepH = habits.find(h => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
+        if (stepH) {
+          stepH.user1 = memHealth.steps;
+          stepH.today_value = memHealth.steps;
+        } else {
+          habits.unshift({
+            id: 'steps',
+            name: 'Steps',
+            category: 'Daily',
+            target: 10000,
+            unit: 'steps',
+            icon: 'steps',
+            user1: memHealth.steps,
+            completed: memHealth.steps >= 10000,
+            streak: 1,
+          });
+        }
+      }
+
       const totalHabits = habits.length;
       const completedCount = habits.filter(h => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';

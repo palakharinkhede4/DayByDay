@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useHabits } from '../context/HabitContext';
+import React, { useState, useMemo } from 'react';
+import { useHabits, enrichPartnerHabitsWithHealthAndGroup } from '../context/HabitContext';
 import { sound } from '../utils/sound';
 import {
   Copy,
@@ -20,6 +20,7 @@ export const TrackScreen = () => {
   const {
     user,
     pod,
+    groupPod,
     trackedPartner,
     trackedPartners = [],
     activeTrackedCode,
@@ -37,6 +38,20 @@ export const TrackScreen = () => {
   const [error, setError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [cheerSent, setCheerSent] = useState(false);
+
+  const getPartnerDisplayHabits = (p) => {
+    if (!p) return [];
+    return enrichPartnerHabitsWithHealthAndGroup(
+      p.habits || [],
+      p,
+      p.preferences,
+      groupPod
+    );
+  };
+
+  const activePartnerHabits = useMemo(() => {
+    return getPartnerDisplayHabits(trackedPartner);
+  }, [trackedPartner, groupPod]);
 
   const myCode = user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000';
 
@@ -173,7 +188,7 @@ export const TrackScreen = () => {
                 (trackedPartner && (trackedPartner.secretCode === code || trackedPartner.secret_code === code));
               const displayName = partner.displayName || partner.username || 'Friend';
 
-              const habitsList = partner.habits || [];
+              const habitsList = getPartnerDisplayHabits(partner);
               const computedPct = habitsList.length > 0
                 ? Math.round(
                     habitsList.reduce((acc, h) => {
@@ -310,16 +325,15 @@ export const TrackScreen = () => {
             <div className="partner-stat-box">
               <span className="stat-num font-black">
                 {(() => {
-                  const partnerHabits = trackedPartner.habits || [];
-                  if (partnerHabits.length > 0) {
+                  if (activePartnerHabits.length > 0) {
                     return Math.round(
-                      partnerHabits.reduce((acc, h) => {
+                      activePartnerHabits.reduce((acc, h) => {
                         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
                         if (isBool) return acc + (Boolean(h.user1) ? 100 : 0);
                         const val = Math.max(0, Number(h.user1) || 0);
                         const target = Math.max(1, Number(h.target) || 1);
                         return acc + Math.min(100, Math.round((val / target) * 100));
-                      }, 0) / partnerHabits.length
+                      }, 0) / activePartnerHabits.length
                     );
                   }
                   return trackedPartner.todayPercent || 0;
@@ -341,7 +355,7 @@ export const TrackScreen = () => {
           <div className="partner-habits-section">
             <h3 className="section-subheading font-bold">Daily Habit Progress</h3>
             <div className="partner-habits-list">
-              {(trackedPartner.habits || []).map((h) => {
+              {activePartnerHabits.map((h) => {
                 const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
                 const val = Number(h.user1) || 0;
                 const target = Number(h.target) || 1;
@@ -367,7 +381,7 @@ export const TrackScreen = () => {
                   </div>
                 );
               })}
-              {(!trackedPartner.habits || trackedPartner.habits.length === 0) && (
+              {activePartnerHabits.length === 0 && (
                 <div className="no-partner-habits font-medium text-slate-400 py-3 text-center">
                   This user hasn't created any daily habits yet.
                 </div>

@@ -13,6 +13,7 @@ import {
   fetchUserRemote,
   fetchUserByCodeRemote,
   syncUserHabitsRemote,
+  syncHealthDataRemote,
   syncPreferencesRemote,
   pairPartnerRemote,
   unpairPartnerRemote,
@@ -233,14 +234,22 @@ function detectInitialOS() {
   return 'ios';
 }
 
-function calculateConsecutiveStreak(history, target, isBoolean) {
+export function getLocalDateKey(date = new Date()) {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function calculateConsecutiveStreak(history, target, isBoolean) {
   if (!history || typeof history !== 'object') return 0;
   let streak = 0;
   const now = new Date();
   for (let i = 0; i < 365; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dateKey = d.toISOString().slice(0, 10);
+    const dateKey = getLocalDateKey(d);
     const val = history[dateKey];
     const isDone = isBoolean ? Boolean(val) : (Number(val) || 0) >= (Number(target) || 1);
     if (isDone) {
@@ -253,6 +262,105 @@ function calculateConsecutiveStreak(history, target, isBoolean) {
     }
   }
   return streak;
+}
+
+export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()) {
+  if (!rawHabits || !Array.isArray(rawHabits)) return INITIAL_HABITS;
+  return rawHabits.map((h) => {
+    const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+    const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+    const hasTodayEntry = history[targetDateKey] !== undefined;
+    const todayVal = hasTodayEntry
+      ? history[targetDateKey]
+      : (isBool ? false : 0);
+
+    const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= (Number(h.target) || 1);
+    const streak = calculateConsecutiveStreak(history, h.target, isBool);
+
+    let extra = {};
+    if (h.id === 'sleep') {
+      const hrs = Math.floor(Number(todayVal) || 0);
+      const mins = Math.round(((Number(todayVal) || 0) - hrs) * 60);
+      extra.user1Display = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+      extra.user2Display = '0h';
+    }
+
+    return {
+      ...h,
+      user1: todayVal,
+      user2: isBool ? false : 0,
+      completed: isCompleted,
+      streak,
+      history,
+      ...extra,
+    };
+  });
+}
+
+export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser, remotePrefs, groupPod) {
+  let habitsList = Array.isArray(partnerHabits) ? [...partnerHabits] : [];
+  const remoteHealth = remotePrefs?.healthData || remoteUser?.preferences?.healthData;
+  const pId = remoteUser?.id ? String(remoteUser.id) : null;
+  const pUsername = (remoteUser?.username || '').toLowerCase();
+  const pCode = (remoteUser?.secretCode || remoteUser?.secret_code || '').toUpperCase();
+
+  // 1. Check preferences.healthData
+  let stepsVal = remoteHealth?.steps ? Number(remoteHealth.steps) : 0;
+
+  // 2. Cross-reference groupPod.sharedGoals
+  if (groupPod && Array.isArray(groupPod.sharedGoals)) {
+    for (const sg of groupPod.sharedGoals) {
+      const su = (sg.unit || '').toLowerCase();
+      const sn = (sg.name || '').toLowerCase();
+      if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
+        const memberProg = sg.memberProgress || {};
+        const entry = (pId && memberProg[pId] !== undefined)
+          ? memberProg[pId]
+          : (pUsername && memberProg[pUsername] !== undefined)
+            ? memberProg[pUsername]
+            : (pCode && memberProg[pCode] !== undefined)
+              ? memberProg[pCode]
+              : undefined;
+        const num = typeof entry === 'object' ? Number(entry.value) : Number(entry);
+        if (!isNaN(num) && num > stepsVal) {
+          stepsVal = num;
+        }
+      }
+    }
+  }
+
+  if (stepsVal > 0) {
+    const stepIdx = habitsList.findIndex((h) =>
+      (h.id || '').toLowerCase() === 'steps' ||
+      (h.unit || '').toLowerCase() === 'steps' ||
+      (h.name || '').toLowerCase().includes('step')
+    );
+    if (stepIdx >= 0) {
+      if ((Number(habitsList[stepIdx].user1) || 0) < stepsVal) {
+        habitsList[stepIdx] = {
+          ...habitsList[stepIdx],
+          user1: stepsVal,
+          completed: stepsVal >= (Number(habitsList[stepIdx].target) || 10000),
+        };
+      }
+    } else {
+      habitsList.unshift({
+        id: 'steps',
+        name: 'Steps',
+        category: 'Daily',
+        description: 'Daily steps from device',
+        target: 10000,
+        unit: 'steps',
+        icon: 'steps',
+        user1: stepsVal,
+        user2: 0,
+        completed: stepsVal >= 10000,
+        streak: 1,
+      });
+    }
+  }
+
+  return habitsList;
 }
 
 export const HabitProvider = ({ children }) => {
@@ -522,8 +630,12 @@ export const HabitProvider = ({ children }) => {
     return trackedPartners[0];
   }, [trackedPartners, activeTrackedCode]);
 
-  // Habits list
+  // Habits list (Cleaned and auto-reset on startup if crossing 12 AM local midnight)
   const [habits, setHabits] = useState(() => {
+    const todayKey = getLocalDateKey();
+    const lastActiveDate = localStorage.getItem('daybyday_last_active_date');
+    const isNewDay = lastActiveDate !== todayKey;
+
     const saved = localStorage.getItem('daybyday_habits') || localStorage.getItem('duotrack_habits');
     if (saved) {
       try {
@@ -532,13 +644,35 @@ export const HabitProvider = ({ children }) => {
         if (hasLegacyMock) {
           localStorage.removeItem('daybyday_habits');
           localStorage.removeItem('duotrack_habits');
+          localStorage.setItem('daybyday_last_active_date', todayKey);
           return INITIAL_HABITS;
+        }
+        if (isNewDay) {
+          const cleanList = getCleanDailyHabits(parsed, todayKey);
+          try {
+            localStorage.setItem('daybyday_habits', JSON.stringify(cleanList));
+            localStorage.setItem('daybyday_last_active_date', todayKey);
+          } catch {}
+          return cleanList;
         }
         return parsed;
       } catch (e) { }
     }
+    try { localStorage.setItem('daybyday_last_active_date', todayKey); } catch {}
     return INITIAL_HABITS;
   });
+
+  const habitsRef = useRef(habits);
+  useEffect(() => {
+    habitsRef.current = habits;
+  }, [habits]);
+
+  const lastActiveDateRef = useRef(getLocalDateKey());
+
+  const groupPodRef = useRef(groupPod);
+  useEffect(() => {
+    groupPodRef.current = groupPod;
+  }, [groupPod]);
 
   // Beyond Today list
   const [beyondGoals, setBeyondGoals] = useState(() => {
@@ -807,8 +941,14 @@ export const HabitProvider = ({ children }) => {
               }
 
               if (remoteData.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
-                setHabits(remoteData.habits);
-                localStorage.setItem('daybyday_habits', JSON.stringify(remoteData.habits));
+                const todayKey = getLocalDateKey();
+                const cleanRemote = getCleanDailyHabits(remoteData.habits, todayKey);
+                setHabits(cleanRemote);
+                habitsRef.current = cleanRemote;
+                localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
+                if (activeUser.id) {
+                  syncUserHabitsRemote(activeUser.id, cleanRemote).catch(() => {});
+                }
               }
               if (remoteData.preferences) {
                 applyPreferences(remoteData.preferences);
@@ -1241,8 +1381,11 @@ export const HabitProvider = ({ children }) => {
 
         // 1. Restore & format habits from DB
         if (res.habits && Array.isArray(res.habits) && res.habits.length > 0) {
-          setHabits(res.habits);
-          localStorage.setItem('daybyday_habits', JSON.stringify(res.habits));
+          const todayKey = getLocalDateKey();
+          const cleanRemote = getCleanDailyHabits(res.habits, todayKey);
+          setHabits(cleanRemote);
+          habitsRef.current = cleanRemote;
+          localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
         } else if (habits && habits.length > 0) {
           // If DB has no habits, seed it with current habits
           syncUserHabitsRemote(loggedInUser.id, habits).catch(() => {});
@@ -1520,7 +1663,13 @@ export const HabitProvider = ({ children }) => {
         remote = await fetchUserRemote(cleanCode);
       }
       if (remote && remote.user) {
-        const partnerHabits = remote.habits || [];
+        const rawHabits = remote.habits || [];
+        const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
+          rawHabits,
+          remote.user,
+          remote.preferences,
+          groupPodRef.current || groupPod
+        );
         const calcPct = calculatePartnerCompletionPercent(partnerHabits);
         const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
         const actualCode = remote.user.secretCode || remote.user.secret_code || cleanCode;
@@ -1613,7 +1762,13 @@ export const HabitProvider = ({ children }) => {
             let res = await fetchUserByCodeRemote(pCode);
             if (!res || !res.user) res = await fetchUserRemote(pCode);
             if (res && res.user) {
-              const partnerHabits = res.habits || [];
+              const rawHabits = res.habits || [];
+              const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
+                rawHabits,
+                res.user,
+                res.preferences,
+                groupPodRef.current || groupPod
+              );
               const calcPct = calculatePartnerCompletionPercent(partnerHabits);
               const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
               return {
@@ -1661,6 +1816,136 @@ export const HabitProvider = ({ children }) => {
       document.removeEventListener('visibilitychange', onFocus);
     };
   }, [trackedPartners.length, refreshTrackedPartners]);
+
+  // 12:00 AM Daily Reset Throughout App
+  const performDailyReset = useCallback(() => {
+    const todayKey = getLocalDateKey();
+    const prevDateKey = lastActiveDateRef.current;
+
+    lastActiveDateRef.current = todayKey;
+    try {
+      localStorage.setItem('daybyday_last_active_date', todayKey);
+    } catch {}
+
+    setHabits((prev) => {
+      const sourceList = (prev && prev.length) ? prev : habitsRef.current;
+      const cleanList = (sourceList && sourceList.length ? sourceList : INITIAL_HABITS).map((h) => {
+        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+        const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+
+        // Archive prior day's value if it existed and wasn't archived yet
+        if (prevDateKey && prevDateKey !== todayKey && history[prevDateKey] === undefined && h.user1 !== undefined) {
+          history[prevDateKey] = h.user1;
+        }
+
+        const streak = calculateConsecutiveStreak(history, h.target, isBool);
+
+        let extra = {};
+        if (h.id === 'sleep') {
+          extra.user1Display = '0h';
+          extra.user2Display = '0h';
+        }
+
+        return {
+          ...h,
+          user1: isBool ? false : 0,
+          user2: isBool ? false : 0,
+          completed: false,
+          streak,
+          history,
+          ...extra,
+        };
+      });
+
+      habitsRef.current = cleanList;
+      try {
+        localStorage.setItem('daybyday_habits', JSON.stringify(cleanList));
+      } catch {}
+
+      if (user?.id) {
+        syncUserHabitsRemote(user.id, cleanList).catch(() => {});
+      }
+
+      return cleanList;
+    });
+
+    // Reset healthStats for the new day
+    setHealthStats((prev) => {
+      const resetStats = {
+        ...(prev || {}),
+        steps: 0,
+        calories: 0,
+        distanceKm: 0,
+        syncedAt: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem('daybyday_health_sync_data', JSON.stringify(resetStats));
+      } catch {}
+      return resetStats;
+    });
+
+    // Reset group pod shared goals progress for new day
+    setGroupPod((prev) => {
+      if (!prev || !Array.isArray(prev.sharedGoals)) return prev;
+      const resetGoals = prev.sharedGoals.map((g) => ({
+        ...g,
+        progress: 0,
+        completed: false,
+        memberProgress: {},
+      }));
+      const updated = { ...prev, sharedGoals: resetGoals };
+      try {
+        localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Refresh tracked partners for new day
+    if (typeof refreshTrackedPartners === 'function') {
+      refreshTrackedPartners();
+    }
+  }, [user?.id, refreshTrackedPartners, setGroupPod]);
+
+  // Schedule midnight 12:00:01 AM local reset + multi-tier wake triggers
+  useEffect(() => {
+    let midnightTimer = null;
+
+    const scheduleNextMidnight = () => {
+      if (midnightTimer) clearTimeout(midnightTimer);
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1, 0);
+      const msUntilMidnight = Math.max(1000, tomorrow.getTime() - now.getTime());
+
+      midnightTimer = setTimeout(() => {
+        performDailyReset();
+        scheduleNextMidnight();
+      }, msUntilMidnight);
+    };
+
+    scheduleNextMidnight();
+
+    // Catch app wakeup / tab un-minimize / phone unlock
+    const checkDateOnWake = () => {
+      const todayKey = getLocalDateKey();
+      if (todayKey !== lastActiveDateRef.current) {
+        performDailyReset();
+        scheduleNextMidnight();
+      }
+    };
+
+    window.addEventListener('focus', checkDateOnWake);
+    window.addEventListener('visibilitychange', checkDateOnWake);
+
+    // Heartbeat check every 30 seconds in case device slept through setTimeout
+    const heartbeat = setInterval(checkDateOnWake, 30000);
+
+    return () => {
+      if (midnightTimer) clearTimeout(midnightTimer);
+      clearInterval(heartbeat);
+      window.removeEventListener('focus', checkDateOnWake);
+      window.removeEventListener('visibilitychange', checkDateOnWake);
+    };
+  }, [performDailyReset]);
 
   const untrackPartner = (codeToUntrack) => {
     sound.tap();
@@ -2274,7 +2559,7 @@ export const HabitProvider = ({ children }) => {
       setHealthStats(healthData);
       await syncHealthDataToHabitsAndPod({
         healthData,
-        habits,
+        habits: habitsRef.current || habits,
         sharedGoals: groupPod?.sharedGoals || [],
         activeUserId: 'user1',
         onUpdateHabit: updateHabit,
@@ -2282,6 +2567,10 @@ export const HabitProvider = ({ children }) => {
         triggerIslandNotification: silent ? null : triggerIslandNotification,
         silent: Boolean(silent),
       });
+      const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
+      if (targetIdOrCode) {
+        syncHealthDataRemote(targetIdOrCode, healthData).catch(() => {});
+      }
       return healthData;
     } else {
       if (!silent) {
@@ -2297,13 +2586,17 @@ export const HabitProvider = ({ children }) => {
     setHealthStats(updated);
     await syncHealthDataToHabitsAndPod({
       healthData: updated,
-      habits,
+      habits: habitsRef.current || habits,
       sharedGoals: groupPod?.sharedGoals || [],
       activeUserId: 'user1',
       onUpdateHabit: updateHabit,
       onUpdateSharedGoal: updateSharedGoalProgress,
       triggerIslandNotification,
     });
+    const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
+    if (targetIdOrCode) {
+      syncHealthDataRemote(targetIdOrCode, updated).catch(() => {});
+    }
     return updated;
   };
 
@@ -2551,63 +2844,62 @@ export const HabitProvider = ({ children }) => {
   const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false, silent = false) => {
     if (!silent) sound.tap();
     let computedNextValue = null;
-    let nextHabitsList = [];
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = getLocalDateKey();
 
-    setHabits((prev) => {
-      const updatedList = prev.map((h) => {
-        if (h.id !== habitId) return h;
+    const currentList = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const updatedList = currentList.map((h) => {
+      if (h.id !== habitId) return h;
 
-        let current = h[userId];
-        let nextValue = current;
+      let current = h[userId];
+      let nextValue = current;
 
-        if (typeof current === 'boolean') {
-          nextValue = isAbsolute ? amountOrValue : !current;
-        } else {
-          nextValue = isAbsolute ? amountOrValue : Math.max(0, (current || 0) + amountOrValue);
-        }
+      if (typeof current === 'boolean') {
+        nextValue = isAbsolute ? amountOrValue : !current;
+      } else {
+        nextValue = isAbsolute ? amountOrValue : Math.max(0, (current || 0) + amountOrValue);
+      }
 
-        computedNextValue = nextValue;
+      computedNextValue = nextValue;
 
-        let extra = {};
-        if (h.id === 'sleep') {
-          const hrs = Math.floor(nextValue);
-          const mins = Math.round((nextValue - hrs) * 60);
-          extra[`${userId}Display`] = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-        }
+      let extra = {};
+      if (h.id === 'sleep') {
+        const hrs = Math.floor(nextValue);
+        const mins = Math.round((nextValue - hrs) * 60);
+        extra[`${userId}Display`] = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+      }
 
-        // Maintain single-row history map: { "YYYY-MM-DD": value }
-        const currentHistory = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
-        currentHistory[todayKey] = nextValue;
+      // Maintain single-row history map: { "YYYY-MM-DD": value }
+      const currentHistory = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+      currentHistory[todayKey] = nextValue;
 
-        const isCompleted = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
-        const newStreak = calculateConsecutiveStreak(currentHistory, h.target, typeof nextValue === 'boolean');
+      const isCompleted = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
+      const newStreak = calculateConsecutiveStreak(currentHistory, h.target, typeof nextValue === 'boolean');
 
-        const updated = {
-          ...h,
-          [userId]: nextValue,
-          history: currentHistory,
-          streak: newStreak,
-          completed: isCompleted,
-          ...extra,
-        };
+      const updated = {
+        ...h,
+        [userId]: nextValue,
+        history: currentHistory,
+        streak: newStreak,
+        completed: isCompleted,
+        ...extra,
+      };
 
-        const wasDone = typeof current === 'boolean' ? current : (current || 0) >= h.target;
-        const nowDone = isCompleted;
-        if (!wasDone && nowDone && !silent) {
-          sound.complete();
-          triggerIslandNotification(`${h.name} completed!`, 'check');
-        }
+      const wasDone = typeof current === 'boolean' ? current : (current || 0) >= h.target;
+      const nowDone = isCompleted;
+      if (!wasDone && nowDone && !silent) {
+        sound.complete();
+        triggerIslandNotification(`${h.name} completed!`, 'check');
+      }
 
-        return updated;
-      });
-
-      nextHabitsList = updatedList;
-      try {
-        localStorage.setItem('daybyday_habits', JSON.stringify(updatedList));
-      } catch {}
-      return updatedList;
+      return updated;
     });
+
+    habitsRef.current = updatedList;
+    setHabits(updatedList);
+    try {
+      localStorage.setItem('daybyday_habits', JSON.stringify(updatedList));
+      localStorage.setItem('daybyday_last_active_date', todayKey);
+    } catch {}
 
     // Asynchronously push update to Vercel Serverless Sync API & Neon DB
     if (pod.isPaired && pod.code && computedNextValue !== null) {
@@ -2622,13 +2914,13 @@ export const HabitProvider = ({ children }) => {
     }
 
     // Sync to user's habits in Neon DB if logged in
-    if (user?.id && nextHabitsList.length > 0) {
-      syncUserHabitsRemote(user.id, nextHabitsList).catch(() => {});
+    if (user?.id && updatedList.length > 0) {
+      syncUserHabitsRemote(user.id, updatedList).catch(() => {});
     }
 
     // Keep Health Stats and Together Pod goals synchronized with exact habits
     if (userId === 'user1' && computedNextValue !== null && computedNextValue !== undefined) {
-      const targetHabit = nextHabitsList.find((h) => h.id === habitId);
+      const targetHabit = updatedList.find((h) => h.id === habitId);
       if (targetHabit) {
         const u = (targetHabit.unit || '').toLowerCase();
         const n = (targetHabit.name || '').toLowerCase();
@@ -2638,20 +2930,29 @@ export const HabitProvider = ({ children }) => {
           const steps = Math.max(0, Math.round(Number(computedNextValue) || 0));
           const calories = Math.round(steps * 0.04);
           const distanceKm = Math.round(steps * 0.000762 * 100) / 100;
+          const healthPayload = {
+            steps,
+            calories,
+            distanceKm,
+            source: 'habit_entry',
+            syncedAt: new Date().toISOString(),
+          };
           setHealthStats((prev) => {
             const updated = {
               ...(prev || {}),
-              steps,
-              calories,
-              distanceKm,
-              source: 'habit_entry',
-              syncedAt: new Date().toISOString(),
+              ...healthPayload,
             };
             try {
               localStorage.setItem('daybyday_health_sync_data', JSON.stringify(updated));
             } catch {}
             return updated;
           });
+
+          // Sync health steps to cloud so friends tracking this user see it!
+          const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
+          if (targetIdOrCode) {
+            syncHealthDataRemote(targetIdOrCode, healthPayload).catch(() => {});
+          }
         }
 
         // UNIFIED SYNC: Update ANY matching shared goal in the Together pod (Water, Steps, Reading, Meditation, etc.)!
@@ -2997,6 +3298,7 @@ export const HabitProvider = ({ children }) => {
         healthStats,
         enableHealthSync,
         disableHealthSync,
+        performDailyReset,
         setCustomHealthSteps,
         isFeaturesGuideOpen,
         setIsFeaturesGuideOpen,

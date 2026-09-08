@@ -479,6 +479,27 @@ export const syncPreferencesRemote = async (userId, preferences) => {
   }
 };
 
+export const syncHealthDataRemote = async (userIdOrCode, healthData) => {
+  if (!hasRemoteBackend() || !userIdOrCode || !healthData) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'health_sync',
+        userId: userIdOrCode,
+        secretCode: userIdOrCode,
+        healthData,
+      }),
+    });
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch {
+    return null;
+  }
+};
+
 export const pairPartnerRemote = async (userId, partnerCode) => {
   if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
