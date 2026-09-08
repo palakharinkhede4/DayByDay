@@ -2029,6 +2029,7 @@ export const HabitProvider = ({ children }) => {
     try {
       await sendCheerRemote({
         toUserId: targetUserIdOrCode,
+        toUsername: targetUserIdOrCode,
         fromUserId: user?.id,
         fromUsername: user?.username || 'friend',
         fromName: user?.displayName || user?.username || 'Friend',
@@ -2160,7 +2161,7 @@ export const HabitProvider = ({ children }) => {
     };
 
     checkCheers();
-    const interval = setInterval(checkCheers, 30000);
+    const interval = setInterval(checkCheers, 15000);
 
     const handleFocus = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
@@ -2387,11 +2388,48 @@ export const HabitProvider = ({ children }) => {
     const memberProgress = {};
     (groupPod.members || []).forEach((m) => {
       const isMe = m.id === currentMemberId || m.username === user?.username || m.id === user?.id;
-      memberProgress[m.id] = isMe ? initialProgressEntry : { value: 0, completed: false, updatedAt: new Date().toISOString() };
+      if (isMe) {
+        memberProgress[m.id] = initialProgressEntry;
+      } else {
+        // Instant check: Look if this friend is tracked in trackedPartners
+        let friendVal = 0;
+        const matchingPartner = (trackedPartners || []).find((tp) =>
+          (tp.id && m.id && String(tp.id) === String(m.id)) ||
+          (tp.username && m.username && String(tp.username).toLowerCase() === String(m.username).toLowerCase()) ||
+          (tp.secretCode && m.secretCode && String(tp.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+          (tp.secret_code && m.secretCode && String(tp.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+        );
+
+        if (matchingPartner && Array.isArray(matchingPartner.habits)) {
+          const partnerHabit = matchingPartner.habits.find((h) => isHabitMatchingSharedGoal(h, goalObj));
+          if (partnerHabit) {
+            friendVal = typeof partnerHabit.user1 === 'boolean'
+              ? (partnerHabit.user1 ? 1 : 0)
+              : Math.max(0, Number(partnerHabit.user1) || 0);
+          }
+        }
+        if (matchingPartner?.preferences?.healthData?.steps && (goalObj.unit === 'steps' || goalObj.name?.toLowerCase().includes('step'))) {
+          friendVal = Math.max(friendVal, Number(matchingPartner.preferences.healthData.steps) || 0);
+        }
+
+        const friendDone = friendVal >= (Number(goalObj.target) || 1);
+        const friendEntry = {
+          value: friendVal,
+          completed: friendDone,
+          updatedAt: new Date().toISOString(),
+        };
+        memberProgress[m.id] = friendEntry;
+        if (m.username) memberProgress[m.username] = friendEntry;
+      }
     });
     memberProgress[currentMemberId] = initialProgressEntry;
     if (user?.id) memberProgress[user.id] = initialProgressEntry;
     if (user?.username) memberProgress[user.username] = initialProgressEntry;
+
+    const initialTotalCurrent = Object.values(memberProgress).reduce(
+      (acc, v) => acc + (typeof v === 'object' ? (Number(v.value) || 0) : (Number(v) || 0)),
+      0
+    );
 
     const newGoal = {
       id: goalObj.id || `sg_${Date.now().toString(36)}`,
@@ -2402,7 +2440,7 @@ export const HabitProvider = ({ children }) => {
       category: goalObj.category || 'Daily',
       delta: Math.max(1, Number(goalObj.delta) || 1),
       createdBy: currentMemberId,
-      current: initialUserProgress,
+      current: initialTotalCurrent,
       memberProgress,
       createdAt: new Date().toISOString(),
     };
@@ -2533,51 +2571,90 @@ export const HabitProvider = ({ children }) => {
     let podChanged = false;
 
     const reconciledGoals = groupPod.sharedGoals.map((sg) => {
-      const matchingHabit = latestHabits.find((h) => isHabitMatchingSharedGoal(h, sg));
-      if (!matchingHabit) return sg;
-
-      const habitVal = typeof matchingHabit.user1 === 'boolean'
-        ? (matchingHabit.user1 ? 1 : 0)
-        : Math.max(0, Number(matchingHabit.user1) || 0);
-
+      let goalChanged = false;
       const memberProgress = { ...(sg.memberProgress || {}) };
-      const myEntry = memberProgress[myKey] ??
-                      (user?.id ? memberProgress[user.id] : undefined) ??
-                      (user?.username ? memberProgress[user.username] : undefined) ??
-                      memberProgress['user1'];
 
-      const currentVal = typeof myEntry === 'object'
-        ? (Number(myEntry?.value) || 0)
-        : (Number(myEntry) || 0);
+      // 1. Reconcile for current user (me)
+      const matchingHabit = latestHabits.find((h) => isHabitMatchingSharedGoal(h, sg));
+      if (matchingHabit) {
+        const habitVal = typeof matchingHabit.user1 === 'boolean'
+          ? (matchingHabit.user1 ? 1 : 0)
+          : Math.max(0, Number(matchingHabit.user1) || 0);
 
-      if (habitVal !== currentVal) {
+        const myEntry = memberProgress[myKey] ??
+                        (user?.id ? memberProgress[user.id] : undefined) ??
+                        (user?.username ? memberProgress[user.username] : undefined) ??
+                        memberProgress['user1'];
+
+        const currentVal = typeof myEntry === 'object'
+          ? (Number(myEntry?.value) || 0)
+          : (Number(myEntry) || 0);
+
+        if (habitVal !== currentVal) {
+          goalChanged = true;
+          const isDone = habitVal >= (Number(sg.target) || 1);
+          const updatedEntry = {
+            value: habitVal,
+            completed: isDone,
+            updatedAt: new Date().toISOString(),
+          };
+          memberProgress[myKey] = updatedEntry;
+          if (user?.id) memberProgress[user.id] = updatedEntry;
+          if (user?.username) memberProgress[user.username] = updatedEntry;
+
+          if (groupPod.code) {
+            updateGroupGoalRemote(groupPod.code, sg.id, 0, myKey, habitVal, isDone).catch(() => {});
+          }
+        }
+      }
+
+      // 2. Reconcile for any pod members present in trackedPartners
+      (groupPod.members || []).forEach((m) => {
+        const isMe = m.id === myKey || m.username === user?.username || m.id === user?.id;
+        if (isMe) return;
+
+        const matchingPartner = (trackedPartners || []).find((tp) =>
+          (tp.id && m.id && String(tp.id) === String(m.id)) ||
+          (tp.username && m.username && String(tp.username).toLowerCase() === String(m.username).toLowerCase()) ||
+          (tp.secretCode && m.secretCode && String(tp.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+          (tp.secret_code && m.secretCode && String(tp.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+        );
+
+        if (matchingPartner && Array.isArray(matchingPartner.habits)) {
+          const partnerHabit = matchingPartner.habits.find((h) => isHabitMatchingSharedGoal(h, sg));
+          if (partnerHabit) {
+            let partnerVal = typeof partnerHabit.user1 === 'boolean'
+              ? (partnerHabit.user1 ? 1 : 0)
+              : Math.max(0, Number(partnerHabit.user1) || 0);
+
+            if (matchingPartner?.preferences?.healthData?.steps && (sg.unit === 'steps' || sg.name?.toLowerCase().includes('step'))) {
+              partnerVal = Math.max(partnerVal, Number(matchingPartner.preferences.healthData.steps) || 0);
+            }
+
+            const currentEntry = memberProgress[m.id] ?? memberProgress[m.username];
+            const curVal = typeof currentEntry === 'object' ? (Number(currentEntry?.value) || 0) : (Number(currentEntry) || 0);
+
+            if (partnerVal > curVal) {
+              goalChanged = true;
+              const isDone = partnerVal >= (Number(sg.target) || 1);
+              const updatedEntry = {
+                value: partnerVal,
+                completed: isDone,
+                updatedAt: new Date().toISOString(),
+              };
+              memberProgress[m.id] = updatedEntry;
+              if (m.username) memberProgress[m.username] = updatedEntry;
+            }
+          }
+        }
+      });
+
+      if (goalChanged) {
         podChanged = true;
-        const isDone = habitVal >= (Number(sg.target) || 1);
-        const updatedEntry = {
-          value: habitVal,
-          completed: isDone,
-          updatedAt: new Date().toISOString(),
-        };
-        memberProgress[myKey] = updatedEntry;
-        if (user?.id) memberProgress[user.id] = updatedEntry;
-        if (user?.username) memberProgress[user.username] = updatedEntry;
-
         const totalSum = Object.values(memberProgress).reduce(
           (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
           0
         );
-
-        if (groupPod.code) {
-          updateGroupGoalRemote(
-            groupPod.code,
-            sg.id,
-            0,
-            myKey,
-            habitVal,
-            isDone
-          ).catch(() => {});
-        }
-
         return {
           ...sg,
           current: totalSum,

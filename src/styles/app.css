@@ -7342,9 +7342,11 @@ button:active {
 }
 
 .group-cheer-btn.cheered {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: rgba(16, 185, 129, 0.4);
-  color: #10B981;
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  color: #10B981 !important;
+  width: auto !important;
+  padding: 0 0.5rem !important;
 }
 
 /* Shared Goal Form Overlay / Inline */
@@ -7919,6 +7921,13 @@ button:active {
   background: rgba(245, 158, 11, 0.25);
   transform: translateY(-1px);
   border-color: rgba(245, 158, 11, 0.5);
+}
+
+.cheer-member-mini-btn.sent {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  color: #10B981 !important;
+  pointer-events: none;
 }
 
 /* No Group Pod Onboarding */

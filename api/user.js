@@ -1459,6 +1459,40 @@ export default async function handler(req, res) {
             createdAt: r.created_at,
             maxMembers: 10,
           }));
+
+          // Enrich members with latest profilePicture & secretCode
+          if (pods.length > 0) {
+            const allMemberIds = [...new Set(pods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
+            if (allMemberIds.length > 0) {
+              try {
+                const uRows = await sql`
+                  SELECT id, username, display_name, avatar, secret_code, preferences
+                  FROM daybyday_users
+                  WHERE id = ANY(${allMemberIds})
+                `;
+                const uMap = new Map(uRows.map((u) => [u.id, u]));
+
+                pods.forEach((p) => {
+                  p.members = (p.members || []).map((m) => {
+                    const u = uMap.get(m.id);
+                    if (u) {
+                      return {
+                        ...m,
+                        username: u.username || m.username,
+                        displayName: u.display_name || u.username || m.displayName,
+                        avatar: u.avatar || m.avatar || 'star',
+                        secretCode: u.secret_code || m.secretCode,
+                        profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                      };
+                    }
+                    return m;
+                  });
+                });
+              } catch (uErr) {
+                // Non-blocking lookup fallback
+              }
+            }
+          }
         }
         return res.status(200).json({ success: true, pods, pod: pods[0] || null });
       } catch (err) {
@@ -1496,6 +1530,83 @@ export default async function handler(req, res) {
 
         if (!pod) return res.status(404).json({ error: 'Pod not found' });
 
+        const memberProgress = { ...(goal.memberProgress || {}) };
+
+        // Auto-reconcile all pod members' progress from their latest habits in daybyday_habits & healthData
+        if (sql && Array.isArray(pod.members) && pod.members.length > 0) {
+          const memberIds = pod.members.map((m) => m.id).filter(Boolean);
+          if (memberIds.length > 0) {
+            try {
+              const allHabits = await sql`
+                SELECT user_id, habit_id, name, category, target, unit, user1, completed
+                FROM daybyday_habits
+                WHERE user_id = ANY(${memberIds})
+              `;
+              const usersRows = await sql`
+                SELECT id, username, preferences
+                FROM daybyday_users
+                WHERE id = ANY(${memberIds})
+              `;
+              const userMap = new Map(usersRows.map((u) => [u.id, u]));
+
+              pod.members.forEach((m) => {
+                const u = userMap.get(m.id);
+                // If member progress is already populated and > 0, keep it
+                const existingVal = memberProgress[m.id]?.value ?? memberProgress[m.username]?.value ?? 0;
+                if (existingVal > 0) return;
+
+                const mHabits = allHabits.filter((h) => h.user_id === m.id);
+                const targetGoalName = (goal.name || '').toLowerCase().trim();
+                const targetUnit = (goal.unit || '').toLowerCase().trim();
+
+                let foundVal = 0;
+                for (const h of mHabits) {
+                  const hName = (h.name || '').toLowerCase().trim();
+                  const hUnit = (h.unit || '').toLowerCase().trim();
+
+                  const isMatch =
+                    hName === targetGoalName ||
+                    hName.includes(targetGoalName) ||
+                    targetGoalName.includes(hName) ||
+                    (targetUnit === 'steps' && (hName.includes('step') || hUnit.includes('step'))) ||
+                    (targetUnit === 'glasses' && (hName.includes('water') || hName.includes('hydrat'))) ||
+                    (targetGoalName.includes('workout') && hName.includes('workout')) ||
+                    (targetGoalName.includes('read') && hName.includes('read'));
+
+                  if (isMatch) {
+                    const v = typeof h.user1 === 'boolean' ? (h.user1 ? 1 : 0) : (Number(h.user1) || 0);
+                    foundVal = Math.max(foundVal, v);
+                  }
+                }
+
+                // Also check steps from user preferences.healthData if step goal
+                if ((targetUnit === 'steps' || targetGoalName.includes('step')) && u?.preferences?.healthData?.steps) {
+                  foundVal = Math.max(foundVal, Number(u.preferences.healthData.steps) || 0);
+                }
+
+                if (foundVal > 0) {
+                  const isDone = foundVal >= (Number(goal.target) || 1);
+                  const entry = {
+                    value: foundVal,
+                    completed: isDone,
+                    updatedAt: new Date().toISOString(),
+                  };
+                  memberProgress[m.id] = entry;
+                  if (m.username) memberProgress[m.username] = entry;
+                }
+              });
+            } catch (reconErr) {
+              console.warn('Reconcile new goal error:', reconErr);
+            }
+          }
+        }
+
+        // Calculate total current sum
+        const currentSum = Object.values(memberProgress).reduce(
+          (acc, v) => acc + (typeof v === 'object' ? (Number(v.value) || 0) : (Number(v) || 0)),
+          0
+        );
+
         const newGoal = {
           id: goal.id || `sg_${Date.now().toString(36)}`,
           name: goal.name.trim(),
@@ -1505,8 +1616,8 @@ export default async function handler(req, res) {
           category: goal.category || 'Daily',
           delta: Math.max(1, Number(goal.delta) || 1),
           createdBy: goal.createdBy || 'member',
-          current: 0,
-          memberProgress: goal.memberProgress || {},
+          current: currentSum,
+          memberProgress,
           createdAt: new Date().toISOString(),
         };
 
@@ -1871,6 +1982,7 @@ export default async function handler(req, res) {
       const targetId = userId || username;
       const cleanUsername = (username || userId || '').trim().replace(/^@/, '');
       const cleanCode = (secretCode || '').trim().toUpperCase();
+      const cleanPod = (podCode || '').trim().toUpperCase();
 
       try {
         let cheers = [];
@@ -1901,13 +2013,19 @@ export default async function handler(req, res) {
             WHERE (
               to_user_id = ANY(${knownIds})
               OR LOWER(to_user_id) = LOWER(${cleanUsername || 'none'})
-              ${podCode ? sql`OR (to_user_id IS NULL AND pod_code = ${podCode})` : sql``}
+              ${cleanPod ? sql`OR (pod_code = ${cleanPod} AND (to_user_id IS NULL OR to_user_id = ANY(${knownIds})))` : sql``}
             )
-            AND (from_user_id IS NULL OR from_user_id != ALL(${knownIds}))
-            AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername || 'none'}))
             AND is_read = false
             ORDER BY created_at DESC LIMIT 30
           `;
+
+          // Clean filter out self-cheers in JS
+          cheers = (cheers || []).filter((c) => {
+            const isFromSelf =
+              knownIds.includes(c.from_user_id) ||
+              (c.from_username && cleanUsername && c.from_username.toLowerCase() === cleanUsername.toLowerCase());
+            return !isFromSelf;
+          });
         } else {
           cheers = memoryDb.getCheersForUser(targetId, podCode) || [];
           cheers = cheers.filter(
@@ -1922,7 +2040,6 @@ export default async function handler(req, res) {
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
-    }
     }
 
     // ACTION: MARK CHEERS READ

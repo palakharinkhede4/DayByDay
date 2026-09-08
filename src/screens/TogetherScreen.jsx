@@ -426,6 +426,8 @@ export const TogetherScreen = () => {
     sendCheer,
     triggerIslandNotification,
     triggerCelebration,
+    trackedPartners = [],
+    profilePicture,
   } = useHabits();
 
   const [createName, setCreateName] = useState('');
@@ -444,6 +446,44 @@ export const TogetherScreen = () => {
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [cheeredMemberId, setCheeredMemberId] = useState(null);
+  const [cheeredKeys, setCheeredKeys] = useState(new Set());
+
+  // Fast profile picture resolution (pod member -> trackedPartner match -> local cache)
+  const getMemberProfilePic = (m) => {
+    if (!m) return null;
+    const isMe = (user?.id && String(user.id) === String(m.id)) ||
+                 (user?.username && m.username && String(user.username).toLowerCase() === String(m.username).toLowerCase());
+    if (isMe && profilePicture) return profilePicture;
+    if (m.profilePicture) return m.profilePicture;
+
+    const partner = (trackedPartners || []).find((tp) =>
+      (tp.id && m.id && String(tp.id) === String(m.id)) ||
+      (tp.username && m.username && String(tp.username).toLowerCase() === String(m.username).toLowerCase()) ||
+      (tp.secretCode && m.secretCode && String(tp.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+      (tp.secret_code && m.secretCode && String(tp.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+    );
+    if (partner?.profilePicture) return partner.profilePicture;
+
+    try {
+      const cached = localStorage.getItem(`daybyday_avatar_${m.username || m.id}`);
+      if (cached) return cached;
+    } catch {}
+
+    return null;
+  };
+
+  useEffect(() => {
+    if (groupPod?.members) {
+      groupPod.members.forEach((m) => {
+        const pic = m.profilePicture;
+        if (pic && (m.username || m.id)) {
+          try {
+            localStorage.setItem(`daybyday_avatar_${m.username || m.id}`, pic);
+          } catch {}
+        }
+      });
+    }
+  }, [groupPod?.members]);
 
   const handleCopyCode = async (code) => {
     try {
@@ -484,7 +524,7 @@ export const TogetherScreen = () => {
       setIsCreating(false);
       setShowCreateJoinModal(false);
     } catch (err) {
-      setError(err.message || 'Could not create group pod');
+      setError(err.message || 'Could not create group pod. Try a different name.');
     }
   };
 
@@ -494,7 +534,7 @@ export const TogetherScreen = () => {
     setError('');
     setIsJoining(true);
     try {
-      await joinGroupPod(joinCode.trim());
+      await joinGroupPod(joinCode.trim().toUpperCase());
       setJoinCode('');
       setShowCreateJoinModal(false);
     } catch (err) {
@@ -513,13 +553,27 @@ export const TogetherScreen = () => {
       return;
     }
 
+    sound.complete();
     const code = member.secretCode || member.secret_code || member.username;
     const msg = goalName ? `Cheering you on for ${goalName}! Keep up the momentum` : 'Keep up the great momentum in the pod';
     sendCheer(code, msg, goalName);
-    setCheeredMemberId(member.id || member.username);
+
+    const mKey = member.id || member.username;
+    const cheerKey = goalName ? `${mKey}_${goalName}` : mKey;
+    setCheeredKeys((prev) => new Set([...prev, cheerKey, mKey]));
+    setCheeredMemberId(mKey);
+
     triggerCelebration();
-    triggerIslandNotification(`Encouragement sent to @${member.username}`, 'flame');
-    setTimeout(() => setCheeredMemberId(null), 2500);
+    triggerIslandNotification(`Cheer sent to @${member.displayName || member.username}! 🔥`, 'check');
+    setTimeout(() => {
+      setCheeredMemberId(null);
+      setCheeredKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(cheerKey);
+        next.delete(mKey);
+        return next;
+      });
+    }, 3000);
   };
 
   return (
@@ -693,15 +747,18 @@ export const TogetherScreen = () => {
                 return (
                   <div key={m.id || idx} className={`group-member-card ${isMe ? 'is-me' : ''}`}>
                     <div className="member-avatar font-bold" style={{ overflow: 'hidden' }}>
-                      {m.profilePicture ? (
-                        <img
-                          src={m.profilePicture}
-                          alt={m.displayName || m.username}
-                          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()
-                      )}
+                      {(() => {
+                        const pic = getMemberProfilePic(m);
+                        return pic ? (
+                          <img
+                            src={pic}
+                            alt={m.displayName || m.username}
+                            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()
+                        );
+                      })()}
                     </div>
                     <div className="member-info">
                       <div className="member-name font-bold">
@@ -720,11 +777,20 @@ export const TogetherScreen = () => {
                     </div>
                     {!isMe && (
                       <button
+                        type="button"
                         className={`group-cheer-btn ${isCheered ? 'cheered' : ''}`}
                         onClick={() => handleCheerMember(m)}
-                        title={`Cheer on @${m.username}`}
+                        title={`Cheer on @${m.displayName || m.username}`}
+                        disabled={isCheered}
                       >
-                        {isCheered ? <Check size={14} /> : <Flame size={14} />}
+                        {isCheered ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Check size={14} className="text-emerald-400" />
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34D399' }}>Sent</span>
+                          </div>
+                        ) : (
+                          <Flame size={14} />
+                        )}
                       </button>
                     )}
                   </div>
@@ -847,18 +913,22 @@ export const TogetherScreen = () => {
                             {/* Member row top: Avatar + Name on left, Numbers + % on right */}
                             <div className="together-member-top">
                               <div className="together-member-identity">
-                                <div className="together-avatar-circle">
-                                  {m.profilePicture ? (
-                                    <img
-                                      src={m.profilePicture}
-                                      alt={m.displayName || m.username}
-                                      className="together-avatar-img"
-                                    />
-                                  ) : (
-                                    <span className="together-avatar-char">
-                                      {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
-                                    </span>
-                                  )}
+                                <div className="together-avatar-circle font-bold" style={{ overflow: 'hidden' }}>
+                                  {(() => {
+                                    const pic = getMemberProfilePic(m);
+                                    return pic ? (
+                                      <img
+                                        src={pic}
+                                        alt={m.displayName || m.username}
+                                        className="together-avatar-img"
+                                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                                      />
+                                    ) : (
+                                      <span className="together-avatar-char">
+                                        {m.avatar || (m.displayName || m.username || 'U')[0].toUpperCase()}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="together-name-box">
                                   <span className="together-member-name">
@@ -952,15 +1022,31 @@ export const TogetherScreen = () => {
                                     </div>
                                   </div>
                                 ) : (
-                                  <button
-                                    type="button"
-                                    className="cheer-member-mini-btn"
-                                    onClick={() => handleCheerMember(m, sg.name)}
-                                    title={`Encourage @${m.username}`}
-                                  >
-                                    <Flame size={13} className="text-amber-400" />
-                                    <span>Encourage</span>
-                                  </button>
+                                  (() => {
+                                    const mKey = m.id || m.username;
+                                    const isGoalCheered = cheeredKeys.has(`${mKey}_${sg.name}`) || cheeredKeys.has(mKey);
+                                    return (
+                                      <button
+                                        type="button"
+                                        className={`cheer-member-mini-btn ${isGoalCheered ? 'sent' : ''}`}
+                                        onClick={() => handleCheerMember(m, sg.name)}
+                                        title={`Encourage @${m.displayName || m.username}`}
+                                        disabled={isGoalCheered}
+                                      >
+                                        {isGoalCheered ? (
+                                          <>
+                                            <Check size={13} className="text-emerald-400" />
+                                            <span className="text-emerald-400 font-bold">Sent!</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Flame size={13} className="text-amber-400" />
+                                            <span>Encourage</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    );
+                                  })()
                                 )}
                               </div>
                             </div>

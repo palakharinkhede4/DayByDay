@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { Sparkles, Download, ExternalLink, CheckCircle2, RefreshCw, Copy, Check, ShieldCheck, Loader2 } from 'lucide-react';
-import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL } from '../utils/updateChecker';
+import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL, CURRENT_APP_VERSION } from '../utils/updateChecker';
 import { sound } from '../utils/sound';
 
 const extractCleanVersion = (info) => {
-  if (!info) return '3.0.0';
+  if (!info) return CURRENT_APP_VERSION;
   const candidates = [info.tagName, info.releaseTag, info.releaseName, info.version];
   for (const c of candidates) {
     if (!c || typeof c !== 'string') continue;
     const match = c.match(/v?(\d+\.\d+(?:\.\d+)?)/i);
     if (match) return match[1];
   }
-  return (info.tagName || info.version || '3.0.0').replace(/^v/, '');
+  return (info.tagName || info.version || CURRENT_APP_VERSION).replace(/^v/, '');
 };
 
 export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false }) => {
@@ -84,7 +84,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
               ? 'Checking for the latest DayByDay improvements...'
               : isUpdate
               ? `Version ${cleanVer} is ready to install.`
-              : `You are on the latest version of DayByDay (${updateInfo?.currentVersion ? (updateInfo.currentVersion.startsWith('v') ? updateInfo.currentVersion : `v${updateInfo.currentVersion}`) : 'v3.0.0'}).`}
+              : `You are on the latest version of DayByDay (${updateInfo?.currentVersion ? (updateInfo.currentVersion.startsWith('v') ? updateInfo.currentVersion : `v${updateInfo.currentVersion}`) : `v${CURRENT_APP_VERSION}`}).`}
           </p>
         </div>
 
