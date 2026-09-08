@@ -165,6 +165,39 @@ export const checkForAppUpdate = async () => {
     };
   }
 
+  // 1. Primary: Query our dedicated Vercel serverless proxy (bypasses mobile carrier rate limits and WebView User-Agent restrictions)
+  try {
+    const baseUrl = getApiBaseUrl();
+    const proxyRes = await fetch(`${baseUrl}/api/user?action=resolve_latest_apk`, { cache: 'no-cache' });
+    if (proxyRes.ok) {
+      const proxyData = await proxyRes.json();
+      if (proxyData && proxyData.success && proxyData.version) {
+        const releaseTag = proxyData.version;
+        const isTagSemver = /^v?\d+\.\d+(\.\d+)?/.test(releaseTag);
+        const updateAvailable = isTagSemver ? compareSemVer(releaseTag, currentVersion) > 0 : false;
+        return {
+          success: true,
+          currentVersion,
+          updateAvailable,
+          releaseName: `DayByDay ${releaseTag}`,
+          tagName: releaseTag,
+          releaseTag,
+          version: releaseTag.replace(/^v/, ''),
+          publishedAt: new Date().toISOString(),
+          formattedDate: 'Latest',
+          releasePageUrl: RELEASES_PAGE_URL,
+          directApkUrl: proxyData.directApkUrl || proxyData.rawGithubUrl || DIRECT_APK_URL,
+          rawGithubUrl: proxyData.rawGithubUrl || DIRECT_APK_URL,
+          apkSize: proxyData.apkSize ? formatFileSize(proxyData.apkSize) : '',
+          changelog: 'Performance updates and continuous improvements.',
+        };
+      }
+    }
+  } catch (proxyErr) {
+    console.warn('Backend APK resolver notice, trying GitHub directly:', proxyErr);
+  }
+
+  // 2. Fallback: Query GitHub Releases API directly
   try {
     const response = await fetch(RELEASES_API_URL, {
       method: 'GET',
