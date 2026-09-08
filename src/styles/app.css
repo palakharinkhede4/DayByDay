@@ -9955,6 +9955,47 @@ button:active {
   transform: translateY(-1px);
 }
 
+.habit-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.habit-modal-btn {
+  padding: 0.55rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.habit-modal-btn.cancel {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.habit-modal-btn.cancel:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.06));
+}
+
+.habit-modal-btn.save {
+  background: var(--primary);
+  color: var(--on-primary, #ffffff);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.habit-modal-btn.save:hover {
+  transform: translateY(-1px);
+}
+
 /* =========================================================
    HABIT CARD PIN & OPTION BUTTON ENHANCEMENTS
    ========================================================= */

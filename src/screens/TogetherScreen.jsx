@@ -77,12 +77,13 @@ const EditGroupNameModal = ({ currentName, podCode, onClose, onSave }) => {
             />
           </div>
 
-          <div className="habit-modal-actions">
-            <button type="button" className="habit-modal-btn cancel" onClick={onClose}>
+          <div className="habit-modal-footer">
+            <button type="button" className="habit-footer-btn cancel font-semibold" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="habit-modal-btn save font-bold">
-              Save Name
+            <button type="submit" className="habit-footer-btn save font-bold">
+              <Check size={16} strokeWidth={2.6} />
+              <span>Save Name</span>
             </button>
           </div>
         </form>
@@ -219,12 +220,13 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
             </div>
           </div>
 
-          <div className="habit-modal-actions">
-            <button type="button" className="habit-modal-btn cancel" onClick={onClose}>
+          <div className="habit-modal-footer">
+            <button type="button" className="habit-footer-btn cancel font-semibold" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="habit-modal-btn save font-bold">
-              Create Goal
+            <button type="submit" className="habit-footer-btn save font-bold">
+              <Check size={16} strokeWidth={2.6} />
+              <span>Create Goal</span>
             </button>
           </div>
         </form>
@@ -424,6 +426,7 @@ export const TogetherScreen = () => {
     deleteSharedGoal,
     syncTogetherPodWithHabits,
     sendCheer,
+    fetchUserGroupPods,
     triggerIslandNotification,
     triggerCelebration,
     trackedPartners = [],
@@ -438,6 +441,11 @@ export const TogetherScreen = () => {
   const [isAddingGoal, setIsAddingGoal] = useState(false);
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
+
+  useEffect(() => {
+    // Fetch all group pods from cloud on mount to ensure both groups are visible on web too
+    fetchUserGroupPods?.().catch(() => {});
+  }, []);
 
   useEffect(() => {
     syncTogetherPodWithHabits?.();
@@ -554,9 +562,13 @@ export const TogetherScreen = () => {
     }
 
     sound.complete();
-    const code = member.secretCode || member.secret_code || member.username;
     const msg = goalName ? `Cheering you on for ${goalName}! Keep up the momentum` : 'Keep up the great momentum in the pod';
-    sendCheer(code, msg, goalName);
+    // Pass all identifiers for 100% reliable cheer delivery
+    sendCheer(
+      { targetId: member.id, targetUsername: member.username, targetSecretCode: member.secretCode || member.secret_code },
+      msg,
+      goalName
+    );
 
     const mKey = member.id || member.username;
     const cheerKey = goalName ? `${mKey}_${goalName}` : mKey;

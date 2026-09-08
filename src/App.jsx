@@ -13,7 +13,7 @@ import { IosInstallPrompt } from './components/IosInstallPrompt';
 import { AuthScreen } from './screens/AuthScreen';
 import { FeaturesGuideModal } from './components/FeaturesGuideModal';
 import { useHabits } from './context/HabitContext';
-import { checkForAppUpdate } from './utils/updateChecker';
+import { checkForAppUpdate, isAndroidNativeApp } from './utils/updateChecker';
 import { ingestUrlHealthData } from './utils/fitnessSync';
 
 class ScreenErrorBoundary extends React.Component {
@@ -104,8 +104,11 @@ const MainAppContent = () => {
     };
   }, []);
 
-  // Automatically check for new releases when app opens and on focus/resume (throttled to 15 min, 0 DB load)
+  // Automatically check for new releases when Android native app opens and on focus/resume (throttled to 15 min, 0 DB load)
+  // Web and iOS webapp directly load the latest version without intrusive APK download modals
   useEffect(() => {
+    if (!isAndroidNativeApp()) return;
+
     let isCancelled = false;
     let lastChecked = Date.now();
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Download, ExternalLink, CheckCircle2, RefreshCw, Copy, Check, ShieldCheck, Loader2 } from 'lucide-react';
-import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL, CURRENT_APP_VERSION } from '../utils/updateChecker';
+import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL, CURRENT_APP_VERSION, isAndroidNativeApp } from '../utils/updateChecker';
 import { sound } from '../utils/sound';
 
 const extractCleanVersion = (info) => {
@@ -18,7 +18,8 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
   const [copied, setCopied] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
 
-  if (!isOpen) return null;
+  // Strictly for native Android app — iOS webapp and website directly migrate to latest version
+  if (!isOpen || !isAndroidNativeApp()) return null;
 
   const isUpdate = updateInfo?.updateAvailable;
   const cleanVer = extractCleanVersion(updateInfo);

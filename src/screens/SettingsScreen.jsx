@@ -35,6 +35,7 @@ import {
   fetchChangelog,
   RELEASES_PAGE_URL,
   DIRECT_APK_URL,
+  isAndroidNativeApp,
 } from '../utils/updateChecker';
 import { UpdateModal } from '../components/UpdateModal';
 import { IosHealthSetupGuide } from '../components/IosHealthSetupGuide';
@@ -645,8 +646,8 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       <div className="settings-group">
         <span className="group-label">APP UPDATES</span>
         <div className="settings-group-content">
-          {/* Check for Updates — Android only (web/iOS gets the app from the web, no APK needed) */}
-          {(osMode === 'android' || Boolean(window.Capacitor?.isNativePlatform?.())) && (
+          {/* Check for Updates — Native Android only (web and iOS webapp directly execute latest build) */}
+          {isAndroidNativeApp() && (
             <div className="settings-row-item clickable" onClick={handleCheckUpdate}>
               <div className="row-left">
                 <RefreshCw

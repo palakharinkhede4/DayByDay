@@ -5,7 +5,7 @@
 
 import { getApiBaseUrl } from './api';
 
-export const CURRENT_APP_VERSION = '3.1.0';
+export const CURRENT_APP_VERSION = '3.2.0';
 export const RELEASES_PAGE_URL = 'https://github.com/palakharinkhede4/DayByDay/releases';
 export const DIRECT_APK_URL = 'https://github.com/palakharinkhede4/DayByDay/releases/latest';
 const RELEASES_API_URL = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest';
@@ -130,11 +130,40 @@ function compareSemVer(v1, v2) {
 }
 
 /**
+ * Detect whether running inside native Android app container (Capacitor)
+ * Website and iOS webapp run latest version directly without update prompts.
+ */
+export const isAndroidNativeApp = () => {
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.Capacitor?.isNativePlatform?.()) {
+        const platform = window.Capacitor?.getPlatform?.() || '';
+        return platform.toLowerCase() === 'android';
+      }
+    }
+  } catch {}
+  return false;
+};
+
+/**
  * Checks GitHub for the latest DayByDay release and determines if a newer version is available.
+ * Only runs for native Android app — iOS and Web directly migrate to the latest version.
  */
 export const checkForAppUpdate = async () => {
   const currentBuildTime = getAppBuildTime();
   const currentVersion = getAppVersion();
+
+  // The update popup and APK download flow is strictly for the native Android app.
+  // iOS webapp and website directly execute the latest web version automatically.
+  if (!isAndroidNativeApp()) {
+    return {
+      success: true,
+      currentVersion,
+      updateAvailable: false,
+      isWebOrIos: true,
+      message: 'Running latest web build directly.',
+    };
+  }
 
   try {
     const response = await fetch(RELEASES_API_URL, {

@@ -185,3 +185,66 @@ export async function dispatchHabitNotification(habit) {
 
   return false;
 }
+
+// Dispatch Encouragement / Cheer Notification across Native Android & Web
+export async function dispatchCheerNotification({ title, body }) {
+  const notifTitle = title || 'DayByDay Encouragement 🔥';
+  const notifBody = body || 'A teammate cheered you on! Keep crushing your goals.';
+
+  // 1. Android / iOS Native via Capacitor LocalNotifications
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await ensureAndroidChannel();
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: Math.floor(Math.random() * 90000 + 10000),
+            title: notifTitle,
+            body: notifBody,
+            channelId: 'daybyday_reminders',
+            smallIcon: 'ic_stat_flame',
+            largeIcon: 'ic_launcher',
+            iconColor: '#F97316',
+            autoCancel: true,
+            schedule: { at: new Date(Date.now() + 100) },
+          },
+        ],
+      });
+      return true;
+    } catch (err) {
+      console.warn('Capacitor Cheer Notification issue:', err);
+    }
+  }
+
+  // 2. Browser / iOS Web App
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      if (navigator.serviceWorker?.ready) {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration && registration.showNotification) {
+          await registration.showNotification(notifTitle, {
+            body: notifBody,
+            icon: '/icon-192.png',
+            badge: '/icon.svg',
+            tag: `cheer-${Date.now()}`,
+            renotify: true,
+          });
+          return true;
+        }
+      }
+
+      new Notification(notifTitle, {
+        body: notifBody,
+        icon: '/icon-192.png',
+        badge: '/icon.svg',
+        tag: `cheer-${Date.now()}`,
+      });
+      return true;
+    } catch (webErr) {
+      console.warn('Web cheer notification notice:', webErr);
+    }
+  }
+
+  return false;
+}
+

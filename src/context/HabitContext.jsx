@@ -39,6 +39,7 @@ import {
   getHabitNotificationContent,
   requestAppNotificationPermission,
   dispatchHabitNotification,
+  dispatchCheerNotification,
 } from '../utils/notifications';
 import {
   initPersistentStorage,
@@ -963,16 +964,35 @@ export const HabitProvider = ({ children }) => {
               if (remoteData.podCode) {
                 setPod((prev) => ({ ...prev, code: remoteData.podCode, isPaired: Boolean(remoteData.partner) }));
               }
-              // Restore Together Group Pod from Cloud
-              if (remoteData.groupPod) {
-                setGroupPod(remoteData.groupPod);
-                localStorage.setItem('daybyday_group_pod', JSON.stringify(remoteData.groupPod));
-              } else if (!groupPod) {
+              // Restore Together Group Pods from Cloud (Both/all pods)
+              const remotePods = Array.isArray(remoteData.groupPods) && remoteData.groupPods.length > 0
+                ? remoteData.groupPods
+                : (remoteData.groupPod ? [remoteData.groupPod] : []);
+
+              if (remotePods.length > 0) {
+                setGroupPods(remotePods);
                 try {
-                  const foundPod = await getUserGroupPodRemote(activeUser.id, activeUser.username);
-                  if (foundPod) {
-                    setGroupPod(foundPod);
-                    localStorage.setItem('daybyday_group_pod', JSON.stringify(foundPod));
+                  localStorage.setItem('daybyday_group_pods', JSON.stringify(remotePods));
+                  localStorage.setItem('daybyday_group_pod', JSON.stringify(remotePods[0]));
+                  if (!activeGroupPodCode && remotePods[0]?.code) {
+                    setActiveGroupPodCode(remotePods[0].code);
+                    localStorage.setItem('daybyday_active_group_pod_code', remotePods[0].code);
+                  }
+                } catch {}
+              } else {
+                try {
+                  const userCode = freshCode || activeUser.secretCode || activeUser.secret_code;
+                  const fetchedPods = await getUserGroupPodsRemote(activeUser.id, activeUser.username, userCode);
+                  if (fetchedPods && fetchedPods.length > 0) {
+                    setGroupPods(fetchedPods);
+                    try {
+                      localStorage.setItem('daybyday_group_pods', JSON.stringify(fetchedPods));
+                      localStorage.setItem('daybyday_group_pod', JSON.stringify(fetchedPods[0]));
+                      if (!activeGroupPodCode && fetchedPods[0]?.code) {
+                        setActiveGroupPodCode(fetchedPods[0].code);
+                        localStorage.setItem('daybyday_active_group_pod_code', fetchedPods[0].code);
+                      }
+                    } catch {}
                   }
                 } catch {}
               }
@@ -2008,13 +2028,17 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Send Cheer / Encouragement with goal context
-  const sendCheer = async (targetUserIdOrCode, customMessage, goalName) => {
+  const sendCheer = async (target, customMessage, goalName) => {
+    const toId = typeof target === 'object' && target !== null ? target.targetId : target;
+    const toUname = typeof target === 'object' && target !== null ? target.targetUsername : target;
+    const toCode = typeof target === 'object' && target !== null ? target.targetSecretCode : target;
+
     // Prevent self-cheering completely!
     const myCode = user?.secretCode || user?.secret_code;
     const isTargetingMe =
-      (targetUserIdOrCode && user?.id && String(targetUserIdOrCode) === String(user.id)) ||
-      (targetUserIdOrCode && user?.username && String(targetUserIdOrCode).toLowerCase() === String(user.username).toLowerCase()) ||
-      (targetUserIdOrCode && myCode && String(targetUserIdOrCode).toUpperCase() === String(myCode).toUpperCase());
+      (toId && user?.id && String(toId) === String(user.id)) ||
+      (toUname && user?.username && String(toUname).toLowerCase() === String(user.username).toLowerCase()) ||
+      (toCode && myCode && String(toCode).toUpperCase() === String(myCode).toUpperCase());
 
     if (isTargetingMe) {
       console.log('Skipping self cheer');
@@ -2028,8 +2052,9 @@ export const HabitProvider = ({ children }) => {
 
     try {
       await sendCheerRemote({
-        toUserId: targetUserIdOrCode,
-        toUsername: targetUserIdOrCode,
+        toUserId: toId,
+        toUsername: toUname,
+        toSecretCode: toCode,
         fromUserId: user?.id,
         fromUsername: user?.username || 'friend',
         fromName: user?.displayName || user?.username || 'Friend',
@@ -2079,19 +2104,10 @@ export const HabitProvider = ({ children }) => {
           const isFromMe =
             (user?.id && String(c.from_user_id) === String(user.id)) ||
             (user?.username && c.from_username && String(c.from_username).toLowerCase() === String(user.username).toLowerCase()) ||
-            (user?.username && c.from_name && String(c.from_name).toLowerCase() === String(user.username).toLowerCase());
-          if (isFromMe) {
-            seenCheerIdsRef.current.add(c.id);
-            return false;
-          }
+            (user?.username && c.from_name && String(c.from_name).toLowerCase() === String(user.username).toLowerCase()) ||
+            (myCode && c.from_user_id && String(c.from_user_id).toUpperCase() === String(myCode).toUpperCase());
 
-          // 2. If the cheer is targeted at someone else, skip it
-          const isForMe =
-            !c.to_user_id ||
-            (user?.id && String(c.to_user_id) === String(user.id)) ||
-            (user?.username && String(c.to_user_id).toLowerCase() === String(user.username).toLowerCase()) ||
-            (myCode && String(c.to_user_id).toUpperCase() === String(myCode).toUpperCase());
-          if (!isForMe) {
+          if (isFromMe) {
             seenCheerIdsRef.current.add(c.id);
             return false;
           }
@@ -2107,43 +2123,19 @@ export const HabitProvider = ({ children }) => {
             const fromWho = c.from_name || (c.from_username ? `@${c.from_username}` : 'A teammate');
             const goalContext = c.goal_name || c.goalName;
             const islandText = goalContext
-              ? `${fromWho} encouraged you for "${goalContext}"!`
+              ? `${fromWho} encouraged you for "${goalContext}"! 🔥`
               : `${fromWho}: "${c.message}"`;
             triggerIslandNotification(islandText, 'flame');
 
-            // 2. Local OS Notification
+            // 2. Local OS & Web System Notification
             const notifTitle = goalContext
-              ? `DayByDay · Encouraged for ${goalContext}`
-              : `DayByDay Encouragement`;
+              ? `DayByDay · Encouraged for ${goalContext} 🔥`
+              : `DayByDay Encouragement 🔥`;
             const notifBody = goalContext
               ? `${fromWho} cheered you on for "${goalContext}"! "${c.message}"`
               : `${fromWho} cheered you on: "${c.message}"`;
 
-            if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.LocalNotifications) {
-              window.Capacitor.Plugins.LocalNotifications.schedule({
-                notifications: [
-                  {
-                    id: Math.floor(Math.random() * 100000),
-                    title: notifTitle,
-                    body: notifBody,
-                    smallIcon: 'ic_stat_flame',
-                    largeIcon: 'ic_launcher',
-                    iconColor: '#F97316',
-                    channelId: 'daybyday_reminders',
-                    schedule: { at: new Date(Date.now() + 500) },
-                    sound: 'beep.wav',
-                  },
-                ],
-              }).catch(() => {});
-            } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-              try {
-                new Notification(notifTitle, {
-                  body: notifBody,
-                  icon: '/icon-192.png',
-                  badge: '/icon.svg',
-                });
-              } catch {}
-            }
+            dispatchCheerNotification({ title: notifTitle, body: notifBody });
           });
 
           // Save seen IDs to localStorage
@@ -2153,6 +2145,7 @@ export const HabitProvider = ({ children }) => {
           } catch {}
 
           sound.complete();
+          triggerCelebration();
 
           // Mark read on backend
           markCheersReadRemote(targetId, user.username).catch(() => {});
@@ -2322,26 +2315,67 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification('Left group pod', 'user');
   };
 
+  // Pull all group pods belonging to current user from cloud
+  const fetchUserGroupPods = useCallback(async () => {
+    const myId = user?.id;
+    const myUname = user?.username;
+    const myCode = user?.secretCode || user?.secret_code;
+    if (!myId && !myUname && !myCode) return [];
+
+    try {
+      const pods = await getUserGroupPodsRemote(myId, myUname, myCode);
+      if (Array.isArray(pods) && pods.length > 0) {
+        setGroupPods(pods);
+        try {
+          localStorage.setItem('daybyday_group_pods', JSON.stringify(pods));
+          if (!activeGroupPodCode && pods[0]?.code) {
+            setActiveGroupPodCode(pods[0].code);
+            localStorage.setItem('daybyday_active_group_pod_code', pods[0].code);
+          }
+        } catch {}
+        return pods;
+      }
+    } catch (e) {
+      console.warn('Fetch user group pods notice:', e);
+    }
+    return [];
+  }, [user?.id, user?.username, user?.secretCode, user?.secret_code, activeGroupPodCode]);
+
   // Option to edit group pod name
   const editGroupName = async (podCode, newName) => {
     if (!podCode || !newName?.trim()) return;
+    const cleanCode = podCode.trim().toUpperCase();
     const trimmedName = newName.trim();
     sound.press();
-    setGroupPod((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, name: trimmedName };
+
+    // 1. Optimistically update all groupPods in state & storage
+    setGroupPods((prev) => {
+      const nextList = (prev || []).map((p) =>
+        (p.code || '').toUpperCase() === cleanCode ? { ...p, name: trimmedName } : p
+      );
       try {
-        localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
+        localStorage.setItem('daybyday_group_pods', JSON.stringify(nextList));
+        const active = nextList.find((p) => (p.code || '').toUpperCase() === cleanCode);
+        if (active) localStorage.setItem('daybyday_group_pod', JSON.stringify(active));
       } catch {}
-      return updated;
+      return nextList;
     });
+
     try {
-      const res = await editGroupNameRemote(podCode, trimmedName);
-      if (res && res.groupPod) {
-        setGroupPod(res.groupPod);
-        try {
-          localStorage.setItem('daybyday_group_pod', JSON.stringify(res.groupPod));
-        } catch {}
+      const res = await editGroupNameRemote(cleanCode, trimmedName);
+      const updatedPod = res?.pod || res;
+      if (updatedPod && updatedPod.code) {
+        setGroupPods((prev) => {
+          const nextList = (prev || []).map((p) =>
+            (p.code || '').toUpperCase() === cleanCode ? { ...p, ...updatedPod, name: trimmedName } : p
+          );
+          try {
+            localStorage.setItem('daybyday_group_pods', JSON.stringify(nextList));
+            const active = nextList.find((p) => (p.code || '').toUpperCase() === cleanCode);
+            if (active) localStorage.setItem('daybyday_group_pod', JSON.stringify(active));
+          } catch {}
+          return nextList;
+        });
       }
       triggerIslandNotification('Group name updated!', 'check');
     } catch (err) {
@@ -2665,11 +2699,13 @@ export const HabitProvider = ({ children }) => {
     });
 
     if (podChanged) {
-      const updatedPod = { ...groupPod, sharedGoals: reconciledGoals };
-      setGroupPod(updatedPod);
-      try {
-        localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedPod));
-      } catch {}
+      // Use functional updater to avoid stale closure overwriting a freshly renamed pod
+      setGroupPod((prev) => {
+        if (!prev) return prev;
+        const merged = { ...prev, sharedGoals: reconciledGoals };
+        try { localStorage.setItem('daybyday_group_pod', JSON.stringify(merged)); } catch {}
+        return merged;
+      });
     }
   };
 
@@ -2763,11 +2799,13 @@ export const HabitProvider = ({ children }) => {
     });
 
     if (podNeedsUpdate) {
-      const nextPod = { ...groupPod, sharedGoals: reconciledGoals };
-      setGroupPod(nextPod);
-      try {
-        localStorage.setItem('daybyday_group_pod', JSON.stringify(nextPod));
-      } catch {}
+      // Use functional updater to avoid stale closure overwriting a freshly renamed pod
+      setGroupPod((prev) => {
+        if (!prev) return prev;
+        const merged = { ...prev, sharedGoals: reconciledGoals };
+        try { localStorage.setItem('daybyday_group_pod', JSON.stringify(merged)); } catch {}
+        return merged;
+      });
     }
   }, [habits, groupPod?.code]);
 
@@ -2946,20 +2984,23 @@ export const HabitProvider = ({ children }) => {
     const refreshPodAndCheers = async () => {
       if (typeof document !== 'undefined' && document.hidden) return;
 
-      // 1. Group pod refresh
+      // 1. Group pod refresh — always preserve local name over stale remote
       if (groupPod?.code) {
         try {
           const remote = await getGroupPodRemote(groupPod.code);
           if (remote && isMounted) {
             setGroupPod((prev) => {
               if (!prev) return remote;
-              return {
+              const merged = {
                 ...prev,
                 members: remote.members || prev.members,
                 sharedGoals: remote.sharedGoals || prev.sharedGoals,
+                // Keep whichever name is more recently set (prefer non-empty remote, fallback to local)
+                name: remote.name || prev.name,
               };
+              try { localStorage.setItem('daybyday_group_pod', JSON.stringify(merged)); } catch {}
+              return merged;
             });
-            localStorage.setItem('daybyday_group_pod', JSON.stringify(remote));
           }
         } catch {}
       }
@@ -3551,6 +3592,7 @@ export const HabitProvider = ({ children }) => {
         updateSharedGoalProgress,
         deleteSharedGoal,
         syncTogetherPodWithHabits,
+        fetchUserGroupPods,
         syncAllStats,
         serverUrl,
         setServerUrl,

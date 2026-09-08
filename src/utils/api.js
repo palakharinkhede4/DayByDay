@@ -758,7 +758,7 @@ export const leaveGroupPodRemote = async (podCode, userId) => {
 // CHEERS & ENCOURAGEMENT SERVICES
 // ==========================================
 
-export const sendCheerRemote = async ({ toUserId, toUsername, fromUserId, fromUsername, fromName, fromAvatar, podCode, message, goalName }) => {
+export const sendCheerRemote = async ({ toUserId, toUsername, toSecretCode, fromUserId, fromUsername, fromName, fromAvatar, podCode, message, goalName }) => {
   if (!hasRemoteBackend()) return null;
   const baseUrl = getApiBaseUrl();
   try {
@@ -769,6 +769,7 @@ export const sendCheerRemote = async ({ toUserId, toUsername, fromUserId, fromUs
         action: 'send_cheer',
         toUserId,
         toUsername,
+        toSecretCode,
         fromUserId,
         fromUsername,
         fromName,
@@ -826,29 +827,8 @@ export const markCheersReadRemote = async (userId, username) => {
   }
 };
 
-export const getUserGroupPodRemote = async (userId, username) => {
-  if (!hasRemoteBackend() || (!userId && !username)) return null;
-  const baseUrl = getApiBaseUrl();
-  try {
-    const res = await apiFetch(`${baseUrl}/api/user`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'get_user_group_pod',
-        userId,
-        username,
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await parseJsonSafe(res);
-    return data?.pod || null;
-  } catch {
-    return null;
-  }
-};
-
-export const getUserGroupPodsRemote = async (userId, username) => {
-  if (!hasRemoteBackend() || (!userId && !username)) return [];
+export const getUserGroupPodsRemote = async (userId, username, secretCode) => {
+  if (!hasRemoteBackend() || (!userId && !username && !secretCode)) return [];
   const baseUrl = getApiBaseUrl();
   try {
     const res = await apiFetch(`${baseUrl}/api/user`, {
@@ -858,6 +838,7 @@ export const getUserGroupPodsRemote = async (userId, username) => {
         action: 'get_user_group_pods',
         userId,
         username,
+        secretCode,
       }),
     });
     if (!res.ok) return [];
@@ -866,5 +847,10 @@ export const getUserGroupPodsRemote = async (userId, username) => {
   } catch {
     return [];
   }
+};
+
+export const getUserGroupPodRemote = async (userId, username, secretCode) => {
+  const pods = await getUserGroupPodsRemote(userId, username, secretCode);
+  return pods?.[0] || null;
 };
 

@@ -432,19 +432,22 @@ export default async function handler(req, res) {
           }
         }
 
-        // Check if user belongs to an active Together Group Pod
+        // Check if user belongs to active Together Group Pods (up to 5 pods)
+        let groupPods = [];
         let groupPod = null;
         try {
+          const userPodCodes = Array.isArray(user.preferences?.groupPodCodes) ? user.preferences.groupPodCodes.filter(Boolean) : [];
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE members::text LIKE ${'%"' + user.id + '"%'}
-               OR members::text LIKE ${'%"' + user.username + '"%'}
+            WHERE (members::text LIKE ${'%"' + user.id + '"%'})
+               OR (members::text LIKE ${'%"' + user.username + '"%'})
+               OR ( ${user.secret_code ? sql`members::text LIKE ${'%"' + user.secret_code + '"%'}` : sql`FALSE`} )
+               ${userPodCodes.length > 0 ? sql`OR code = ANY(${userPodCodes})` : sql``}
             ORDER BY updated_at DESC
-            LIMIT 1
+            LIMIT 5
           `;
           if (groupRows.length > 0) {
-            const gr = groupRows[0];
-            groupPod = {
+            groupPods = groupRows.map((gr) => ({
               id: gr.id,
               name: gr.name,
               code: gr.code,
@@ -452,10 +455,43 @@ export default async function handler(req, res) {
               sharedGoals: gr.shared_goals || [],
               createdAt: gr.created_at,
               maxMembers: 10,
-            };
+            }));
+
+            // Enrich members with latest profilePicture & secretCode so avatars load instantly
+            const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
+            if (allMemberIds.length > 0) {
+              try {
+                const memberRows = await sql`
+                  SELECT id, username, display_name, avatar, secret_code, preferences
+                  FROM daybyday_users
+                  WHERE id = ANY(${allMemberIds})
+                `;
+                const uMap = new Map(memberRows.map((u) => [u.id, u]));
+                groupPods.forEach((p) => {
+                  p.members = (p.members || []).map((m) => {
+                    const u = uMap.get(m.id);
+                    if (u) {
+                      return {
+                        ...m,
+                        username: u.username || m.username,
+                        displayName: u.display_name || u.username || m.displayName,
+                        avatar: u.avatar || m.avatar || 'star',
+                        secretCode: u.secret_code || m.secretCode,
+                        profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                      };
+                    }
+                    return m;
+                  });
+                });
+              } catch (uErr) {
+                // Non-blocking, best effort
+              }
+            }
+
+            groupPod = groupPods[0] || null;
           }
         } catch (gpErr) {
-          console.warn('Notice querying user group pod:', gpErr.message);
+          console.warn('Notice querying user group pods:', gpErr.message);
         }
 
         const todayDateStr = new Date().toISOString().slice(0, 10);
@@ -557,6 +593,7 @@ export default async function handler(req, res) {
           partner,
           podCode,
           groupPod,
+          groupPods,
           isSolo: !partner,
           todayPercent,
           streak,
@@ -847,19 +884,22 @@ export default async function handler(req, res) {
             }
           }
 
-          // Check if user belongs to an active Together Group Pod
+          // Check if user belongs to active Together Group Pods (up to 5 pods)
+          let groupPods = [];
           let groupPod = null;
           try {
+            const userPodCodes = Array.isArray(user.preferences?.groupPodCodes) ? user.preferences.groupPodCodes.filter(Boolean) : [];
             const groupRows = await sql`
               SELECT * FROM daybyday_group_pods 
-              WHERE members::text LIKE ${'%"' + user.id + '"%'}
-                 OR members::text LIKE ${'%"' + user.username + '"%'}
+              WHERE (members::text LIKE ${'%"' + user.id + '"%'})
+                 OR (members::text LIKE ${'%"' + user.username + '"%'})
+                 OR ( ${user.secret_code ? sql`members::text LIKE ${'%"' + user.secret_code + '"%'}` : sql`FALSE`} )
+                 ${userPodCodes.length > 0 ? sql`OR code = ANY(${userPodCodes})` : sql``}
               ORDER BY updated_at DESC
-              LIMIT 1
+              LIMIT 5
             `;
             if (groupRows.length > 0) {
-              const gr = groupRows[0];
-              groupPod = {
+              groupPods = groupRows.map((gr) => ({
                 id: gr.id,
                 name: gr.name,
                 code: gr.code,
@@ -867,10 +907,43 @@ export default async function handler(req, res) {
                 sharedGoals: gr.shared_goals || [],
                 createdAt: gr.created_at,
                 maxMembers: 10,
-              };
+              }));
+
+              // Enrich members with latest profilePicture & secretCode so avatars load instantly
+              const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
+              if (allMemberIds.length > 0) {
+                try {
+                  const memberRows = await sql`
+                    SELECT id, username, display_name, avatar, secret_code, preferences
+                    FROM daybyday_users
+                    WHERE id = ANY(${allMemberIds})
+                  `;
+                  const uMap = new Map(memberRows.map((u) => [u.id, u]));
+                  groupPods.forEach((p) => {
+                    p.members = (p.members || []).map((m) => {
+                      const u = uMap.get(m.id);
+                      if (u) {
+                        return {
+                          ...m,
+                          username: u.username || m.username,
+                          displayName: u.display_name || u.username || m.displayName,
+                          avatar: u.avatar || m.avatar || 'star',
+                          secretCode: u.secret_code || m.secretCode,
+                          profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                        };
+                      }
+                      return m;
+                    });
+                  });
+                } catch (uErr) {
+                  // Non-blocking, best effort
+                }
+              }
+
+              groupPod = groupPods[0] || null;
             }
           } catch (gpErr) {
-            console.warn('Notice querying user group pod on login:', gpErr.message);
+            console.warn('Notice querying user group pods on login:', gpErr.message);
           }
 
           return res.status(200).json({
@@ -880,6 +953,7 @@ export default async function handler(req, res) {
             partner,
             podCode,
             groupPod,
+            groupPods,
             isSolo: !partner
           });
         }
@@ -1436,17 +1510,34 @@ export default async function handler(req, res) {
       }
     }
 
-    // ACTION: GET USER'S CURRENT GROUP PODS (UP TO 5 GROUPS)
     if (action === 'get_user_group_pods' || action === 'get_user_group_pod') {
-      const { userId, username } = req.body;
+      const { userId, username, secretCode } = req.body;
       const cleanU = (username || '').trim().replace(/^@/, '');
+      const cleanCode = (secretCode || '').trim().toUpperCase();
       try {
         let pods = [];
         if (sql) {
+          // Look up user preferences for any stored groupPodCodes
+          let prefCodes = [];
+          try {
+            const uRows = await sql`
+              SELECT preferences FROM daybyday_users
+              WHERE ( ${userId ? sql`id = ${userId}` : sql`FALSE`} )
+                 OR ( ${cleanU ? sql`LOWER(username) = LOWER(${cleanU})` : sql`FALSE`} )
+                 OR ( ${cleanCode ? sql`UPPER(secret_code) = UPPER(${cleanCode})` : sql`FALSE`} )
+              LIMIT 1
+            `;
+            if (uRows.length > 0 && Array.isArray(uRows[0].preferences?.groupPodCodes)) {
+              prefCodes = uRows[0].preferences.groupPodCodes.filter(Boolean);
+            }
+          } catch {}
+
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
             WHERE ( ${userId ? sql`members::text LIKE ${'%"' + userId + '"%'}` : sql`FALSE`} )
                OR ( ${cleanU ? sql`members::text LIKE ${'%"' + cleanU + '"%'}` : sql`FALSE`} )
+               OR ( ${cleanCode ? sql`members::text LIKE ${'%"' + cleanCode + '"%'}` : sql`FALSE`} )
+               ${prefCodes.length > 0 ? sql`OR code = ANY(${prefCodes})` : sql``}
             ORDER BY updated_at DESC
             LIMIT 5
           `;
@@ -1914,28 +2005,37 @@ export default async function handler(req, res) {
 
     // ACTION: SEND CHEER / ENCOURAGEMENT (Real cross-user delivery)
     if (action === 'send_cheer') {
-      const { toUserId, toUsername, fromUserId, fromUsername, fromName, fromAvatar, podCode, message, goalName } = req.body;
+      const { toUserId, toUsername, toSecretCode, fromUserId, fromUsername, fromName, fromAvatar, podCode, message, goalName } = req.body;
       const cheerMessage = (message || (goalName ? `Encouraged you for ${goalName}! 🔥` : 'Keep crushing your goals! 🔥')).trim();
 
       try {
-        let recipientId = toUserId;
-        let recipientUsername = toUsername;
-        let recipientSecretCode = null;
+        let recipientId = toUserId || null;
+        let recipientUsername = toUsername || null;
+        let recipientSecretCode = toSecretCode || null;
 
-        if (sql && (toUserId || toUsername)) {
-          const targetLookup = (toUserId || toUsername || '').trim();
-          const cleanTargetLookup = targetLookup.replace(/^@/, '');
-          const found = await sql`
-            SELECT id, username, secret_code FROM daybyday_users
-            WHERE id = ${targetLookup}
-               OR LOWER(username) = LOWER(${cleanTargetLookup})
-               OR UPPER(secret_code) = UPPER(${targetLookup})
-            LIMIT 1
-          `;
-          if (found.length > 0) {
-            recipientId = found[0].id;
-            recipientUsername = found[0].username;
-            recipientSecretCode = found[0].secret_code;
+        if (sql && (toUserId || toUsername || toSecretCode)) {
+          const u1 = (toUserId || '').trim();
+          const u2 = (toUsername || '').trim().replace(/^@/, '');
+          const u3 = (toSecretCode || '').trim().toUpperCase();
+
+          try {
+            const found = await sql`
+              SELECT id, username, secret_code FROM daybyday_users
+              WHERE ( ${u1 ? sql`id = ${u1}` : sql`FALSE`} )
+                 OR ( ${u1 ? sql`LOWER(username) = LOWER(${u1.replace(/^@/, '')})` : sql`FALSE`} )
+                 OR ( ${u1 ? sql`UPPER(secret_code) = UPPER(${u1})` : sql`FALSE`} )
+                 OR ( ${u2 ? sql`LOWER(username) = LOWER(${u2})` : sql`FALSE`} )
+                 OR ( ${u2 ? sql`id = ${u2}` : sql`FALSE`} )
+                 OR ( ${u3 ? sql`UPPER(secret_code) = UPPER(${u3})` : sql`FALSE`} )
+              LIMIT 1
+            `;
+            if (found.length > 0) {
+              recipientId = found[0].id;
+              recipientUsername = found[0].username;
+              recipientSecretCode = found[0].secret_code;
+            }
+          } catch (lookupErr) {
+            console.warn('Recipient lookup notice:', lookupErr.message);
           }
         }
 
@@ -1946,20 +2046,22 @@ export default async function handler(req, res) {
           return res.status(200).json({ success: true, message: 'Self cheer skipped' });
         }
 
+        const finalToId = recipientId || recipientUsername || recipientSecretCode || 'teammate';
+
         if (sql) {
           await sql`
             INSERT INTO daybyday_cheers (
               to_user_id, from_user_id, from_username, from_name, from_avatar, pod_code, message, goal_name, is_read
             )
             VALUES (
-              ${recipientId || recipientUsername || recipientSecretCode || null}, ${fromUserId || null}, ${fromUsername || 'friend'},
+              ${finalToId}, ${fromUserId || null}, ${fromUsername || 'friend'},
               ${fromName || fromUsername || 'Friend'}, ${fromAvatar || 'flame'}, ${podCode || null}, ${cheerMessage}, ${goalName || null}, false
             )
           `;
         }
 
         memoryDb.addCheer({
-          to_user_id: recipientId || recipientUsername || recipientSecretCode,
+          to_user_id: finalToId,
           from_user_id: fromUserId,
           from_username: fromUsername,
           from_name: fromName,
@@ -1979,7 +2081,7 @@ export default async function handler(req, res) {
     // ACTION: GET CHEERS (Fetch incoming cheers for user or group pod)
     if (action === 'get_cheers') {
       const { userId, username, secretCode, podCode } = req.body;
-      const targetId = userId || username;
+      const targetId = (userId || '').trim();
       const cleanUsername = (username || userId || '').trim().replace(/^@/, '');
       const cleanCode = (secretCode || '').trim().toUpperCase();
       const cleanPod = (podCode || '').trim().toUpperCase();
@@ -1988,41 +2090,47 @@ export default async function handler(req, res) {
         let cheers = [];
         if (sql) {
           // Resolve all user identifiers for the recipient to ensure 100% reliable matching
-          let knownIds = [targetId, cleanUsername].filter(Boolean);
-          if (cleanCode) knownIds.push(cleanCode);
+          const knownIds = new Set();
+          if (targetId) knownIds.add(targetId);
+          if (cleanUsername) knownIds.add(cleanUsername);
+          if (cleanCode) knownIds.add(cleanCode);
 
           if (targetId || cleanUsername || cleanCode) {
-            const userLookup = await sql`
-              SELECT id, username, secret_code FROM daybyday_users
-              WHERE id = ${targetId || 'none'}
-                 OR LOWER(username) = LOWER(${cleanUsername || 'none'})
-                 OR UPPER(secret_code) = UPPER(${cleanCode || 'none'})
-              LIMIT 1
-            `;
-            if (userLookup.length > 0) {
-              const u = userLookup[0];
-              if (u.id) knownIds.push(u.id);
-              if (u.username) knownIds.push(u.username);
-              if (u.secret_code) knownIds.push(u.secret_code);
-            }
+            try {
+              const userLookup = await sql`
+                SELECT id, username, secret_code FROM daybyday_users
+                WHERE ( ${targetId ? sql`id = ${targetId}` : sql`FALSE`} )
+                   OR ( ${cleanUsername ? sql`LOWER(username) = LOWER(${cleanUsername})` : sql`FALSE`} )
+                   OR ( ${cleanCode ? sql`UPPER(secret_code) = UPPER(${cleanCode})` : sql`FALSE`} )
+                LIMIT 1
+              `;
+              if (userLookup.length > 0) {
+                const u = userLookup[0];
+                if (u.id) knownIds.add(u.id);
+                if (u.username) knownIds.add(u.username);
+                if (u.secret_code) knownIds.add(u.secret_code);
+              }
+            } catch {}
           }
-          knownIds = [...new Set(knownIds.filter(Boolean))];
+          const idsList = Array.from(knownIds).filter(Boolean);
 
-          cheers = await sql`
-            SELECT * FROM daybyday_cheers
-            WHERE (
-              to_user_id = ANY(${knownIds})
-              OR LOWER(to_user_id) = LOWER(${cleanUsername || 'none'})
-              ${cleanPod ? sql`OR (pod_code = ${cleanPod} AND (to_user_id IS NULL OR to_user_id = ANY(${knownIds})))` : sql``}
-            )
-            AND is_read = false
-            ORDER BY created_at DESC LIMIT 30
-          `;
+          if (idsList.length > 0 || cleanPod) {
+            cheers = await sql`
+              SELECT * FROM daybyday_cheers
+              WHERE (
+                ( ${idsList.length > 0 ? sql`to_user_id = ANY(${idsList})` : sql`FALSE`} )
+                ${cleanUsername ? sql`OR LOWER(to_user_id) = LOWER(${cleanUsername})` : sql``}
+                ${cleanPod ? sql`OR (pod_code = ${cleanPod} AND (to_user_id IS NULL OR to_user_id = ANY(${idsList})))` : sql``}
+              )
+              AND is_read = false
+              ORDER BY created_at DESC LIMIT 30
+            `;
+          }
 
           // Clean filter out self-cheers in JS
           cheers = (cheers || []).filter((c) => {
             const isFromSelf =
-              knownIds.includes(c.from_user_id) ||
+              (c.from_user_id && idsList.includes(c.from_user_id)) ||
               (c.from_username && cleanUsername && c.from_username.toLowerCase() === cleanUsername.toLowerCase());
             return !isFromSelf;
           });
