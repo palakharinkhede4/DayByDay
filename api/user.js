@@ -11,10 +11,25 @@ function hashSecurityAnswer(answer, salt) {
   return crypto.pbkdf2Sync(clean, String(salt), 1000, 32, 'sha256').toString('hex');
 }
 
+function parseSafeJson(val, fallback = {}) {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return val;
+  if (typeof val === 'string') {
+    try {
+      let parsed = JSON.parse(val);
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return typeof parsed === 'object' && parsed !== null ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, ...safe } = u;
-  if (!safe.preferences) safe.preferences = {};
+  safe.preferences = parseSafeJson(safe.preferences, {});
   const code = safe.secretCode || safe.secret_code;
   safe.secretCode = code;
   safe.secret_code = code;
@@ -48,7 +63,7 @@ function formatHabitFromRow(row) {
     reminderTime: row.reminder_time || '',
     reminderDays: row.reminder_days ? row.reminder_days.split(',') : [],
     streak: Number(row.streak) || 0,
-    history: typeof row.history === 'object' && row.history !== null ? row.history : {},
+    history: parseSafeJson(row.history, {}),
   };
 }
 
@@ -451,8 +466,8 @@ export default async function handler(req, res) {
               id: gr.id,
               name: gr.name,
               code: gr.code,
-              members: gr.members || [],
-              sharedGoals: gr.shared_goals || [],
+              members: parseSafeJson(gr.members, []),
+              sharedGoals: parseSafeJson(gr.shared_goals, []),
               createdAt: gr.created_at,
               maxMembers: 10,
             }));
@@ -477,7 +492,7 @@ export default async function handler(req, res) {
                         displayName: u.display_name || u.username || m.displayName,
                         avatar: u.avatar || m.avatar || 'star',
                         secretCode: u.secret_code || m.secretCode,
-                        profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                        profilePicture: parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
                       };
                     }
                     return m;
@@ -909,8 +924,8 @@ export default async function handler(req, res) {
                 id: gr.id,
                 name: gr.name,
                 code: gr.code,
-                members: gr.members || [],
-                sharedGoals: gr.shared_goals || [],
+                members: parseSafeJson(gr.members, []),
+                sharedGoals: parseSafeJson(gr.shared_goals, []),
                 createdAt: gr.created_at,
                 maxMembers: 10,
               }));
@@ -935,7 +950,7 @@ export default async function handler(req, res) {
                           displayName: u.display_name || u.username || m.displayName,
                           avatar: u.avatar || m.avatar || 'star',
                           secretCode: u.secret_code || m.secretCode,
-                          profilePicture: u.preferences?.profilePicture || m.profilePicture || null,
+                          profilePicture: parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
                         };
                       }
                       return m;
@@ -1123,11 +1138,12 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
-          if (preferences && typeof preferences === 'object') {
-            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(preferences)}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
+          if (preferences) {
+            await sql`UPDATE daybyday_users SET preferences = ${parseSafeJson(preferences, {})}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
           }
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
+            const historyObj = parseSafeJson(h.history, {});
             await sql`
               INSERT INTO daybyday_habits (
                 user_id, habit_id, name, description, target, unit, icon, category,
@@ -1136,7 +1152,7 @@ export default async function handler(req, res) {
               VALUES (
                 ${userId}, ${h.id}, ${h.name}, ${h.description || ''}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
                 ${h.user1 ?? h.todayValue ?? 0}, ${Boolean(h.completed)}, ${h.reminderTime || null}, ${reminderDaysStr},
-                ${h.streak || 0}, ${JSON.stringify(h.history || {})}::jsonb, CURRENT_TIMESTAMP
+                ${h.streak || 0}, ${historyObj}::jsonb, CURRENT_TIMESTAMP
               )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
                 today_value = EXCLUDED.today_value,

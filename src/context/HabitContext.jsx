@@ -1306,7 +1306,6 @@ export const HabitProvider = ({ children }) => {
     // 2. Reset every piece of React state to virgin clean slate
     setUser(null);
     setPartner(null);
-    setTrackedPartner(null);
     setTrackedPartners([]);
     setActiveTrackedCode('');
     setGroupPods([]);
