@@ -244,11 +244,50 @@ function detectInitialOS() {
 }
 
 export function getLocalDateKey(date = new Date()) {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(date));
+  } catch {
+    const d = new Date(date);
+    const ist = new Date(d.getTime() + (330 * 60 * 1000));
+    return ist.toISOString().slice(0, 10);
+  }
+}
+export const getIstDateKey = getLocalDateKey;
+
+export function getMsUntilIstMidnight(testDate = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
+    }).formatToParts(testDate);
+
+    const getPart = (type) => parseInt(parts.find(p => p.type === type)?.value || '0', 10);
+    const hour = getPart('hour') % 24;
+    const minute = getPart('minute');
+    const second = getPart('second');
+
+    const secondsPastIstMidnight = (hour * 3600) + (minute * 60) + second;
+    const secondsInDay = 86400;
+    let secondsRemaining = secondsInDay - secondsPastIstMidnight + 1; // 12:00:01 AM IST
+    if (secondsRemaining <= 0) secondsRemaining = secondsInDay;
+
+    return Math.max(1000, secondsRemaining * 1000);
+  } catch {
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1, 0);
+    return Math.max(1000, tomorrow.getTime() - now.getTime());
+  }
 }
 
 export function calculateConsecutiveStreak(history, target, isBoolean) {
@@ -273,11 +312,20 @@ export function calculateConsecutiveStreak(history, target, isBoolean) {
   return streak;
 }
 
-export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()) {
+export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey(), priorDateKey = null) {
   if (!rawHabits || !Array.isArray(rawHabits)) return INITIAL_HABITS;
   return rawHabits.map((h) => {
     const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
     const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+
+    // Archive prior day's info into history if it existed and wasn't archived yet
+    if (priorDateKey && priorDateKey !== targetDateKey && history[priorDateKey] === undefined && h.user1 !== undefined && h.user1 !== null) {
+      const val = isBool ? Boolean(h.user1) : (Number(h.user1) || 0);
+      if (val > 0 || h.completed) {
+        history[priorDateKey] = val;
+      }
+    }
+
     const hasTodayEntry = history[targetDateKey] !== undefined;
     const todayVal = hasTodayEntry
       ? history[targetDateKey]
@@ -729,10 +777,26 @@ export const HabitProvider = ({ children }) => {
           return INITIAL_HABITS;
         }
         if (isNewDay) {
-          const cleanList = getCleanDailyHabits(parsed, todayKey);
+          const cleanList = getCleanDailyHabits(parsed, todayKey, lastActiveDate);
           try {
             localStorage.setItem('daybyday_habits', JSON.stringify(cleanList));
             localStorage.setItem('daybyday_last_active_date', todayKey);
+            const storedH = getStoredHealthData();
+            if (storedH && (storedH.steps > 0 || storedH.calories > 0)) {
+              localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
+                date: lastActiveDate,
+                steps: storedH.steps || 0,
+                calories: storedH.calories || 0,
+                distanceKm: storedH.distanceKm || 0,
+              }));
+            }
+            localStorage.setItem('daybyday_health_sync_data', JSON.stringify({
+              steps: 0,
+              calories: 0,
+              distanceKm: 0,
+              source: 'reset',
+              syncedAt: new Date().toISOString(),
+            }));
           } catch {}
           return cleanList;
         }
@@ -748,7 +812,7 @@ export const HabitProvider = ({ children }) => {
     habitsRef.current = habits;
   }, [habits]);
 
-  const lastActiveDateRef = useRef(getLocalDateKey());
+  const lastActiveDateRef = useRef(localStorage.getItem('daybyday_last_active_date') || getLocalDateKey());
 
   const groupPodRef = useRef(groupPod);
   useEffect(() => {
@@ -2075,16 +2139,34 @@ export const HabitProvider = ({ children }) => {
 
     // Reset healthStats for the new day
     setHealthStats((prev) => {
+      if (prev && (prev.steps > 0 || prev.calories > 0)) {
+        try {
+          localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
+            date: prevDateKey,
+            steps: prev.steps || 0,
+            calories: prev.calories || 0,
+            distanceKm: prev.distanceKm || 0,
+            source: prev.source || 'apple_health',
+          }));
+        } catch {}
+      }
       const resetStats = {
         ...(prev || {}),
         steps: 0,
         calories: 0,
         distanceKm: 0,
+        source: 'reset',
         syncedAt: new Date().toISOString(),
       };
       try {
         localStorage.setItem('daybyday_health_sync_data', JSON.stringify(resetStats));
       } catch {}
+
+      const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
+      if (targetIdOrCode) {
+        syncHealthDataRemote(targetIdOrCode, resetStats).catch(() => {});
+      }
+
       return resetStats;
     });
 
@@ -2108,17 +2190,15 @@ export const HabitProvider = ({ children }) => {
     if (typeof refreshTrackedPartners === 'function') {
       refreshTrackedPartners();
     }
-  }, [user?.id, refreshTrackedPartners, setGroupPod]);
+  }, [user?.id, user?.secretCode, user?.secret_code, refreshTrackedPartners, setGroupPod]);
 
-  // Schedule midnight 12:00:01 AM local reset + multi-tier wake triggers
+  // Schedule midnight 12:00:01 AM Indian Standard Time (IST) reset + multi-tier wake triggers
   useEffect(() => {
     let midnightTimer = null;
 
     const scheduleNextMidnight = () => {
       if (midnightTimer) clearTimeout(midnightTimer);
-      const now = new Date();
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1, 0);
-      const msUntilMidnight = Math.max(1000, tomorrow.getTime() - now.getTime());
+      const msUntilMidnight = getMsUntilIstMidnight();
 
       midnightTimer = setTimeout(() => {
         performDailyReset();

@@ -707,14 +707,13 @@ export default async function handler(req, res) {
               if (entry) {
                 let isEntryToday = false;
                 let pVal = 0;
-                if (typeof entry === 'object') {
+                if (typeof entry === 'object' && entry !== null) {
                   const entryDate = entry.updatedAt ? getIstDateKey(new Date(entry.updatedAt)) : null;
                   isEntryToday = (entryDate === todayDateStr);
                   pVal = isEntryToday ? Number(entry.value) : 0;
                 } else {
-                  const podDate = groupPod.updatedAt ? getIstDateKey(new Date(groupPod.updatedAt)) : null;
-                  isEntryToday = (podDate === todayDateStr);
-                  pVal = isEntryToday ? Number(entry) : 0;
+                  isEntryToday = false;
+                  pVal = 0;
                 }
                 if (isEntryToday && !isNaN(pVal) && pVal > 0) {
                   const stepH = formattedHabits.find((h) =>
@@ -955,7 +954,7 @@ export default async function handler(req, res) {
                   const isDone = cleanHealthData.steps >= targetNum;
                   await sql`
                     UPDATE daybyday_habits 
-                    SET user1 = ${cleanHealthData.steps}, history = ${JSON.stringify(history)}, completed = ${isDone}
+                    SET today_value = ${cleanHealthData.steps}, history = ${JSON.stringify(history)}::jsonb, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ${h.id}
                   `;
                 }

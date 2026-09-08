@@ -21,25 +21,54 @@ export const setHealthSyncEnabled = (enabled) => {
   } catch {}
 };
 
+export function getIstDateKey(date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(date));
+  } catch {
+    const d = new Date(date);
+    const ist = new Date(d.getTime() + (330 * 60 * 1000));
+    return ist.toISOString().slice(0, 10);
+  }
+}
+
 export const getStoredHealthData = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && parsed.syncedAt) {
-      const now = new Date();
-      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const d = new Date(parsed.syncedAt);
-      const syncDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const todayKey = getIstDateKey();
+      const syncDate = getIstDateKey(new Date(parsed.syncedAt));
       if (syncDate !== todayKey) {
-        // Stale from yesterday! Return clean 0
-        return {
+        // Stale from yesterday! Archive previous day's info if not already saved
+        if (parsed.steps > 0 || parsed.calories > 0) {
+          try {
+            localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
+              date: syncDate,
+              steps: parsed.steps || 0,
+              calories: parsed.calories || 0,
+              distanceKm: parsed.distanceKm || 0,
+              source: parsed.source || 'apple_health',
+            }));
+          } catch {}
+        }
+        const cleanReset = {
           ...parsed,
           steps: 0,
           calories: 0,
           distanceKm: 0,
+          source: 'reset',
           syncedAt: new Date().toISOString(),
         };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanReset));
+        } catch {}
+        return cleanReset;
       }
     }
     return parsed;
@@ -216,13 +245,22 @@ export const importDeviceHealthStats = async (user = null) => {
       } catch {}
     }
 
-    const now = new Date();
-    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayDate = getIstDateKey();
     let isToday = false;
     if (lastSaved?.syncedAt) {
-      const d = new Date(lastSaved.syncedAt);
-      const syncDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const syncDate = getIstDateKey(new Date(lastSaved.syncedAt));
       isToday = (syncDate === todayDate);
+    }
+
+    if (!isToday && lastSaved && (lastSaved.steps > 0 || lastSaved.calories > 0)) {
+      try {
+        localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
+          date: lastSaved.syncedAt ? getIstDateKey(new Date(lastSaved.syncedAt)) : null,
+          steps: lastSaved.steps || 0,
+          calories: lastSaved.calories || 0,
+          distanceKm: lastSaved.distanceKm || 0,
+        }));
+      } catch {}
     }
 
     const steps = isToday
@@ -372,12 +410,10 @@ export const syncHealthDataToHabitsAndPod = async ({
 }) => {
   if (!healthData || typeof healthData !== 'object') return null;
 
+  const todayKey = getIstDateKey();
   // If healthData has a syncedAt from prior date, skip syncing to today's habits
   if (healthData.syncedAt) {
-    const now = new Date();
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const d = new Date(healthData.syncedAt);
-    const syncDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const syncDate = getIstDateKey(new Date(healthData.syncedAt));
     if (syncDate !== todayKey) {
       return null;
     }
@@ -396,8 +432,11 @@ export const syncHealthDataToHabitsAndPod = async ({
     if (targetVal === null || targetVal === undefined) continue;
 
     const curVal = Number(h[activeUserId]) || 0;
-    // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an empty device sync!
-    if (targetVal <= 0 && curVal > 0) continue;
+    const hasTodayRecord = h.history && h.history[todayKey] !== undefined;
+
+    // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an empty device sync during the active day!
+    // BUT if the user has NO record for today (meaning curVal is lingering from yesterday), allow resetting to 0!
+    if (targetVal <= 0 && curVal > 0 && hasTodayRecord) continue;
 
     if (curVal !== targetVal && typeof onUpdateHabit === 'function') {
       onUpdateHabit(h.id, activeUserId, targetVal, true, silent);
