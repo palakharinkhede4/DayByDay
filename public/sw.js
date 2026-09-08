@@ -1,7 +1,7 @@
 // DayByDay Service Worker — required for iOS web app push + showNotification support
 // iOS 16.4+ only supports notifications fired through the service worker registration, NOT new Notification()
 
-const CACHE_NAME = 'daybyday-v3.5.0';
+const CACHE_NAME = 'daybyday-v3.5.1';
 const APP_SHELL = [
   '/',
   '/index.html',
