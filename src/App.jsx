@@ -69,31 +69,21 @@ class ScreenErrorBoundary extends React.Component {
 }
 
 const MainAppContent = () => {
-  const { user, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide, syncDeviceHealth } = useHabits();
+  const { user, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide, syncDeviceHealth, syncAllStats } = useHabits();
   const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
-  // Auto-sync fitness data ONLY ONCE when switching tabs (habits, together, settings, insights)
+  // Sync stats immediately when tab changes
   const prevTabRef = useRef(null);
-  const syncDeviceHealthRef = useRef(syncDeviceHealth);
-  useEffect(() => {
-    syncDeviceHealthRef.current = syncDeviceHealth;
-  }, [syncDeviceHealth]);
-
   useEffect(() => {
     if (prevTabRef.current !== activeTab) {
       prevTabRef.current = activeTab;
-      // Only sync device health on tab switch if user explicitly enabled fitness sync
-      if (typeof window !== 'undefined' && localStorage.getItem('daybyday_health_sync_enabled') === 'true') {
-        if (activeTab === 'habits' || activeTab === 'together') {
-          syncDeviceHealthRef.current?.({ silent: true, force: false })?.catch?.(() => {});
-        }
-      }
+      syncAllStats?.(activeTab);
     }
-  }, [activeTab]);
+  }, [activeTab, syncAllStats]);
 
   // Handle incoming health data (e.g. Apple Shortcuts / Health automations via URL params) on mount & resume
   useEffect(() => {
@@ -177,6 +167,11 @@ const MainAppContent = () => {
     );
   }
 
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    syncAllStats?.(tabId);
+  };
+
   return (
     <div className="app-root">
       {/* Dynamic iOS Pop-up (shows only on iOS browser) */}
@@ -185,7 +180,7 @@ const MainAppContent = () => {
       {/* Main Responsive Application Layout */}
       <AppLayout
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         onOpenAddGoal={() => setIsAddGoalOpen(true)}
       >
         <ScreenErrorBoundary activeTab={activeTab} onReset={() => setActiveTab('habits')}>

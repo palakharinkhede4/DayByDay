@@ -1714,6 +1714,51 @@ export default async function handler(req, res) {
       }
     }
 
+    // ACTION: EDIT GROUP POD NAME
+    if (action === 'edit_group_name' || action === 'edit_group_pod_name') {
+      const { podCode, name } = req.body;
+      const cleanCode = (podCode || '').trim().toUpperCase();
+      const cleanName = (name || '').trim();
+      if (!cleanCode || !cleanName) {
+        return res.status(400).json({ error: 'Pod code and new name required' });
+      }
+
+      try {
+        let pod = null;
+        if (sql) {
+          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
+          if (rows.length > 0) {
+            const r = rows[0];
+            await sql`
+              UPDATE daybyday_group_pods
+              SET name = ${cleanName}, updated_at = CURRENT_TIMESTAMP
+              WHERE UPPER(code) = ${cleanCode}
+            `;
+            pod = {
+              id: r.id,
+              name: cleanName,
+              code: r.code,
+              members: r.members || [],
+              sharedGoals: r.shared_goals || [],
+              createdAt: r.created_at,
+              maxMembers: 10,
+            };
+          }
+        } else {
+          pod = memoryDb.getGroupPod(cleanCode);
+          if (pod) {
+            pod.name = cleanName;
+            memoryDb.saveGroupPod(pod);
+          }
+        }
+
+        if (!pod) return res.status(404).json({ error: 'Pod not found' });
+        return res.status(200).json({ success: true, pod });
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to update group name: ' + err.message });
+      }
+    }
+
     // ACTION: RESOLVE DIRECT RAW APK RELEASE ASSET (Bypasses GitHub 302 redirect for instant Chrome downloads)
     if (action === 'resolve_latest_apk') {
       try {
@@ -1764,18 +1809,22 @@ export default async function handler(req, res) {
       try {
         let recipientId = toUserId;
         let recipientUsername = toUsername;
+        let recipientSecretCode = null;
+
         if (sql && (toUserId || toUsername)) {
-          const targetLookup = (toUserId || toUsername).trim();
+          const targetLookup = (toUserId || toUsername || '').trim();
+          const cleanTargetLookup = targetLookup.replace(/^@/, '');
           const found = await sql`
-            SELECT id, username FROM daybyday_users
+            SELECT id, username, secret_code FROM daybyday_users
             WHERE id = ${targetLookup}
-               OR LOWER(username) = LOWER(${targetLookup})
+               OR LOWER(username) = LOWER(${cleanTargetLookup})
                OR UPPER(secret_code) = UPPER(${targetLookup})
             LIMIT 1
           `;
           if (found.length > 0) {
             recipientId = found[0].id;
             recipientUsername = found[0].username;
+            recipientSecretCode = found[0].secret_code;
           }
         }
 
@@ -1792,14 +1841,14 @@ export default async function handler(req, res) {
               to_user_id, from_user_id, from_username, from_name, from_avatar, pod_code, message, goal_name, is_read
             )
             VALUES (
-              ${recipientId || recipientUsername || null}, ${fromUserId || null}, ${fromUsername || 'friend'},
+              ${recipientId || recipientUsername || recipientSecretCode || null}, ${fromUserId || null}, ${fromUsername || 'friend'},
               ${fromName || fromUsername || 'Friend'}, ${fromAvatar || 'flame'}, ${podCode || null}, ${cheerMessage}, ${goalName || null}, false
             )
           `;
         }
 
         memoryDb.addCheer({
-          to_user_id: recipientId || recipientUsername,
+          to_user_id: recipientId || recipientUsername || recipientSecretCode,
           from_user_id: fromUserId,
           from_username: fromUsername,
           from_name: fromName,
@@ -1818,50 +1867,47 @@ export default async function handler(req, res) {
 
     // ACTION: GET CHEERS (Fetch incoming cheers for user or group pod)
     if (action === 'get_cheers') {
-      const { userId, username, podCode } = req.body;
+      const { userId, username, secretCode, podCode } = req.body;
       const targetId = userId || username;
-      const cleanUsername = (username || userId || '').trim();
+      const cleanUsername = (username || userId || '').trim().replace(/^@/, '');
+      const cleanCode = (secretCode || '').trim().toUpperCase();
 
       try {
         let cheers = [];
         if (sql) {
-          if (targetId && podCode) {
-            cheers = await sql`
-              SELECT * FROM daybyday_cheers
-              WHERE (
-                to_user_id = ${targetId} 
-                OR to_user_id = ${cleanUsername} 
-                OR LOWER(to_user_id) = LOWER(${cleanUsername})
-                OR (to_user_id IS NULL AND pod_code = ${podCode})
-              )
-              AND (from_user_id IS NULL OR from_user_id != ${targetId})
-              AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername}))
-              AND is_read = false
-              ORDER BY created_at DESC LIMIT 20
+          // Resolve all user identifiers for the recipient to ensure 100% reliable matching
+          let knownIds = [targetId, cleanUsername].filter(Boolean);
+          if (cleanCode) knownIds.push(cleanCode);
+
+          if (targetId || cleanUsername || cleanCode) {
+            const userLookup = await sql`
+              SELECT id, username, secret_code FROM daybyday_users
+              WHERE id = ${targetId || 'none'}
+                 OR LOWER(username) = LOWER(${cleanUsername || 'none'})
+                 OR UPPER(secret_code) = UPPER(${cleanCode || 'none'})
+              LIMIT 1
             `;
-          } else if (targetId) {
-            cheers = await sql`
-              SELECT * FROM daybyday_cheers
-              WHERE (
-                to_user_id = ${targetId} 
-                OR to_user_id = ${cleanUsername} 
-                OR LOWER(to_user_id) = LOWER(${cleanUsername})
-              )
-              AND (from_user_id IS NULL OR from_user_id != ${targetId})
-              AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername}))
-              AND is_read = false
-              ORDER BY created_at DESC LIMIT 20
-            `;
-          } else if (podCode) {
-            cheers = await sql`
-              SELECT * FROM daybyday_cheers
-              WHERE pod_code = ${podCode} 
-                AND (from_user_id IS NULL OR from_user_id != ${targetId})
-                AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername}))
-                AND is_read = false
-              ORDER BY created_at DESC LIMIT 20
-            `;
+            if (userLookup.length > 0) {
+              const u = userLookup[0];
+              if (u.id) knownIds.push(u.id);
+              if (u.username) knownIds.push(u.username);
+              if (u.secret_code) knownIds.push(u.secret_code);
+            }
           }
+          knownIds = [...new Set(knownIds.filter(Boolean))];
+
+          cheers = await sql`
+            SELECT * FROM daybyday_cheers
+            WHERE (
+              to_user_id = ANY(${knownIds})
+              OR LOWER(to_user_id) = LOWER(${cleanUsername || 'none'})
+              ${podCode ? sql`OR (to_user_id IS NULL AND pod_code = ${podCode})` : sql``}
+            )
+            AND (from_user_id IS NULL OR from_user_id != ALL(${knownIds}))
+            AND (from_username IS NULL OR LOWER(from_username) != LOWER(${cleanUsername || 'none'}))
+            AND is_read = false
+            ORDER BY created_at DESC LIMIT 30
+          `;
         } else {
           cheers = memoryDb.getCheersForUser(targetId, podCode) || [];
           cheers = cheers.filter(
@@ -1876,6 +1922,7 @@ export default async function handler(req, res) {
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
+    }
     }
 
     // ACTION: MARK CHEERS READ

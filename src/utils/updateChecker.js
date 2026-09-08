@@ -5,7 +5,7 @@
 
 import { getApiBaseUrl } from './api';
 
-export const CURRENT_APP_VERSION = '2.7.2';
+export const CURRENT_APP_VERSION = '3.0.0';
 export const RELEASES_PAGE_URL = 'https://github.com/palakharinkhede4/DayByDay/releases';
 export const DIRECT_APK_URL = 'https://github.com/palakharinkhede4/DayByDay/releases/latest';
 const RELEASES_API_URL = 'https://api.github.com/repos/palakharinkhede4/DayByDay/releases/latest';
@@ -212,6 +212,8 @@ export const checkForAppUpdate = async () => {
       updateAvailable,
       releaseName: data.name || 'DayByDay Latest Build',
       tagName: data.tag_name || 'latest',
+      releaseTag: data.tag_name || 'latest',
+      version: (data.tag_name || '').replace(/^v/, '') || data.name || CURRENT_APP_VERSION,
       publishedAt,
       formattedDate,
       releasePageUrl: data.html_url || RELEASES_PAGE_URL,

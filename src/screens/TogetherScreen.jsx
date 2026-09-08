@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitContext';
 import { sound } from '../utils/sound';
 import {
@@ -17,6 +17,7 @@ import {
   X,
   SlidersHorizontal,
   ChevronRight,
+  Pencil,
 } from 'lucide-react';
 const POD_GOAL_PRESETS = [
   { name: '10,000 Steps', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
@@ -37,6 +38,199 @@ const getMemberProgressVal = (memberProgressMap, m) => {
   if (raw === undefined || raw === null) return 0;
   if (typeof raw === 'object') return Number(raw.value) || 0;
   return Number(raw) || 0;
+};
+
+const EditGroupNameModal = ({ currentName, podCode, onClose, onSave }) => {
+  const [name, setName] = useState(currentName || '');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSave(podCode, name.trim());
+    onClose();
+  };
+
+  return (
+    <div className="habit-modal-backdrop" onClick={onClose}>
+      <div className="habit-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Edit Group Name">
+        <div className="habit-modal-header">
+          <div className="habit-modal-title-group">
+            <h2 className="habit-modal-title font-extrabold">Edit Group Name</h2>
+            <p className="habit-modal-subtitle">Rename your pod for all members in real time.</p>
+          </div>
+          <button className="habit-modal-close-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="habit-modal-body">
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">Group Name</label>
+            <input
+              type="text"
+              className="habit-modal-input font-medium"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Morning Champions, Focus Squad"
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="habit-modal-actions">
+            <button type="button" className="habit-modal-btn cancel" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="habit-modal-btn save font-bold">
+              Save Name
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const AddSharedGoalModal = ({ onClose, onSave }) => {
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('Daily');
+  const [target, setTarget] = useState(10);
+  const [unit, setUnit] = useState('times');
+  const [delta, setDelta] = useState(1);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSave({
+      name: name.trim(),
+      category,
+      target: Math.max(1, Number(target) || 1),
+      unit: unit.trim() || 'times',
+      delta: Math.max(1, Number(delta) || 1),
+    });
+    onClose();
+  };
+
+  return (
+    <div className="habit-modal-backdrop" onClick={onClose}>
+      <div className="habit-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Add Pod Goal">
+        <div className="habit-modal-header">
+          <div className="habit-modal-title-group">
+            <h2 className="habit-modal-title font-extrabold">New Shared Pod Goal</h2>
+            <p className="habit-modal-subtitle">Collective goal with individual progress tracking for all members.</p>
+          </div>
+          <button className="habit-modal-close-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="habit-modal-body">
+          {/* Quick Presets */}
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">Quick Presets</label>
+            <div className="preset-chips-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
+              {POD_GOAL_PRESETS.map((p) => (
+                <button
+                  key={p.name}
+                  type="button"
+                  className="pod-preset-pill"
+                  onClick={() => {
+                    sound.selection();
+                    setName(p.name);
+                    setCategory(p.category);
+                    setTarget(p.target);
+                    setUnit(p.unit);
+                    setDelta(p.delta);
+                  }}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Goal Name */}
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">Goal Name</label>
+            <input
+              type="text"
+              className="habit-modal-input font-medium"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 10,000 Steps, 3L Hydration"
+              required
+            />
+          </div>
+
+          {/* Category */}
+          <div className="habit-modal-field">
+            <label className="habit-modal-label font-bold">Category</label>
+            <select
+              className="habit-modal-input habit-modal-select font-medium"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="Fitness">Fitness</option>
+              <option value="Health">Health</option>
+              <option value="Mind">Mind</option>
+              <option value="Productivity">Productivity</option>
+              <option value="Daily">Daily</option>
+            </select>
+          </div>
+
+          {/* Target, Unit & Increment */}
+          <div className="habit-modal-row-split">
+            <div className="habit-modal-field">
+              <label className="habit-modal-label font-bold">Target / Person</label>
+              <input
+                type="number"
+                min="1"
+                max="1000000"
+                className="habit-modal-input font-medium"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="habit-modal-field">
+              <label className="habit-modal-label font-bold">Unit</label>
+              <input
+                type="text"
+                className="habit-modal-input font-medium"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="steps, min, reps"
+                required
+              />
+            </div>
+
+            <div className="habit-modal-field">
+              <label className="habit-modal-label font-bold">Step (+ / -)</label>
+              <input
+                type="number"
+                min="1"
+                max="100000"
+                className="habit-modal-input font-medium"
+                value={delta}
+                onChange={(e) => setDelta(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="habit-modal-actions">
+            <button type="button" className="habit-modal-btn cancel" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="habit-modal-btn save font-bold">
+              Create Goal
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
@@ -223,10 +417,12 @@ export const TogetherScreen = () => {
     createGroupPod,
     joinGroupPod,
     leaveGroupPod,
+    editGroupName,
     addSharedGoal,
     editSharedGoal,
     updateSharedGoalProgress,
     deleteSharedGoal,
+    syncTogetherPodWithHabits,
     sendCheer,
     triggerIslandNotification,
     triggerCelebration,
@@ -238,14 +434,12 @@ export const TogetherScreen = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateJoinModal, setShowCreateJoinModal] = useState(false);
   const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
-  
-  // Shared Goal Modal Form State
-  const [goalName, setGoalName] = useState('');
-  const [goalTarget, setGoalTarget] = useState(10000);
-  const [goalUnit, setGoalUnit] = useState('steps');
-  const [goalDelta, setGoalDelta] = useState(1000);
-  const [goalCategory, setGoalCategory] = useState('Fitness');
+
+  useEffect(() => {
+    syncTogetherPodWithHabits?.();
+  }, [groupPod?.code]);
 
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
@@ -308,26 +502,6 @@ export const TogetherScreen = () => {
     } finally {
       setIsJoining(false);
     }
-  };
-
-  const handleAddGoalSubmit = async (e) => {
-    e.preventDefault();
-    if (!goalName.trim()) return;
-    
-    await addSharedGoal({
-      name: goalName.trim(),
-      target: Number(goalTarget) || 1,
-      unit: goalUnit.trim() || 'reps',
-      delta: Number(goalDelta) || 1,
-      category: goalCategory || 'Fitness',
-    });
-
-    setGoalName('');
-    setGoalTarget(10000);
-    setGoalUnit('steps');
-    setGoalDelta(1000);
-    setIsAddingGoal(false);
-    triggerIslandNotification('Shared goal added to pod', 'check');
   };
 
   const handleCheerMember = (member, goalName) => {
@@ -451,6 +625,15 @@ export const TogetherScreen = () => {
                   <Users size={18} />
                 </span>
                 <h2 className="group-title font-black">{groupPod.name}</h2>
+                <button
+                  type="button"
+                  className="edit-group-name-btn"
+                  onClick={() => setIsEditingGroupName(true)}
+                  title="Edit group name"
+                  aria-label="Edit group name"
+                >
+                  <Pencil size={14} />
+                </button>
               </div>
               <div className="group-code-row">
                 <span className="group-code-pill font-mono font-bold">{groupPod.code}</span>
@@ -565,132 +748,16 @@ export const TogetherScreen = () => {
                 <button
                   type="button"
                   className="add-shared-goal-btn"
-                  onClick={() => setIsAddingGoal(!isAddingGoal)}
+                  onClick={() => {
+                    sound.press();
+                    setIsAddingGoal(true);
+                  }}
                 >
                   <Plus size={15} />
                   <span>Add Goal</span>
                 </button>
               </div>
             </div>
-
-            {/* Modal / Inline form for Add Shared Goal */}
-            {isAddingGoal && (
-              <form onSubmit={handleAddGoalSubmit} className="add-shared-goal-form">
-                <div className="add-goal-form-title-row">
-                  <span className="font-bold text-slate-200">New Shared Pod Goal</span>
-                  <button
-                    type="button"
-                    className="form-close-x"
-                    onClick={() => setIsAddingGoal(false)}
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                {/* Quick Presets Row */}
-                <div className="pod-presets-row">
-                  <span className="preset-label font-bold text-xs text-slate-400">Presets:</span>
-                  <div className="preset-chips-scroll">
-                    {POD_GOAL_PRESETS.map((p) => (
-                      <button
-                        key={p.name}
-                        type="button"
-                        className="pod-preset-pill"
-                        onClick={() => {
-                          sound.selection();
-                          setGoalName(p.name);
-                          setGoalCategory(p.category);
-                          setGoalTarget(p.target);
-                          setGoalUnit(p.unit);
-                          setGoalDelta(p.delta);
-                        }}
-                      >
-                        {p.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="shared-goal-fields-grid">
-                  <div className="shared-field">
-                    <label className="field-lbl">Goal Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 10,000 Daily Steps, 3L Water"
-                      value={goalName}
-                      onChange={(e) => setGoalName(e.target.value)}
-                      required
-                      className="shared-goal-input name"
-                    />
-                  </div>
-
-                  <div className="shared-field">
-                    <label className="field-lbl">Category</label>
-                    <select
-                      value={goalCategory}
-                      onChange={(e) => setGoalCategory(e.target.value)}
-                      className="shared-goal-input select"
-                    >
-                      <option value="Fitness">Fitness</option>
-                      <option value="Health">Health</option>
-                      <option value="Mind">Mind</option>
-                      <option value="Productivity">Productivity</option>
-                      <option value="Daily">Daily</option>
-                    </select>
-                  </div>
-
-                  <div className="shared-field">
-                    <label className="field-lbl">Daily Target</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={goalTarget}
-                      onChange={(e) => setGoalTarget(Number(e.target.value))}
-                      className="shared-goal-input target"
-                      required
-                    />
-                  </div>
-
-                  <div className="shared-field">
-                    <label className="field-lbl">Unit</label>
-                    <input
-                      type="text"
-                      value={goalUnit}
-                      onChange={(e) => setGoalUnit(e.target.value)}
-                      className="shared-goal-input unit"
-                      placeholder="steps, min, reps"
-                      required
-                    />
-                  </div>
-
-                  <div className="shared-field">
-                    <label className="field-lbl">Step Increment (+/-)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={goalDelta}
-                      onChange={(e) => setGoalDelta(Number(e.target.value))}
-                      className="shared-goal-input delta"
-                      placeholder="e.g. 1000, 5, 1"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="shared-goal-form-actions">
-                  <button
-                    type="button"
-                    className="cancel-form-btn"
-                    onClick={() => setIsAddingGoal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="shared-goal-save-btn">
-                    Save Pod Goal
-                  </button>
-                </div>
-              </form>
-            )}
 
             {/* Shared Goals List */}
             <div className="together-goals-list">
@@ -1006,6 +1073,24 @@ export const TogetherScreen = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add Shared Goal Modal */}
+      {isAddingGoal && (
+        <AddSharedGoalModal
+          onClose={() => setIsAddingGoal(false)}
+          onSave={addSharedGoal}
+        />
+      )}
+
+      {/* Edit Group Name Modal */}
+      {isEditingGroupName && (
+        <EditGroupNameModal
+          currentName={groupPod?.name}
+          podCode={groupPod?.code}
+          onClose={() => setIsEditingGroupName(false)}
+          onSave={editGroupName}
+        />
       )}
 
       {/* Edit Shared Goal Settings Modal */}

@@ -27,6 +27,7 @@ import {
   updateGroupGoalRemote,
   deleteGroupGoalRemote,
   leaveGroupPodRemote,
+  editGroupNameRemote,
   sendCheerRemote,
   fetchCheersRemote,
   markCheersReadRemote,
@@ -365,6 +366,8 @@ export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser,
 
 export const HabitProvider = ({ children }) => {
   const firedRemindersRef = useRef(new Set());
+  const isCrossSyncingRef = useRef(false);
+  const isHealthSyncRunningRef = useRef(false);
 
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
@@ -986,11 +989,13 @@ export const HabitProvider = ({ children }) => {
     checkVaultSession();
   }, []);
 
-  // Dual-layer session snapshot sync: whenever session state changes, mirror to both localStorage and IndexedDB Vault
+  // Dual-layer session snapshot sync: debounced to prevent IndexedDB lockups during batch updates
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+    const timer = setTimeout(() => {
       persistSessionSnapshot(user, partner, habits, pod, groupPod, trackedPartners, activeTrackedCode);
-    }
+    }, 250);
+    return () => clearTimeout(timer);
   }, [user, partner, habits, pod, groupPod, trackedPartners, activeTrackedCode]);
 
   // Multi-tab real-time session and habits synchronization
@@ -1017,7 +1022,9 @@ export const HabitProvider = ({ children }) => {
         } else if (e.key === 'daybyday_theme_mode' || e.key === 'duotrack_theme_mode') {
           if (e.newValue) {
             setThemeModeState(e.newValue);
-            document.documentElement.setAttribute('data-theme-mode', e.newValue);
+            const effective = resolveEffectiveTheme(e.newValue);
+            document.documentElement.setAttribute('data-theme-mode', effective);
+            document.documentElement.setAttribute('data-theme-preference', e.newValue);
           }
         } else if (e.key === 'daybyday_theme' || e.key === 'duotrack_theme') {
           if (e.newValue) {
@@ -1153,7 +1160,9 @@ export const HabitProvider = ({ children }) => {
     if (prefs.themeMode) {
       setThemeModeState(prefs.themeMode);
       localStorage.setItem('daybyday_theme_mode', prefs.themeMode);
-      document.documentElement.setAttribute('data-theme-mode', prefs.themeMode);
+      const effective = resolveEffectiveTheme(prefs.themeMode);
+      document.documentElement.setAttribute('data-theme-mode', effective);
+      document.documentElement.setAttribute('data-theme-preference', prefs.themeMode);
     }
     if (prefs.useMaterial3Theme !== undefined) {
       const isM3 = Boolean(prefs.useMaterial3Theme);
@@ -2058,7 +2067,7 @@ export const HabitProvider = ({ children }) => {
     const checkCheers = async () => {
       try {
         const targetId = user.id || user.username;
-        const cheers = await fetchCheersRemote(targetId, user.username, groupPod?.code);
+        const cheers = await fetchCheersRemote(targetId, user.username, groupPod?.code, myCode);
         if (!isSubscribed || !Array.isArray(cheers) || cheers.length === 0) return;
 
         const unread = cheers.filter((c) => {
@@ -2152,11 +2161,22 @@ export const HabitProvider = ({ children }) => {
 
     checkCheers();
     const interval = setInterval(checkCheers, 30000);
+
+    const handleFocus = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        checkCheers();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
     return () => {
       isSubscribed = false;
       clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
     };
-  }, [user?.id, user?.username, groupPod?.code]);
+  }, [user?.id, user?.username, user?.secretCode, user?.secret_code, groupPod?.code]);
 
   // Active user streak computed dynamically from habits
   const activeUserStreak = useMemo(() => {
@@ -2301,12 +2321,39 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification('Left group pod', 'user');
   };
 
-  const addSharedGoal = async (goalOrName, target, unit, delta, category) => {
-    sound.complete();
-    if (!groupPod) return;
+  // Option to edit group pod name
+  const editGroupName = async (podCode, newName) => {
+    if (!podCode || !newName?.trim()) return;
+    const trimmedName = newName.trim();
+    sound.press();
+    setGroupPod((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, name: trimmedName };
+      try {
+        localStorage.setItem('daybyday_group_pod', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    try {
+      const res = await editGroupNameRemote(podCode, trimmedName);
+      if (res && res.groupPod) {
+        setGroupPod(res.groupPod);
+        try {
+          localStorage.setItem('daybyday_group_pod', JSON.stringify(res.groupPod));
+        } catch {}
+      }
+      triggerIslandNotification('Group name updated!', 'check');
+    } catch (err) {
+      console.warn('Edit group name error:', err);
+    }
+  };
 
-    let goalObj = {};
-    if (typeof goalOrName === 'object' && goalOrName !== null) {
+  const addSharedGoal = async (goalOrName, target, unit, delta, category) => {
+    if (!groupPod) return;
+    sound.press();
+
+    let goalObj;
+    if (goalOrName && typeof goalOrName === 'object') {
       goalObj = goalOrName;
     } else {
       goalObj = {
@@ -2319,16 +2366,32 @@ export const HabitProvider = ({ children }) => {
     }
 
     const currentMemberId = user?.id || user?.username || 'usr_me';
-    const initProg = {
-      value: 0,
-      completed: false,
+
+    // Instant Stat Sync: Check if this new shared goal matches any existing habit in user's habits
+    const latestHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const matchingHabit = (latestHabits || []).find((h) => isHabitMatchingSharedGoal(h, goalObj));
+    let initialUserProgress = 0;
+    if (matchingHabit) {
+      initialUserProgress = typeof matchingHabit.user1 === 'boolean'
+        ? (matchingHabit.user1 ? 1 : 0)
+        : Math.max(0, Number(matchingHabit.user1) || 0);
+    }
+
+    const isGoalDone = initialUserProgress >= (Number(goalObj.target) || 1);
+    const initialProgressEntry = {
+      value: initialUserProgress,
+      completed: isGoalDone,
       updatedAt: new Date().toISOString(),
     };
-    const initialMemberProgress = {
-      [currentMemberId]: initProg,
-    };
-    if (user?.id) initialMemberProgress[user.id] = initProg;
-    if (user?.username) initialMemberProgress[user.username] = initProg;
+
+    const memberProgress = {};
+    (groupPod.members || []).forEach((m) => {
+      const isMe = m.id === currentMemberId || m.username === user?.username || m.id === user?.id;
+      memberProgress[m.id] = isMe ? initialProgressEntry : { value: 0, completed: false, updatedAt: new Date().toISOString() };
+    });
+    memberProgress[currentMemberId] = initialProgressEntry;
+    if (user?.id) memberProgress[user.id] = initialProgressEntry;
+    if (user?.username) memberProgress[user.username] = initialProgressEntry;
 
     const newGoal = {
       id: goalObj.id || `sg_${Date.now().toString(36)}`,
@@ -2339,8 +2402,8 @@ export const HabitProvider = ({ children }) => {
       category: goalObj.category || 'Daily',
       delta: Math.max(1, Number(goalObj.delta) || 1),
       createdBy: currentMemberId,
-      current: 0,
-      memberProgress: initialMemberProgress,
+      current: initialUserProgress,
+      memberProgress,
       createdAt: new Date().toISOString(),
     };
 
@@ -2366,7 +2429,7 @@ export const HabitProvider = ({ children }) => {
     triggerIslandNotification('Shared goal added to pod!', 'target');
   };
 
-  const updateSharedGoalProgress = async (goalId, delta, explicitValue, silent = false) => {
+  const updateSharedGoalProgress = async (goalId, delta, explicitValue, silent = false, origin = 'user') => {
     if (!groupPod) return;
 
     const myKey = user?.id || user?.username || 'usr_me';
@@ -2438,17 +2501,124 @@ export const HabitProvider = ({ children }) => {
       ).catch(() => {});
     }
 
-    // Bidirectional sync: propagate updated value to matching habit in Habits tab
-    const matchedGoal = updatedGoals.find((g) => g.id === goalId);
-    if (matchedGoal) {
-      const targetHabit = habits.find((h) => isHabitMatchingSharedGoal(h, matchedGoal));
-      if (targetHabit) {
-        const myEntry = matchedGoal.memberProgress?.[myKey];
-        const myVal = typeof myEntry === 'object' ? Number(myEntry.value) : Number(myEntry);
-        if (myVal !== undefined && !isNaN(myVal) && Number(targetHabit.user1) !== myVal) {
-          updateHabit(targetHabit.id, 'user1', myVal, true, true);
+    // Bidirectional sync: propagate updated value to matching habit in Habits tab (STRICTLY GUARDED against recursion)
+    if (origin !== 'habit' && !isCrossSyncingRef.current) {
+      const matchedGoal = updatedGoals.find((g) => g.id === goalId);
+      if (matchedGoal) {
+        const latestHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+        const targetHabit = latestHabits.find((h) => isHabitMatchingSharedGoal(h, matchedGoal));
+        if (targetHabit) {
+          const myEntry = matchedGoal.memberProgress?.[myKey];
+          const myVal = typeof myEntry === 'object' ? Number(myEntry.value) : Number(myEntry);
+          if (myVal !== undefined && !isNaN(myVal) && Number(targetHabit.user1) !== myVal) {
+            try {
+              isCrossSyncingRef.current = true;
+              updateHabit(targetHabit.id, 'user1', myVal, true, true, 'sharedGoal');
+            } finally {
+              isCrossSyncingRef.current = false;
+            }
+          }
         }
       }
+    }
+  };
+
+  // Instant sync: Reconciles all shared goals with user's current habits (called on mount, goal add, & Together tab open)
+  const syncTogetherPodWithHabits = async () => {
+    if (!groupPod || !Array.isArray(groupPod.sharedGoals) || groupPod.sharedGoals.length === 0) return;
+    const latestHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    if (!latestHabits || !latestHabits.length) return;
+
+    const myKey = user?.id || user?.username || 'usr_me';
+    let podChanged = false;
+
+    const reconciledGoals = groupPod.sharedGoals.map((sg) => {
+      const matchingHabit = latestHabits.find((h) => isHabitMatchingSharedGoal(h, sg));
+      if (!matchingHabit) return sg;
+
+      const habitVal = typeof matchingHabit.user1 === 'boolean'
+        ? (matchingHabit.user1 ? 1 : 0)
+        : Math.max(0, Number(matchingHabit.user1) || 0);
+
+      const memberProgress = { ...(sg.memberProgress || {}) };
+      const myEntry = memberProgress[myKey] ??
+                      (user?.id ? memberProgress[user.id] : undefined) ??
+                      (user?.username ? memberProgress[user.username] : undefined) ??
+                      memberProgress['user1'];
+
+      const currentVal = typeof myEntry === 'object'
+        ? (Number(myEntry?.value) || 0)
+        : (Number(myEntry) || 0);
+
+      if (habitVal !== currentVal) {
+        podChanged = true;
+        const isDone = habitVal >= (Number(sg.target) || 1);
+        const updatedEntry = {
+          value: habitVal,
+          completed: isDone,
+          updatedAt: new Date().toISOString(),
+        };
+        memberProgress[myKey] = updatedEntry;
+        if (user?.id) memberProgress[user.id] = updatedEntry;
+        if (user?.username) memberProgress[user.username] = updatedEntry;
+
+        const totalSum = Object.values(memberProgress).reduce(
+          (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
+          0
+        );
+
+        if (groupPod.code) {
+          updateGroupGoalRemote(
+            groupPod.code,
+            sg.id,
+            0,
+            myKey,
+            habitVal,
+            isDone
+          ).catch(() => {});
+        }
+
+        return {
+          ...sg,
+          current: totalSum,
+          memberProgress,
+        };
+      }
+      return sg;
+    });
+
+    if (podChanged) {
+      const updatedPod = { ...groupPod, sharedGoals: reconciledGoals };
+      setGroupPod(updatedPod);
+      try {
+        localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedPod));
+      } catch {}
+    }
+  };
+
+  // Unified global sync function: syncs all stats as soon as user opens or clicks any tab
+  const syncAllStats = async (targetTab) => {
+    try {
+      // 1. Sync device health stats non-blockingly
+      if (isHealthSyncEnabled()) {
+        syncDeviceHealth({ silent: true, force: false }).catch(() => {});
+      }
+
+      // 2. Reconcile Together group goals with latest habits
+      if (targetTab === 'together' || !targetTab) {
+        syncTogetherPodWithHabits().catch(() => {});
+      }
+
+      // 3. Refresh group pod from cloud
+      if (groupPod?.code) {
+        getGroupPodRemote(groupPod.code).then((remote) => {
+          if (remote) {
+            setGroupPod((prev) => prev ? { ...prev, members: remote.members || prev.members, sharedGoals: remote.sharedGoals || prev.sharedGoals } : remote);
+          }
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('syncAllStats notice:', err);
     }
   };
 
@@ -2552,31 +2722,38 @@ export const HabitProvider = ({ children }) => {
   // Import Native OS Fitness & Step Stats and Auto-Sync to Habits and Together Pod
   const syncDeviceHealth = async ({ silent = false, force = false } = {}) => {
     if (!force && !isHealthSyncEnabled()) return null;
+    if (isHealthSyncRunningRef.current) return healthStats;
+
+    isHealthSyncRunningRef.current = true;
     if (!silent) sound.press();
 
-    const healthData = await importDeviceHealthStats(user);
-    if (healthData && healthData.success) {
-      setHealthStats(healthData);
-      await syncHealthDataToHabitsAndPod({
-        healthData,
-        habits: habitsRef.current || habits,
-        sharedGoals: groupPod?.sharedGoals || [],
-        activeUserId: 'user1',
-        onUpdateHabit: updateHabit,
-        onUpdateSharedGoal: updateSharedGoalProgress,
-        triggerIslandNotification: silent ? null : triggerIslandNotification,
-        silent: Boolean(silent),
-      });
-      const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
-      if (targetIdOrCode) {
-        syncHealthDataRemote(targetIdOrCode, healthData).catch(() => {});
+    try {
+      const healthData = await importDeviceHealthStats(user);
+      if (healthData && healthData.success) {
+        setHealthStats(healthData);
+        await syncHealthDataToHabitsAndPod({
+          healthData,
+          habits: habitsRef.current || habits,
+          sharedGoals: groupPod?.sharedGoals || [],
+          activeUserId: 'user1',
+          onUpdateHabit: (hId, uId, val, isAbs, isSil) => updateHabit(hId, uId, val, isAbs, isSil, 'health'),
+          onUpdateSharedGoal: (gId, d, exp, isSil) => updateSharedGoalProgress(gId, d, exp, isSil, 'health'),
+          triggerIslandNotification: silent ? null : triggerIslandNotification,
+          silent: Boolean(silent),
+        });
+        const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
+        if (targetIdOrCode) {
+          syncHealthDataRemote(targetIdOrCode, healthData).catch(() => {});
+        }
+        return healthData;
+      } else {
+        if (!silent) {
+          triggerIslandNotification(healthData?.error || 'Could not import health stats', 'untrack');
+        }
+        return healthData;
       }
-      return healthData;
-    } else {
-      if (!silent) {
-        triggerIslandNotification(healthData?.error || 'Could not import health stats', 'untrack');
-      }
-      return healthData;
+    } finally {
+      isHealthSyncRunningRef.current = false;
     }
   };
 
@@ -2589,8 +2766,8 @@ export const HabitProvider = ({ children }) => {
       habits: habitsRef.current || habits,
       sharedGoals: groupPod?.sharedGoals || [],
       activeUserId: 'user1',
-      onUpdateHabit: updateHabit,
-      onUpdateSharedGoal: updateSharedGoalProgress,
+      onUpdateHabit: (hId, uId, val, isAbs, isSil) => updateHabit(hId, uId, val, isAbs, isSil, 'health'),
+      onUpdateSharedGoal: (gId, d, exp, isSil) => updateSharedGoalProgress(gId, d, exp, isSil, 'health'),
       triggerIslandNotification,
     });
     const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
@@ -2841,7 +3018,7 @@ export const HabitProvider = ({ children }) => {
   };
 
   // Update Habit Value (Single Habit Change)
-  const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false, silent = false) => {
+  const updateHabit = (habitId, userId, amountOrValue, isAbsolute = false, silent = false, origin = 'user') => {
     if (!silent) sound.tap();
     let computedNextValue = null;
     const todayKey = getLocalDateKey();
@@ -2955,15 +3132,22 @@ export const HabitProvider = ({ children }) => {
           }
         }
 
-        // UNIFIED SYNC: Update ANY matching shared goal in the Together pod (Water, Steps, Reading, Meditation, etc.)!
-        if (groupPod && Array.isArray(groupPod.sharedGoals)) {
-          const valToSync = typeof computedNextValue === 'boolean'
-            ? (computedNextValue ? 1 : 0)
-            : Math.max(0, Number(computedNextValue) || 0);
+        // UNIFIED SYNC: Update ANY matching shared goal in the Together pod (STRICTLY GUARDED against circular recursion)
+        if (origin !== 'sharedGoal' && !isCrossSyncingRef.current) {
+          if (groupPod && Array.isArray(groupPod.sharedGoals)) {
+            const valToSync = typeof computedNextValue === 'boolean'
+              ? (computedNextValue ? 1 : 0)
+              : Math.max(0, Number(computedNextValue) || 0);
 
-          for (const sg of groupPod.sharedGoals) {
-            if (isHabitMatchingSharedGoal(targetHabit, sg)) {
-              updateSharedGoalProgress(sg.id, 0, valToSync, silent);
+            for (const sg of groupPod.sharedGoals) {
+              if (isHabitMatchingSharedGoal(targetHabit, sg)) {
+                try {
+                  isCrossSyncingRef.current = true;
+                  updateSharedGoalProgress(sg.id, 0, valToSync, silent, 'habit');
+                } finally {
+                  isCrossSyncingRef.current = false;
+                }
+              }
             }
           }
         }
@@ -3284,10 +3468,13 @@ export const HabitProvider = ({ children }) => {
         createGroupPod,
         joinGroupPod,
         leaveGroupPod,
+        editGroupName,
         addSharedGoal,
         editSharedGoal,
         updateSharedGoalProgress,
         deleteSharedGoal,
+        syncTogetherPodWithHabits,
+        syncAllStats,
         serverUrl,
         setServerUrl,
         syncStatus,

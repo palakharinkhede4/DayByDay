@@ -4600,6 +4600,87 @@ button:active {
   font-weight: 800 !important;
 }
 
+/* System Default (Auto) - When user selects System and device prefers Light mode */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme-mode="dark"]) .mobile-app-header,
+  [data-theme-preference="auto"] .mobile-app-header,
+  [data-theme-mode="auto"] .mobile-app-header {
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  :root:not([data-theme-mode="dark"]) .mobile-app-header .mobile-brand-title,
+  :root:not([data-theme-mode="dark"]) .mobile-brand-title,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-brand-title,
+  [data-theme-preference="auto"] .mobile-brand-title,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-brand-title,
+  [data-theme-mode="auto"] .mobile-brand-title {
+    color: #0F172A !important;
+    -webkit-text-fill-color: #0F172A !important;
+    font-weight: 800 !important;
+  }
+
+  :root:not([data-theme-mode="dark"]) .mobile-app-header .mobile-brand-badge,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-brand-badge,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-brand-badge {
+    background: #FEF3C7 !important;
+    border: 1px solid rgba(245, 158, 11, 0.4) !important;
+  }
+
+  :root:not([data-theme-mode="dark"]) .mobile-app-header .mobile-brand-flame,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-brand-flame,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-brand-flame {
+    color: #D97706 !important;
+  }
+
+  :root:not([data-theme-mode="dark"]) .mobile-app-header .mobile-theme-btn,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-theme-btn,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-theme-btn {
+    background: #F1F5F9 !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #334155 !important;
+  }
+
+  :root:not([data-theme-mode="dark"]) .mobile-app-header .mobile-avatar-badge,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-avatar-badge,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-avatar-badge {
+    background: #F1F5F9 !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #0F172A !important;
+  }
+
+  :root:not([data-theme-mode="dark"]) .mobile-app-header .mobile-avatar-char,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-avatar-char,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-avatar-char {
+    color: #0F172A !important;
+    font-weight: 800 !important;
+  }
+}
+
+/* System Default (Auto) - When user selects System and device prefers Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-mode="light"]) .mobile-app-header,
+  [data-theme-preference="auto"] .mobile-app-header,
+  [data-theme-mode="auto"] .mobile-app-header {
+    background: #090D16 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  :root:not([data-theme-mode="light"]) .mobile-app-header .mobile-brand-title,
+  :root:not([data-theme-mode="light"]) .mobile-brand-title,
+  [data-theme-preference="auto"] .mobile-app-header .mobile-brand-title,
+  [data-theme-preference="auto"] .mobile-brand-title,
+  [data-theme-mode="auto"] .mobile-app-header .mobile-brand-title,
+  [data-theme-mode="auto"] .mobile-brand-title {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+  }
+}
+
 [data-theme-mode="dark"] .mobile-app-header {
   background: #090D16 !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -6916,6 +6997,39 @@ button:active {
 .group-title {
   font-size: 1.35rem;
   color: var(--text-primary, #f8fafc);
+}
+
+.edit-group-name-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  color: var(--text-secondary, #94a3b8);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin-left: 0.35rem;
+}
+
+.edit-group-name-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #ffffff);
+  border-color: var(--border-medium, rgba(255, 255, 255, 0.25));
+  transform: scale(1.05);
+}
+
+[data-theme-mode="light"] .edit-group-name-btn {
+  border-color: #CBD5E1 !important;
+  color: #64748B !important;
+}
+
+[data-theme-mode="light"] .edit-group-name-btn:hover {
+  background: #F1F5F9 !important;
+  color: #0F172A !important;
 }
 
 .group-code-row {
@@ -11265,6 +11379,24 @@ button:active {
   -webkit-backdrop-filter: none !important;
 }
 
+@media (prefers-color-scheme: light) {
+  [data-os="android"][data-theme-preference="auto"] .mobile-app-header,
+  [data-os="android"] [data-theme-preference="auto"] .mobile-app-header,
+  [data-os="android"][data-theme-mode="auto"] .mobile-app-header,
+  [data-os="android"] [data-theme-mode="auto"] .mobile-app-header {
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  }
+  [data-os="android"][data-theme-preference="auto"] .mobile-brand-title,
+  [data-os="android"] [data-theme-preference="auto"] .mobile-brand-title,
+  [data-os="android"][data-theme-mode="auto"] .mobile-brand-title,
+  [data-os="android"] [data-theme-mode="auto"] .mobile-brand-title {
+    color: #0F172A !important;
+    -webkit-text-fill-color: #0F172A !important;
+  }
+}
+
 [data-os="android"][data-theme-mode="light"] .mobile-brand-title,
 [data-os="android"] [data-theme-mode="light"] .mobile-brand-title,
 [data-theme-mode="light"][data-os="android"] .mobile-brand-title {
@@ -11314,6 +11446,16 @@ button:active {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-os="web"][data-theme-preference="auto"] .desktop-navbar,
+  [data-os="web"] [data-theme-preference="auto"] .desktop-navbar,
+  [data-theme-preference="auto"] .desktop-navbar {
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  }
 }
 
 [data-os="web"][data-theme-mode="light"] .brand-name,

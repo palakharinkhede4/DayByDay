@@ -714,6 +714,27 @@ export const deleteGroupGoalRemote = async (podCode, goalId) => {
   }
 };
 
+export const editGroupNameRemote = async (podCode, name) => {
+  if (!hasRemoteBackend()) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'edit_group_name',
+        podCode,
+        name,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await parseJsonSafe(res);
+    return data?.pod || null;
+  } catch {
+    return null;
+  }
+};
+
 export const leaveGroupPodRemote = async (podCode, userId) => {
   if (!hasRemoteBackend()) return false;
   const baseUrl = getApiBaseUrl();
@@ -764,7 +785,7 @@ export const sendCheerRemote = async ({ toUserId, toUsername, fromUserId, fromUs
   }
 };
 
-export const fetchCheersRemote = async (userId, username, podCode) => {
+export const fetchCheersRemote = async (userId, username, podCode, secretCode) => {
   if (!hasRemoteBackend()) return [];
   const baseUrl = getApiBaseUrl();
   try {
@@ -775,6 +796,7 @@ export const fetchCheersRemote = async (userId, username, podCode) => {
         action: 'get_cheers',
         userId,
         username,
+        secretCode,
         podCode,
       }),
     });

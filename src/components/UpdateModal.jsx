@@ -3,6 +3,17 @@ import { Sparkles, Download, ExternalLink, CheckCircle2, RefreshCw, Copy, Check,
 import { installApkDirectly, openExternalUrl, DIRECT_APK_URL, RELEASES_PAGE_URL } from '../utils/updateChecker';
 import { sound } from '../utils/sound';
 
+const extractCleanVersion = (info) => {
+  if (!info) return '3.0.0';
+  const candidates = [info.tagName, info.releaseTag, info.releaseName, info.version];
+  for (const c of candidates) {
+    if (!c || typeof c !== 'string') continue;
+    const match = c.match(/v?(\d+\.\d+(?:\.\d+)?)/i);
+    if (match) return match[1];
+  }
+  return (info.tagName || info.version || '3.0.0').replace(/^v/, '');
+};
+
 export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false }) => {
   const [copied, setCopied] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
@@ -10,6 +21,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
   if (!isOpen) return null;
 
   const isUpdate = updateInfo?.updateAvailable;
+  const cleanVer = extractCleanVersion(updateInfo);
 
   const handleCopyLink = async () => {
     sound.press();
@@ -71,8 +83,8 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
             {isChecking
               ? 'Checking for the latest DayByDay improvements...'
               : isUpdate
-              ? `Version ${updateInfo?.releaseTag || '2.0.0'} is ready to install.`
-              : `You are on the latest version of DayByDay (${updateInfo?.currentVersion || 'v2.0.0'}).`}
+              ? `Version ${cleanVer} is ready to install.`
+              : `You are on the latest version of DayByDay (${updateInfo?.currentVersion ? (updateInfo.currentVersion.startsWith('v') ? updateInfo.currentVersion : `v${updateInfo.currentVersion}`) : 'v3.0.0'}).`}
           </p>
         </div>
 
@@ -82,7 +94,7 @@ export const UpdateModal = ({ isOpen, onClose, updateInfo, isChecking = false })
             <div className="update-detail-row">
               <span className="detail-label">Version</span>
               <span className="detail-value font-mono font-bold text-primary">
-                {updateInfo.releaseTag || updateInfo.releaseName || 'v2.0.0'}
+                {`v${cleanVer}`}
               </span>
             </div>
             {updateInfo.formattedDate && (
