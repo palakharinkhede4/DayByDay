@@ -8807,6 +8807,155 @@ button:active {
 }
 
 /* ==========================================================================
+   INSIGHTS STEPS & ACTIVITY TRENDS VISUALIZER
+   ========================================================================== */
+
+.cal-indicator-circle.has-steps {
+  background: rgba(0, 210, 132, 0.12) !important;
+  border: 1.5px solid rgba(0, 210, 132, 0.45);
+  color: var(--primary, #00d284) !important;
+}
+
+[data-theme-mode="light"] .cal-indicator-circle.has-steps {
+  background: rgba(0, 210, 132, 0.1) !important;
+  border-color: rgba(0, 210, 132, 0.6);
+}
+
+.cal-steps-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--primary, #1A56C4);
+  background: rgba(26, 86, 196, 0.14);
+  padding: 0.08rem 0.35rem;
+  border-radius: 9999px;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+}
+
+[data-theme-mode="light"] .cal-steps-badge {
+  background: rgba(26, 86, 196, 0.08);
+  color: #1A56C4;
+}
+
+.insights-steps-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .insights-steps-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+}
+
+.steps-stat-pill {
+  background: var(--bg-surface-container);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+[data-theme-mode="light"] .steps-stat-pill {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.steps-stat-val {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.steps-stat-lbl {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.steps-chart-bars-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: 140px;
+  padding: 1rem 0.75rem 0.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+}
+
+[data-theme-mode="light"] .steps-chart-bars-wrap {
+  background: rgba(241, 245, 249, 0.6);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.steps-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.steps-bar-col:hover {
+  transform: translateY(-2px);
+}
+
+.steps-bar-col.selected .steps-bar-fill {
+  box-shadow: 0 0 10px rgba(0, 210, 132, 0.5);
+  border: 1.5px solid #ffffff;
+}
+
+.steps-bar-val-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.steps-bar-track {
+  width: 100%;
+  max-width: 28px;
+  height: 85px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.steps-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  border-radius: 6px;
+  transition: height 0.4s ease;
+}
+
+.steps-bar-fill.partial {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.steps-bar-fill.zero {
+  height: 2px !important;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.steps-bar-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
    IN-APP UPDATE CHECKER & DATA PORTABILITY
    ========================================================================== */
 

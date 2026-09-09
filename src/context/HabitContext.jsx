@@ -385,8 +385,10 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
           history[priorDateKey] = val;
         }
       }
-      // On day rollover, reset today's value strictly to 0
-      history[targetDateKey] = isBool ? false : 0;
+      // On day rollover, reset today's value strictly to 0 ONLY if not already recorded
+      if (history[targetDateKey] === undefined) {
+        history[targetDateKey] = isBool ? false : 0;
+      }
     }
 
     // Restore multi-day steps from daybyday_health_history and daybyday_health_yesterday
@@ -1221,7 +1223,7 @@ export const HabitProvider = ({ children }) => {
                     history: cleanHistory([remHist, locHist, healthHist]),
                   };
                 });
-                const cleanRemote = getCleanDailyHabits(mergedRemoteHabits, todayKey, lastActive);
+                const cleanRemote = getCleanDailyHabits(mergedRemoteHabits, todayKey);
                 setHabits(cleanRemote);
                 habitsRef.current = cleanRemote;
                 localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
@@ -2263,8 +2265,10 @@ export const HabitProvider = ({ children }) => {
           }
         }
 
-        // Today strictly starts at 0
-        history[todayKey] = isBool ? false : 0;
+        // Today starts at 0 if not already recorded
+        if (history[todayKey] === undefined) {
+          history[todayKey] = isBool ? false : 0;
+        }
 
         const streak = calculateConsecutiveStreak(history, h.target, isBool);
 

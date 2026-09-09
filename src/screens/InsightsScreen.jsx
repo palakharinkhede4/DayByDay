@@ -14,6 +14,7 @@ import {
   XCircle,
   BarChart3,
   CalendarDays,
+  Footprints,
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -119,14 +120,26 @@ export const InsightsScreen = () => {
       const dateKey = getLocalDateKey(d);
 
       let completedOnDate = 0;
+      let daySteps = 0;
+      let hasAnyActivity = false;
+
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
         const target = Number(h.target) || 1;
         const { val, hasRecord } = getHistoricalValue(h, dateKey, isToday);
         if (hasRecord) {
-          if (isBool ? Boolean(val) : (Number(val) || 0) >= target) {
+          const num = Number(val) || 0;
+          if (isBool ? Boolean(val) : num >= target) {
             completedOnDate++;
           }
+          if (isBool ? Boolean(val) : num > 0) {
+            hasAnyActivity = true;
+          }
+        }
+        const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps' || (h.name || '').toLowerCase().includes('step');
+        if (isStep) {
+          const { val: stepVal } = getHistoricalValue(h, dateKey, isToday);
+          daySteps = Math.max(daySteps, Number(stepVal) || 0);
         }
       });
 
@@ -136,12 +149,50 @@ export const InsightsScreen = () => {
         dateKey,
         isToday,
         completedCount: completedOnDate,
+        daySteps,
         total: habits.length || 1,
         isSuccess: completedOnDate > 0,
+        hasActivity: hasAnyActivity || daySteps > 0,
       });
     }
     return result;
   }, [habits]);
+
+  // Dedicated 7-day steps statistics for weekly pulse and activity trends
+  const stepsWeeklyStats = useMemo(() => {
+    const stepHabit = habits.find(
+      (h) => (h.id || '').toLowerCase() === 'steps' ||
+             (h.unit || '').toLowerCase() === 'steps' ||
+             (h.name || '').toLowerCase().includes('step')
+    );
+    if (!stepHabit) return null;
+
+    const days = weekDays.map((d) => {
+      const { val } = getHistoricalValue(stepHabit, d.dateKey, d.isToday);
+      const steps = Math.max(0, Number(val) || 0);
+      return {
+        ...d,
+        steps,
+        isTargetMet: steps >= (Number(stepHabit.target) || 10000),
+      };
+    });
+
+    const totalSteps = days.reduce((sum, d) => sum + d.steps, 0);
+    const avgSteps = Math.round(totalSteps / days.length);
+    const totalDistance = Math.round(totalSteps * 0.000762 * 10) / 10;
+    const totalCalories = Math.round(totalSteps * 0.04);
+    const maxSteps = Math.max(Number(stepHabit.target) || 10000, ...days.map((d) => d.steps));
+
+    return {
+      stepHabit,
+      days,
+      totalSteps,
+      avgSteps,
+      totalDistance,
+      totalCalories,
+      maxSteps,
+    };
+  }, [habits, weekDays]);
 
   // 2. Full Month Calendar Grid
   const calendarGrid = useMemo(() => {
@@ -345,6 +396,78 @@ export const InsightsScreen = () => {
     );
   };
 
+  const renderStepsActivityCard = () => {
+    if (!stepsWeeklyStats) return null;
+    const { totalSteps, avgSteps, totalDistance, totalCalories, maxSteps, days } = stepsWeeklyStats;
+
+    return (
+      <div className="insights-section-card">
+        <div className="section-card-header">
+          <div className="section-card-title-group">
+            <Footprints size={18} className="text-emerald-400" />
+            <h3 className="section-card-title font-bold">Steps & Activity Trends (Past 7 Days)</h3>
+          </div>
+          <span className="section-card-tag font-semibold font-mono">
+            {totalSteps.toLocaleString()} Steps
+          </span>
+        </div>
+
+        {/* 4 Stat Pills */}
+        <div className="insights-steps-stats-grid">
+          <div className="steps-stat-pill">
+            <span className="steps-stat-val font-mono">{totalSteps.toLocaleString()}</span>
+            <span className="steps-stat-lbl">7-Day Total</span>
+          </div>
+          <div className="steps-stat-pill">
+            <span className="steps-stat-val font-mono">{avgSteps.toLocaleString()}</span>
+            <span className="steps-stat-lbl">Daily Avg</span>
+          </div>
+          <div className="steps-stat-pill">
+            <span className="steps-stat-val font-mono">{totalDistance} km</span>
+            <span className="steps-stat-lbl">Est. Distance</span>
+          </div>
+          <div className="steps-stat-pill">
+            <span className="steps-stat-val font-mono">{totalCalories} kcal</span>
+            <span className="steps-stat-lbl">Active Energy</span>
+          </div>
+        </div>
+
+        {/* 7-Day Interactive Steps Visualizer */}
+        <div className="steps-chart-bars-wrap">
+          {days.map((d, i) => {
+            const heightPct = maxSteps > 0 ? Math.min(100, Math.round((d.steps / maxSteps) * 100)) : 0;
+            const isSelected = selectedDateKey === d.dateKey;
+            const isPartial = d.steps > 0 && !d.isTargetMet;
+
+            return (
+              <div
+                key={d.dateKey || i}
+                className={`steps-bar-col ${isSelected ? 'selected' : ''}`}
+                onClick={() => setSelectedDateKey(d.dateKey)}
+                title={`${d.dateKey}: ${d.steps.toLocaleString()} steps`}
+              >
+                <span className="steps-bar-val-tag font-mono">
+                  {d.steps > 0
+                    ? (d.steps >= 1000 ? `${(d.steps / 1000).toFixed(1)}k` : d.steps)
+                    : '0'}
+                </span>
+                <div className="steps-bar-track">
+                  <div
+                    className={`steps-bar-fill ${d.steps === 0 ? 'zero' : (isPartial ? 'partial' : 'met')}`}
+                    style={{ height: d.steps > 0 ? `${Math.max(8, heightPct)}%` : '3px' }}
+                  />
+                </div>
+                <span className="steps-bar-label font-bold">
+                  {d.dayName}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="screen-insights-container">
       {/* Header */}
@@ -435,17 +558,24 @@ export const InsightsScreen = () => {
                   onClick={() => {
                     setSelectedDateKey(d.dateKey);
                   }}
-                  title={`View ${d.dateKey}`}
+                  title={`${d.dateKey}: ${d.daySteps > 0 ? d.daySteps.toLocaleString() + ' steps, ' : ''}${d.completedCount}/${d.total} completed`}
                 >
                   <span className="cal-day-letter font-medium">{d.dayName}</span>
-                  <div className={`cal-indicator-circle ${d.isSuccess ? 'completed' : ''}`}>
+                  <div className={`cal-indicator-circle ${d.isSuccess ? 'completed' : (d.daySteps > 0 ? 'has-steps' : '')}`}>
                     {d.isSuccess ? (
                       <CheckCircle2 size={16} strokeWidth={2.8} />
+                    ) : d.daySteps > 0 ? (
+                      <Footprints size={14} className="text-emerald-400" />
                     ) : (
                       <span className="empty-dot"></span>
                     )}
                   </div>
                   <span className="cal-date-num font-mono">{d.dateNum}</span>
+                  {d.daySteps > 0 && (
+                    <span className="cal-steps-badge font-mono">
+                      {d.daySteps >= 1000 ? `${(d.daySteps / 1000).toFixed(1)}k` : d.daySteps}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -550,6 +680,9 @@ export const InsightsScreen = () => {
           </div>
         )}
       </div>
+
+      {/* Dedicated Steps & Distance Trends Card */}
+      {renderStepsActivityCard()}
 
       {/* Overall Habit Progress Breakdown List */}
       <div className="insights-section-card">
