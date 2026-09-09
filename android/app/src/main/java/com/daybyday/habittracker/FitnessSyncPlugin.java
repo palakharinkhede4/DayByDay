@@ -89,9 +89,15 @@ public class FitnessSyncPlugin extends Plugin {
         if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
             int currentTotalHardwareSteps = (int) event.values[0];
             int baselineSteps = prefs.getInt(KEY_BASELINE_STEPS, -1);
+            int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
 
-            int dailySteps;
             if (!today.equals(savedDate) || baselineSteps == -1 || baselineSteps > currentTotalHardwareSteps) {
+                if (!today.equals(savedDate) && !savedDate.isEmpty() && lastKnown > 0) {
+                    prefs.edit()
+                        .putString("yesterday_date", savedDate)
+                        .putInt("yesterday_steps", lastKnown)
+                        .apply();
+                }
                 baselineSteps = currentTotalHardwareSteps;
                 prefs.edit()
                     .putString(KEY_BASELINE_DATE, today)
@@ -99,12 +105,19 @@ public class FitnessSyncPlugin extends Plugin {
                     .putInt(KEY_LAST_STEPS, 0)
                     .apply();
             } else {
-                dailySteps = Math.max(0, currentTotalHardwareSteps - baselineSteps);
+                int dailySteps = Math.max(0, currentTotalHardwareSteps - baselineSteps);
                 prefs.edit().putInt(KEY_LAST_STEPS, dailySteps).apply();
             }
         } else if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
             // Incremental step detector
-            int currentDaily = today.equals(savedDate) ? prefs.getInt(KEY_LAST_STEPS, 0) : 0;
+            int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+            if (!today.equals(savedDate) && !savedDate.isEmpty() && lastKnown > 0) {
+                prefs.edit()
+                    .putString("yesterday_date", savedDate)
+                    .putInt("yesterday_steps", lastKnown)
+                    .apply();
+            }
+            int currentDaily = today.equals(savedDate) ? lastKnown : 0;
             currentDaily += (int) event.values[0];
             prefs.edit()
                 .putString(KEY_BASELINE_DATE, today)
@@ -220,6 +233,7 @@ public class FitnessSyncPlugin extends Plugin {
                 ret.put("activeMinutes", activeMinutes);
                 ret.put("source", "android_step_counter");
                 ret.put("date", today);
+                attachYesterdayData(ret, prefs);
                 call.resolve(ret);
             }
         };
@@ -242,6 +256,7 @@ public class FitnessSyncPlugin extends Plugin {
             ret.put("activeMinutes", (int) Math.round(lastKnown / 100.0));
             ret.put("source", "cached_fallback");
             ret.put("date", today);
+            attachYesterdayData(ret, prefs);
             call.resolve(ret);
             return;
         }
@@ -264,8 +279,19 @@ public class FitnessSyncPlugin extends Plugin {
                 ret.put("activeMinutes", (int) Math.round(lastKnown / 100.0));
                 ret.put("source", "android_step_counter_stationary");
                 ret.put("date", today);
+                attachYesterdayData(ret, prefs);
                 call.resolve(ret);
             }
         }, 1200);
+    }
+
+    private void attachYesterdayData(JSObject ret, SharedPreferences prefs) {
+        if (ret == null || prefs == null) return;
+        int ySteps = prefs.getInt("yesterday_steps", 0);
+        String yDate = prefs.getString("yesterday_date", "");
+        if (ySteps > 0 && !yDate.isEmpty()) {
+            ret.put("yesterdaySteps", ySteps);
+            ret.put("yesterdayDate", yDate);
+        }
     }
 }

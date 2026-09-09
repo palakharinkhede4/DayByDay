@@ -68,6 +68,32 @@ export const InsightsScreen = () => {
     setSelectedDateKey(getLocalDateKey(today));
   };
 
+  // Helper to resolve clean historical value with fallback to daybyday_health_yesterday for steps
+  const getHistoricalValue = (h, dateKey, isToday) => {
+    const cleanHist = cleanHistory(h.history);
+    if (cleanHist[dateKey] !== undefined) {
+      return { val: cleanHist[dateKey], hasRecord: true };
+    }
+    if (isToday) {
+      const val = Math.max(Number(cleanHist[dateKey]) || 0, Number(h.user1) || 0);
+      return { val: (typeof h.user1 === 'boolean' || h.unit === 'check') ? (Boolean(h.user1) || Boolean(cleanHist[dateKey])) : val, hasRecord: true };
+    }
+    const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps' || (h.name || '').toLowerCase().includes('step');
+    if (isStep && typeof window !== 'undefined') {
+      try {
+        const rawY = localStorage.getItem('daybyday_health_yesterday');
+        if (rawY) {
+          const yObj = JSON.parse(rawY);
+          const yDate = (yObj.date && /^\d{4}-\d{2}-\d{2}$/.test(yObj.date)) ? yObj.date : null;
+          if (yDate === dateKey && Number(yObj.steps) > 0) {
+            return { val: Number(yObj.steps), hasRecord: true };
+          }
+        }
+      } catch {}
+    }
+    return { val: (typeof h.user1 === 'boolean' || h.unit === 'check') ? false : 0, hasRecord: false };
+  };
+
   // 1. Last 7 Days Pulse
   const weekDays = useMemo(() => {
     const daysLetters = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -85,15 +111,9 @@ export const InsightsScreen = () => {
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
         const target = Number(h.target) || 1;
-        const cleanHist = cleanHistory(h.history);
-        if (cleanHist[dateKey] !== undefined) {
-          const val = cleanHist[dateKey];
+        const { val, hasRecord } = getHistoricalValue(h, dateKey, isToday);
+        if (hasRecord) {
           if (isBool ? Boolean(val) : (Number(val) || 0) >= target) {
-            completedOnDate++;
-          }
-        } else if (isToday) {
-          const val = Math.max(Number(cleanHist[dateKey]) || 0, Number(h.user1) || 0);
-          if (isBool ? (Boolean(h.user1) || Boolean(cleanHist[dateKey])) : val >= target) {
             completedOnDate++;
           }
         }
@@ -136,14 +156,9 @@ export const InsightsScreen = () => {
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
         const target = Number(h.target) || 1;
-        const cleanHist = cleanHistory(h.history);
-        if (cleanHist[dateKey] !== undefined) {
-          const val = cleanHist[dateKey];
+        const { val, hasRecord } = getHistoricalValue(h, dateKey, isToday);
+        if (hasRecord) {
           const isDone = isBool ? Boolean(val) : (Number(val) || 0) >= target;
-          if (isDone) completedCount++;
-        } else if (isToday) {
-          const val = Math.max(Number(cleanHist[dateKey]) || 0, Number(h.user1) || 0);
-          const isDone = isBool ? (Boolean(h.user1) || Boolean(cleanHist[dateKey])) : val >= target;
           if (isDone) completedCount++;
         }
       });
@@ -184,18 +199,7 @@ export const InsightsScreen = () => {
     let completedCount = 0;
     const items = habits.map((h) => {
       const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-      let recordedValue = 0;
-      let hasRecord = false;
-      const cleanHist = cleanHistory(h.history);
-
-      if (cleanHist[selectedDateKey] !== undefined) {
-        recordedValue = cleanHist[selectedDateKey];
-        hasRecord = true;
-      } else if (isToday) {
-        recordedValue = h.user1;
-        hasRecord = true;
-      }
-
+      const { val: recordedValue, hasRecord } = getHistoricalValue(h, selectedDateKey, isToday);
       const isDone = isBool ? Boolean(recordedValue) : (Number(recordedValue) || 0) >= h.target;
       if (isDone) completedCount++;
 

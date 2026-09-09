@@ -145,24 +145,15 @@ function formatHabitFromRow(row, explicitSql = null) {
   const isBool = row.unit === 'check';
   const target = Number(row.target) || 1;
   const rowTodayVal = (row.today_value !== undefined && row.today_value !== null) ? (Number(row.today_value) || 0) : 0;
-  let needsDbSelfHeal = false;
-
-  // Detect corrupted history column in DB (arrays, strings, or numeric indexed keys)
-  if (Array.isArray(row.history) || typeof row.history === 'string' || (row.history && row.history['0'] !== undefined)) {
-    needsDbSelfHeal = true;
-  }
-
   // 1. If row was NOT updated today in IST:
   // Any value in row.today_value belongs to lastUpdatedDateKey (yesterday or earlier)
   if (!wasUpdatedToday && lastUpdatedDateKey) {
     if (history[lastUpdatedDateKey] === undefined && (rowTodayVal > 0 || row.completed)) {
       history[lastUpdatedDateKey] = isBool ? Boolean(row.completed) : rowTodayVal;
-      needsDbSelfHeal = true;
     }
     // And today's history entry cannot hold yesterday's lingering value
     if (history[todayKey] !== undefined && history[todayKey] !== 0 && history[todayKey] !== false) {
       history[todayKey] = isBool ? false : 0;
-      needsDbSelfHeal = true;
     }
   }
 
@@ -178,27 +169,6 @@ function formatHabitFromRow(row, explicitSql = null) {
   }
 
   const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= target;
-
-  // If DB's today_value column holds a positive number while today is 0, self-heal it
-  if (rowTodayVal > 0 && todayVal === 0) {
-    needsDbSelfHeal = true;
-  }
-
-  // Self-heal the database row in PostgreSQL if stale/un-reset states or corrupted history were resolved
-  if (needsDbSelfHeal && sql && row.id) {
-    const cleanDbVal = isBool ? (todayVal ? 1 : 0) : (Number(todayVal) || 0);
-    // Fire-and-forget: async self-heal in background, never block client responses
-    sql`
-      UPDATE daybyday_habits
-      SET today_value = ${cleanDbVal},
-          completed = ${Boolean(isCompleted)},
-          history = ${JSON.stringify(history)}::jsonb,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${row.id}
-    `.catch((err) => {
-      console.warn('Notice self-healing habit row in DB:', err.message);
-    });
-  }
 
   return {
     id: row.habit_id || String(row.id),
@@ -261,22 +231,6 @@ function formatGroupPodFromRow(row, sql = null) {
 
       const healedGoals = Array.from(goalMap.values());
       rawGoals = healedGoals;
-
-      // Asynchronously repair in PostgreSQL if sql client and pod id/code are present
-      if (sql && (row.id || row.code)) {
-        const podId = row.id;
-        const podCode = (row.code || '').toUpperCase();
-        sql`
-          UPDATE daybyday_group_pods
-          SET shared_goals = ${JSON.stringify(healedGoals)}::jsonb,
-              updated_at = CURRENT_TIMESTAMP
-          WHERE ${podId ? sql`id = ${podId}` : sql`UPPER(code) = ${podCode}`}
-        `.then(() => {
-          console.log(`[AutoHeal Pod] Successfully repaired and persisted ${healedGoals.length} clean goals for pod ${podCode || podId}`);
-        }).catch((dbHealErr) => {
-          console.warn(`[AutoHeal Pod] Async DB write failed for pod ${podCode || podId}:`, dbHealErr.message);
-        });
-      }
     }
   }
 
@@ -478,7 +432,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
       if (stepHabits.length > 0) {
         for (const sh of stepHabits) {
           const target = Number(sh.target) || 10000;
-          const history = typeof sh.history === 'object' && sh.history !== null ? { ...sh.history } : {};
+          const history = cleanHistory(sh.history);
           history[payloadDate] = steps;
 
           if (isToday) {
@@ -1141,7 +1095,7 @@ export default async function handler(req, res) {
                                (h.name || '').toLowerCase().includes('step') ||
                                (h.name || '').toLowerCase().includes('walk');
                 if (isStep) {
-                  const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+                  const history = cleanHistory(h.history);
                   history[syncDate] = cleanHealthData.steps;
                   if (isToday) {
                     const targetNum = Number(h.target) || 10000;

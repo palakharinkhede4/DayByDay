@@ -198,12 +198,25 @@ export const importDeviceHealthStats = async (user = null) => {
       const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats();
       if (stats && stats.success) {
         const steps = Math.max(0, Number(stats.steps) || 0);
+        if (stats.yesterdaySteps > 0 && stats.yesterdayDate) {
+          try {
+            localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
+              date: stats.yesterdayDate,
+              steps: Number(stats.yesterdaySteps) || 0,
+              calories: Math.round((Number(stats.yesterdaySteps) || 0) * 0.04),
+              distanceKm: Math.round((Number(stats.yesterdaySteps) || 0) * 0.000762 * 100) / 100,
+              source: 'android_step_counter',
+            }));
+          } catch {}
+        }
         const payload = {
           steps,
           calories: Number(stats.calories) || Math.round(steps * 0.04),
           distanceKm: Number(stats.distanceKm) || Math.round(steps * 0.000762 * 100) / 100,
           source: stats.source || 'android_step_counter',
           syncedAt: new Date().toISOString(),
+          yesterdaySteps: stats.yesterdaySteps || 0,
+          yesterdayDate: stats.yesterdayDate || null,
         };
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));

@@ -386,6 +386,22 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
       history[targetDateKey] = isBool ? false : 0;
     }
 
+    // Restore yesterday's steps from daybyday_health_yesterday if missing from step habit history
+    const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps' || (h.name || '').toLowerCase().includes('step');
+    if (isStep && typeof window !== 'undefined') {
+      try {
+        const rawY = localStorage.getItem('daybyday_health_yesterday');
+        if (rawY) {
+          const yObj = JSON.parse(rawY);
+          const yDate = (yObj.date && /^\d{4}-\d{2}-\d{2}$/.test(yObj.date)) ? yObj.date : getIstYesterdayKey();
+          const ySteps = Number(yObj.steps) || 0;
+          if (ySteps > 0 && (!history[yDate] || Number(history[yDate]) === 0)) {
+            history[yDate] = ySteps;
+          }
+        }
+      } catch {}
+    }
+
     const hasTodayEntry = history[targetDateKey] !== undefined;
     const todayVal = hasTodayEntry
       ? history[targetDateKey]
@@ -2193,11 +2209,19 @@ export const HabitProvider = ({ children }) => {
       const sourceList = (prev && prev.length) ? prev : habitsRef.current;
       const cleanList = (sourceList && sourceList.length ? sourceList : INITIAL_HABITS).map((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-        const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+        const history = cleanHistory(h.history);
 
         // Archive prior day's value if it existed and wasn't archived yet
-        if (prevDateKey && prevDateKey !== todayKey && history[prevDateKey] === undefined && h.user1 !== undefined) {
-          history[prevDateKey] = h.user1;
+        if (prevDateKey && prevDateKey !== todayKey && history[prevDateKey] === undefined) {
+          let prevVal = isBool ? Boolean(h.user1) : (Number(h.user1) || 0);
+          const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps';
+          if (isStep && prevVal === 0) {
+            const storedH = getStoredHealthData();
+            if (storedH?.steps > 0) prevVal = Number(storedH.steps);
+          }
+          if (prevVal > 0) {
+            history[prevDateKey] = prevVal;
+          }
         }
 
         // Today strictly starts at 0
@@ -3558,7 +3582,7 @@ export const HabitProvider = ({ children }) => {
       }
 
       // Maintain single-row history map: { "YYYY-MM-DD": value }
-      const currentHistory = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+      const currentHistory = cleanHistory(h.history);
       currentHistory[todayKey] = nextValue;
 
       const isCompleted = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
