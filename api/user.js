@@ -235,7 +235,7 @@ function formatHabitFromRow(row, explicitSql = null) {
   };
 }
 
-function formatGroupPodFromRow(row, sql = null) {
+async function formatGroupPodFromRow(row, sql = null) {
   if (!row) return null;
   const todayKey = getIstDateKey();
   let rawGoals = parseSafeJson(row.shared_goals, []);
@@ -286,11 +286,62 @@ function formatGroupPodFromRow(row, sql = null) {
     (sg) => sg && typeof sg === 'object' && typeof sg.name === 'string' && sg.name.trim() !== '' && sg['0'] === undefined
   );
 
+  const members = parseSafeJson(row.members, []);
+
+  // AUTO-RECONCILIATION ENGINE: Cross-reference live habits table for all pod members
+  const memberHabitsMap = new Map(); // key: id or lowercase username -> habits array
+  if (sql && members.length > 0) {
+    try {
+      const memberIds = [];
+      const memberUsernames = [];
+      members.forEach((m) => {
+        if (m.id) memberIds.push(String(m.id));
+        if (m.username) memberUsernames.push(String(m.username).toLowerCase());
+      });
+
+      const uRows = await sql`
+        SELECT id, username FROM daybyday_users 
+        WHERE (id = ANY(${memberIds})) OR (LOWER(username) = ANY(${memberUsernames}))
+      `;
+      const allUserIds = Array.from(new Set([...memberIds, ...uRows.map(u => u.id)]));
+      const idToUser = new Map();
+      uRows.forEach(u => {
+        idToUser.set(u.id, u.username);
+        idToUser.set(u.username.toLowerCase(), u.id);
+      });
+
+      if (allUserIds.length > 0) {
+        const habitRows = await sql`
+          SELECT user_id, habit_id, name, description, target, unit, icon, category, today_value, completed, streak, history, updated_at
+          FROM daybyday_habits
+          WHERE user_id = ANY(${allUserIds})
+        `;
+        habitRows.forEach((hr) => {
+          const formattedH = formatHabitFromRow(hr, todayKey);
+          const uId = hr.user_id;
+          const uName = idToUser.get(uId);
+
+          if (!memberHabitsMap.has(uId)) memberHabitsMap.set(uId, []);
+          memberHabitsMap.get(uId).push(formattedH);
+
+          if (uName) {
+            const cleanU = uName.toLowerCase();
+            if (!memberHabitsMap.has(cleanU)) memberHabitsMap.set(cleanU, []);
+            memberHabitsMap.get(cleanU).push(formattedH);
+          }
+        });
+      }
+    } catch (reconcileFetchErr) {
+      console.warn('[Pod Format] Notice reconciling member habits from SQL:', reconcileFetchErr.message);
+    }
+  }
+
+  let goalsChanged = false;
   const cleanGoals = validGoalsList.map((sg) => {
     const memberProgress = { ...(sg.memberProgress || {}) };
-    let activeTotal = 0;
     const cleanMemberProg = {};
 
+    // 1. Ingest existing memberProgress records
     for (const [k, v] of Object.entries(memberProgress)) {
       let isToday = false;
       let val = 0;
@@ -312,7 +363,61 @@ function formatGroupPodFromRow(row, sql = null) {
         val = isToday ? (Number(v) || 0) : 0;
         cleanMemberProg[k] = val;
       }
-      activeTotal += val;
+    }
+
+    // 2. Authoritative Habit Cross-Reconciliation: Ensure member's actual logged habits from daybyday_habits reflect here
+    members.forEach((m) => {
+      const mId = m.id ? String(m.id) : null;
+      const mName = m.username ? String(m.username).toLowerCase() : null;
+
+      const mHabits = (mId && memberHabitsMap.get(mId)) ||
+                      (mName && memberHabitsMap.get(mName)) ||
+                      [];
+
+      const matchingHabit = mHabits.find((h) => isHabitMatchingSharedGoal(h, sg));
+      if (matchingHabit) {
+        const habitVal = typeof matchingHabit.user1 === 'boolean'
+          ? (matchingHabit.user1 ? 1 : 0)
+          : Math.max(0, Number(matchingHabit.user1) || 0);
+
+        const currentEntry = (mId && cleanMemberProg[mId]) || (mName && cleanMemberProg[mName]);
+        const curVal = currentEntry && typeof currentEntry === 'object'
+          ? (Number(currentEntry.value) || 0)
+          : (Number(currentEntry) || 0);
+
+        if (habitVal > curVal || (habitVal > 0 && curVal === 0)) {
+          goalsChanged = true;
+          const isDone = habitVal >= (Number(sg.target) || 1);
+          const updatedEntry = {
+            value: habitVal,
+            completed: isDone,
+            updatedAt: new Date().toISOString(),
+          };
+          if (mId) cleanMemberProg[mId] = updatedEntry;
+          if (mName) cleanMemberProg[mName] = updatedEntry;
+          if (m.username) cleanMemberProg[m.username] = updatedEntry;
+        }
+      }
+    });
+
+    // 3. Compute unique member sum for today (prevent duplicate summing of id and username)
+    const uniqueMemberTotals = new Map();
+    members.forEach((m) => {
+      const mId = m.id ? String(m.id) : null;
+      const mName = m.username ? String(m.username) : null;
+      const entry = (mId && cleanMemberProg[mId]) || (mName && cleanMemberProg[mName]);
+      const val = entry && typeof entry === 'object' ? (Number(entry.value) || 0) : (Number(entry) || 0);
+      uniqueMemberTotals.set(mId || mName, val);
+    });
+
+    let activeTotal = 0;
+    if (uniqueMemberTotals.size > 0) {
+      activeTotal = Array.from(uniqueMemberTotals.values()).reduce((sum, v) => sum + v, 0);
+    } else {
+      activeTotal = Object.values(cleanMemberProg).reduce((sum, v) => {
+        const val = v && typeof v === 'object' ? (Number(v.value) || 0) : (Number(v) || 0);
+        return sum + val;
+      }, 0);
     }
 
     return {
@@ -322,11 +427,20 @@ function formatGroupPodFromRow(row, sql = null) {
     };
   });
 
+  // Asynchronously persist healed goals back to SQL so subsequent requests are pre-warmed
+  if (goalsChanged && sql && row.id) {
+    sql`
+      UPDATE daybyday_group_pods 
+      SET shared_goals = ${JSON.stringify(cleanGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ${row.id}
+    `.catch((saveErr) => console.warn('[Pod Reconcile] Auto-save healed goals error:', saveErr.message));
+  }
+
   return {
     id: row.id,
     name: row.name,
     code: (row.code || '').toUpperCase(),
-    members: parseSafeJson(row.members, []),
+    members,
     sharedGoals: cleanGoals,
     maxMembers: row.max_members || 10,
     createdAt: row.created_at,
@@ -583,23 +697,27 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
 
 export default async function handler(req, res) {
   // CORS Headers for Web & Native Apps
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  if (origin !== '*') {
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  const origin = req.headers?.origin || '*';
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    if (origin !== '*') {
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE, PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE, PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Vary', 'Origin');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   // Set strict cache headers to prevent stale data on iOS Safari / WebKit PWAs
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
 
   if (!isTablesInitialized()) {
     await ensureTables();
@@ -792,7 +910,7 @@ export default async function handler(req, res) {
             LIMIT 5
           `;
           if (groupRows.length > 0) {
-            groupPods = groupRows.map((r) => formatGroupPodFromRow(r, sql));
+            groupPods = await Promise.all(groupRows.map((r) => formatGroupPodFromRow(r, sql)));
 
             // Enrich members with latest profilePicture & secretCode so avatars load instantly
             const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
@@ -1317,7 +1435,7 @@ export default async function handler(req, res) {
               LIMIT 5
             `;
             if (groupRows.length > 0) {
-              groupPods = groupRows.map((r) => formatGroupPodFromRow(r, sql));
+              groupPods = await Promise.all(groupRows.map((r) => formatGroupPodFromRow(r, sql)));
 
               // Enrich members with latest profilePicture & secretCode so avatars load instantly
               const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
@@ -1625,9 +1743,25 @@ export default async function handler(req, res) {
           // Unidirectional SSOT: Atomically propagate all updated habits to all group pods where user is a member
           if (!isPriorDaySync) {
             try {
-              const gRows = await sql`SELECT id, shared_goals FROM daybyday_group_pods WHERE members::text LIKE ${'%"' + userId + '"%'}`;
+              let uName = null;
+              let uCode = null;
+              const uUser = await sql`SELECT id, username, secret_code FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+              if (uUser && uUser.length > 0) {
+                uName = uUser[0].username;
+                uCode = uUser[0].secret_code;
+              }
+              const cleanUName = uName ? uName.trim() : null;
+              const cleanUCode = uCode ? uCode.trim() : null;
+
+              const gRows = await sql`
+                SELECT id, members, shared_goals FROM daybyday_group_pods 
+                WHERE (members::text LIKE ${'%"' + userId + '"%'})
+                   OR (${cleanUName ? sql`members::text ILIKE ${'%"' + cleanUName + '"%'}` : sql`FALSE`})
+                   OR (${cleanUCode ? sql`members::text ILIKE ${'%"' + cleanUCode + '"%'}` : sql`FALSE`})
+              `;
               for (const gr of gRows) {
                 let sGoals = parseSafeJson(gr.shared_goals, []);
+                const podMembers = parseSafeJson(gr.members, []);
                 let changed = false;
                 sGoals = sGoals.map((g) => {
                   const matchedH = habits.find((h) => isHabitMatchingSharedGoal(h, g));
@@ -1637,19 +1771,47 @@ export default async function handler(req, res) {
                       : Math.max(0, Number(matchedH.user1) || 0);
                     const isDone = hVal >= (Number(g.target) || 1);
                     const mProg = { ...(g.memberProgress || {}) };
-                    mProg[userId] = {
+                    const progressEntry = {
                       value: hVal,
                       completed: isDone,
                       updatedAt: new Date().toISOString(),
                     };
+                    mProg[userId] = progressEntry;
+                    if (cleanUName) {
+                      mProg[cleanUName] = progressEntry;
+                      mProg[cleanUName.toLowerCase()] = progressEntry;
+                    }
                     changed = true;
-                    const totalSum = Object.values(mProg).reduce((acc, m) => {
-                      if (m && typeof m === 'object') {
-                        const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
-                        return acc + (entryDate === todayStr ? (Number(m.value) || 0) : 0);
+
+                    // Deduplicate sum across unique members
+                    const uniqueMemberTotals = new Map();
+                    podMembers.forEach((m) => {
+                      const mId = m.id ? String(m.id) : null;
+                      const mN = m.username ? String(m.username) : null;
+                      const entry = (mId && mProg[mId]) || (mN && mProg[mN]) || (mN && mProg[mN.toLowerCase()]);
+                      if (entry && typeof entry === 'object') {
+                        const entryDate = entry.updatedAt ? getIstDateKey(new Date(entry.updatedAt)) : null;
+                        if (entryDate === todayStr) {
+                          uniqueMemberTotals.set(mId || mN, Number(entry.value) || 0);
+                        }
+                      } else if (entry != null) {
+                        uniqueMemberTotals.set(mId || mN, Number(entry) || 0);
                       }
-                      return acc + (Number(m) || 0);
-                    }, 0);
+                    });
+
+                    let totalSum = 0;
+                    if (uniqueMemberTotals.size > 0) {
+                      totalSum = Array.from(uniqueMemberTotals.values()).reduce((acc, v) => acc + v, 0);
+                    } else {
+                      totalSum = Object.values(mProg).reduce((acc, m) => {
+                        if (m && typeof m === 'object') {
+                          const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
+                          return acc + (entryDate === todayStr ? (Number(m.value) || 0) : 0);
+                        }
+                        return acc + (Number(m) || 0);
+                      }, 0);
+                    }
+
                     return { ...g, current: totalSum, memberProgress: mProg };
                   }
                   return g;
@@ -1869,7 +2031,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1965,7 +2127,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2041,7 +2203,7 @@ export default async function handler(req, res) {
             ORDER BY updated_at DESC
             LIMIT 5
           `;
-          pods = groupRows.map((r) => formatGroupPodFromRow(r, sql));
+          pods = await Promise.all(groupRows.map((r) => formatGroupPodFromRow(r, sql)));
 
           // Enrich members with latest profilePicture & secretCode
           if (pods.length > 0) {
@@ -2096,7 +2258,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2227,7 +2389,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2241,7 +2403,18 @@ export default async function handler(req, res) {
             const memberProgress = { ...(g.memberProgress || {}) };
 
             if (userId) {
-              const currentMemberData = memberProgress[userId] || { value: 0, completed: false };
+              const foundMember = (pod.members || []).find(m => 
+                (m.id && String(m.id) === String(userId)) || 
+                (m.username && m.username.toLowerCase() === String(userId).toLowerCase()) ||
+                (m.secretCode && m.secretCode.toUpperCase() === String(userId).toUpperCase()) ||
+                (m.secret_code && m.secret_code.toUpperCase() === String(userId).toUpperCase())
+              );
+
+              const currentMemberData = memberProgress[userId] ||
+                                        (foundMember && foundMember.id && memberProgress[foundMember.id]) ||
+                                        (foundMember && foundMember.username && memberProgress[foundMember.username]) ||
+                                        { value: 0, completed: false };
+
               let curMemberVal = 0;
               if (currentMemberData && typeof currentMemberData === 'object') {
                 const entryDate = currentMemberData.updatedAt ? getIstDateKey(new Date(currentMemberData.updatedAt)) : null;
@@ -2258,21 +2431,50 @@ export default async function handler(req, res) {
                 ? Boolean(completed)
                 : nextMemberVal >= (Number(g.target) || 1);
 
-              memberProgress[userId] = {
+              const progressEntry = {
                 value: nextMemberVal,
                 completed: isCompleted,
                 updatedAt: new Date().toISOString(),
               };
+
+              memberProgress[userId] = progressEntry;
+              if (foundMember) {
+                if (foundMember.id) memberProgress[foundMember.id] = progressEntry;
+                if (foundMember.username) {
+                  memberProgress[foundMember.username] = progressEntry;
+                  memberProgress[foundMember.username.toLowerCase()] = progressEntry;
+                }
+              }
             }
 
-            // Total aggregated current value across members for today
-            const totalSum = Object.values(memberProgress).reduce((acc, m) => {
-              if (m && typeof m === 'object') {
-                const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
-                return acc + (entryDate === todayKey ? (Number(m.value) || 0) : 0);
+            // Total aggregated current value across unique members for today
+            const uniqueMemberTotals = new Map();
+            (pod.members || []).forEach((m) => {
+              const mId = m.id ? String(m.id) : null;
+              const mName = m.username ? String(m.username) : null;
+              const entry = (mId && memberProgress[mId]) || (mName && memberProgress[mName]) || (mName && memberProgress[mName.toLowerCase()]);
+              if (entry && typeof entry === 'object') {
+                const entryDate = entry.updatedAt ? getIstDateKey(new Date(entry.updatedAt)) : null;
+                if (entryDate === todayKey) {
+                  uniqueMemberTotals.set(mId || mName, Number(entry.value) || 0);
+                }
+              } else if (entry != null) {
+                uniqueMemberTotals.set(mId || mName, Number(entry) || 0);
               }
-              return acc;
-            }, 0);
+            });
+
+            let totalSum = 0;
+            if (uniqueMemberTotals.size > 0) {
+              totalSum = Array.from(uniqueMemberTotals.values()).reduce((acc, v) => acc + v, 0);
+            } else {
+              totalSum = Object.values(memberProgress).reduce((acc, m) => {
+                if (m && typeof m === 'object') {
+                  const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
+                  return acc + (entryDate === todayKey ? (Number(m.value) || 0) : 0);
+                }
+                return acc + (Number(m) || 0);
+              }, 0);
+            }
 
             return {
               ...g,
@@ -2310,7 +2512,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2349,7 +2551,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2407,7 +2609,7 @@ export default async function handler(req, res) {
               SET name = ${cleanName}, updated_at = CURRENT_TIMESTAMP
               WHERE UPPER(code) = ${cleanCode}
             `;
-            pod = { ...formatGroupPodFromRow(r, sql), name: cleanName };
+            pod = { ...(await formatGroupPodFromRow(r, sql)), name: cleanName };
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2659,7 +2861,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0], sql);
+            pod = await formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);

@@ -591,6 +591,80 @@ export function sanitizePodSharedGoals(pod) {
   };
 }
 
+export function mergeSharedGoalsSafely(localGoals, remoteGoals) {
+  if (!Array.isArray(remoteGoals) || remoteGoals.length === 0) return localGoals || [];
+  if (!Array.isArray(localGoals) || localGoals.length === 0) return remoteGoals;
+
+  const todayStr = getLocalDateKey();
+  return remoteGoals.map((rGoal) => {
+    const lGoal = localGoals.find(
+      (lg) => (lg.id && rGoal.id && lg.id === rGoal.id) ||
+              (lg.name && rGoal.name && lg.name.toLowerCase() === rGoal.name.toLowerCase())
+    );
+    if (!lGoal) return rGoal;
+
+    const mergedMemberProg = { ...(rGoal.memberProgress || {}) };
+    const lProg = lGoal.memberProgress || {};
+
+    for (const [key, lValObj] of Object.entries(lProg)) {
+      const rValObj = mergedMemberProg[key];
+      let lVal = 0;
+      let lDate = null;
+      if (lValObj && typeof lValObj === 'object') {
+        lDate = lValObj.updatedAt ? getLocalDateKey(new Date(lValObj.updatedAt)) : null;
+        lVal = (lDate === todayStr) ? (Number(lValObj.value) || 0) : 0;
+      } else {
+        lVal = Number(lValObj) || 0;
+      }
+
+      let rVal = 0;
+      let rDate = null;
+      if (rValObj && typeof rValObj === 'object') {
+        rDate = rValObj.updatedAt ? getLocalDateKey(new Date(rValObj.updatedAt)) : null;
+        rVal = (rDate === todayStr) ? (Number(rValObj.value) || 0) : 0;
+      } else {
+        rVal = Number(rValObj) || 0;
+      }
+
+      // If local has today's progress and it's higher than remote, preserve local!
+      if (lVal > rVal && lDate === todayStr) {
+        mergedMemberProg[key] = lValObj;
+      }
+    }
+
+    // Recompute total sum across unique members or entries
+    const totalSum = Object.values(mergedMemberProg).reduce((acc, m) => {
+      if (m && typeof m === 'object') {
+        const entryDate = m.updatedAt ? getLocalDateKey(new Date(m.updatedAt)) : null;
+        return acc + (entryDate === todayStr ? (Number(m.value) || 0) : 0);
+      }
+      return acc + (Number(m) || 0);
+    }, 0);
+
+    return {
+      ...rGoal,
+      memberProgress: mergedMemberProg,
+      current: Math.max(Number(rGoal.current) || 0, totalSum),
+    };
+  });
+}
+
+export function mergeGroupPodSafely(localPod, remotePod) {
+  if (!remotePod) return localPod;
+  if (!localPod) return sanitizePodSharedGoals(remotePod);
+
+  const cleanRemote = sanitizePodSharedGoals(remotePod);
+  const cleanLocal = sanitizePodSharedGoals(localPod);
+
+  const mergedGoals = mergeSharedGoalsSafely(cleanLocal.sharedGoals, cleanRemote.sharedGoals);
+
+  return {
+    ...cleanRemote,
+    name: cleanLocal.name && cleanLocal.name !== cleanRemote.name ? cleanLocal.name : cleanRemote.name,
+    sharedGoals: mergedGoals,
+  };
+}
+
 export const HabitProvider = ({ children }) => {
   const firedRemindersRef = useRef(new Set());
   const isCrossSyncingRef = useRef(false);
@@ -1266,29 +1340,41 @@ export const HabitProvider = ({ children }) => {
                 : (remoteData.groupPod ? [remoteData.groupPod] : []);
 
               if (remotePods.length > 0) {
-                setGroupPods(remotePods);
-                try {
-                  localStorage.setItem('daybyday_group_pods', JSON.stringify(remotePods));
-                  localStorage.setItem('daybyday_group_pod', JSON.stringify(remotePods[0]));
-                  if (!activeGroupPodCode && remotePods[0]?.code) {
-                    setActiveGroupPodCode(remotePods[0].code);
-                    localStorage.setItem('daybyday_active_group_pod_code', remotePods[0].code);
-                  }
-                } catch {}
+                setGroupPods((prev) => {
+                  const mergedList = remotePods.map((rp) => {
+                    const local = (prev || []).find((p) => (p.code || '').toUpperCase() === (rp.code || '').toUpperCase());
+                    return mergeGroupPodSafely(local, rp);
+                  });
+                  try {
+                    localStorage.setItem('daybyday_group_pods', JSON.stringify(mergedList));
+                    localStorage.setItem('daybyday_group_pod', JSON.stringify(mergedList[0]));
+                    if (!activeGroupPodCode && mergedList[0]?.code) {
+                      setActiveGroupPodCode(mergedList[0].code);
+                      localStorage.setItem('daybyday_active_group_pod_code', mergedList[0].code);
+                    }
+                  } catch {}
+                  return mergedList;
+                });
               } else {
                 try {
                   const userCode = freshCode || activeUser.secretCode || activeUser.secret_code;
                   const fetchedPods = await getUserGroupPodsRemote(activeUser.id, activeUser.username, userCode);
                   if (fetchedPods && fetchedPods.length > 0) {
-                    setGroupPods(fetchedPods);
-                    try {
-                      localStorage.setItem('daybyday_group_pods', JSON.stringify(fetchedPods));
-                      localStorage.setItem('daybyday_group_pod', JSON.stringify(fetchedPods[0]));
-                      if (!activeGroupPodCode && fetchedPods[0]?.code) {
-                        setActiveGroupPodCode(fetchedPods[0].code);
-                        localStorage.setItem('daybyday_active_group_pod_code', fetchedPods[0].code);
-                      }
-                    } catch {}
+                    setGroupPods((prev) => {
+                      const mergedList = fetchedPods.map((rp) => {
+                        const local = (prev || []).find((p) => (p.code || '').toUpperCase() === (rp.code || '').toUpperCase());
+                        return mergeGroupPodSafely(local, rp);
+                      });
+                      try {
+                        localStorage.setItem('daybyday_group_pods', JSON.stringify(mergedList));
+                        localStorage.setItem('daybyday_group_pod', JSON.stringify(mergedList[0]));
+                        if (!activeGroupPodCode && mergedList[0]?.code) {
+                          setActiveGroupPodCode(mergedList[0].code);
+                          localStorage.setItem('daybyday_active_group_pod_code', mergedList[0].code);
+                        }
+                      } catch {}
+                      return mergedList;
+                    });
                   }
                 } catch {}
               }
@@ -2788,14 +2874,20 @@ export const HabitProvider = ({ children }) => {
     try {
       const pods = await getUserGroupPodsRemote(myId, myUname, myCode);
       if (Array.isArray(pods) && pods.length > 0) {
-        setGroupPods(pods);
-        try {
-          localStorage.setItem('daybyday_group_pods', JSON.stringify(pods));
-          if (!activeGroupPodCode && pods[0]?.code) {
-            setActiveGroupPodCode(pods[0].code);
-            localStorage.setItem('daybyday_active_group_pod_code', pods[0].code);
-          }
-        } catch {}
+        setGroupPods((prev) => {
+          const mergedList = pods.map((rp) => {
+            const local = (prev || []).find((p) => (p.code || '').toUpperCase() === (rp.code || '').toUpperCase());
+            return mergeGroupPodSafely(local, rp);
+          });
+          try {
+            localStorage.setItem('daybyday_group_pods', JSON.stringify(mergedList));
+            if (!activeGroupPodCode && mergedList[0]?.code) {
+              setActiveGroupPodCode(mergedList[0].code);
+              localStorage.setItem('daybyday_active_group_pod_code', mergedList[0].code);
+            }
+          } catch {}
+          return mergedList;
+        });
         return pods;
       }
     } catch (e) {
@@ -3138,6 +3230,11 @@ export const HabitProvider = ({ children }) => {
               };
               memberProgress[m.id] = updatedEntry;
               if (m.username) memberProgress[m.username] = updatedEntry;
+
+              // Propagate partner's reconciled progress to the group pod in cloud immediately
+              if (groupPod.code) {
+                updateGroupGoalRemote(groupPod.code, sg.id, 0, m.id || m.username, partnerVal, isDone).catch(() => {});
+              }
             }
           }
         }
@@ -3145,10 +3242,31 @@ export const HabitProvider = ({ children }) => {
 
       if (goalChanged) {
         podChanged = true;
-        const totalSum = Object.values(memberProgress).reduce(
-          (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
-          0
-        );
+        const uniqueMemberTotals = new Map();
+        (groupPod.members || []).forEach((m) => {
+          const mId = m.id ? String(m.id) : null;
+          const mName = m.username ? String(m.username) : null;
+          const entry = (mId && memberProgress[mId]) || (mName && memberProgress[mName]);
+          if (entry && typeof entry === 'object') {
+            const entryDate = entry.updatedAt ? getLocalDateKey(new Date(entry.updatedAt)) : null;
+            if (entryDate === todayKey) {
+              uniqueMemberTotals.set(mId || mName, Number(entry.value) || 0);
+            }
+          } else if (entry != null) {
+            uniqueMemberTotals.set(mId || mName, Number(entry) || 0);
+          }
+        });
+
+        let totalSum = 0;
+        if (uniqueMemberTotals.size > 0) {
+          totalSum = Array.from(uniqueMemberTotals.values()).reduce((acc, v) => acc + v, 0);
+        } else {
+          totalSum = Object.values(memberProgress).reduce(
+            (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
+            0
+          );
+        }
+
         return {
           ...sg,
           current: totalSum,
@@ -3182,11 +3300,11 @@ export const HabitProvider = ({ children }) => {
         syncTogetherPodWithHabits().catch(() => {});
       }
 
-      // 3. Refresh group pod from cloud
+      // 3. Refresh group pod from cloud with safe non-downgrading merge
       if (groupPod?.code) {
         getGroupPodRemote(groupPod.code).then((remote) => {
           if (remote) {
-            setGroupPod((prev) => prev ? { ...prev, members: remote.members || prev.members, sharedGoals: remote.sharedGoals || prev.sharedGoals } : remote);
+            setGroupPod((prev) => mergeGroupPodSafely(prev, remote));
           }
         }).catch(() => {});
       }
@@ -3476,14 +3594,8 @@ export const HabitProvider = ({ children }) => {
           const remote = await getGroupPodRemote(groupPod.code);
           if (remote && isMounted) {
             setGroupPod((prev) => {
-              if (!prev) return remote;
-              const merged = {
-                ...prev,
-                members: remote.members || prev.members,
-                sharedGoals: remote.sharedGoals || prev.sharedGoals,
-                // Keep whichever name is more recently set (prefer non-empty remote, fallback to local)
-                name: remote.name || prev.name,
-              };
+              if (!prev) return sanitizePodSharedGoals(remote);
+              const merged = mergeGroupPodSafely(prev, remote);
               try { localStorage.setItem('daybyday_group_pod', JSON.stringify(merged)); } catch {}
               return merged;
             });

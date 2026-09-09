@@ -38,23 +38,82 @@ const POD_GOAL_PRESETS = [
   { name: 'Sleep', iconName: 'moon', category: 'Health', target: 8, unit: 'Hours', delta: 1 },
 ];
 
-const getMemberProgressVal = (memberProgressMap, m) => {
-  if (!memberProgressMap || !m) return 0;
-  const raw = memberProgressMap[m.id] ??
-              (m.username ? memberProgressMap[m.username] : undefined) ??
-              (m.secretCode ? memberProgressMap[m.secretCode] : undefined) ??
-              (m.secret_code ? memberProgressMap[m.secret_code] : undefined) ??
-              memberProgressMap['user1'];
-  if (raw === undefined || raw === null) return 0;
-  if (typeof raw === 'object') {
-    if (raw.updatedAt) {
-      const entryDate = getLocalDateKey(new Date(raw.updatedAt));
-      const todayKey = getLocalDateKey();
-      if (entryDate !== todayKey) return 0;
+const getMemberProgressVal = (memberProgressMap, m, currentGoal = null, currentUser = null, userHabits = [], trackedPartners = []) => {
+  if (!m) return 0;
+  let storedVal = 0;
+
+  if (memberProgressMap) {
+    const raw = memberProgressMap[m.id] ??
+                (m.username ? memberProgressMap[m.username] : undefined) ??
+                (m.username ? memberProgressMap[m.username.toLowerCase()] : undefined) ??
+                (m.secretCode ? memberProgressMap[m.secretCode] : undefined) ??
+                (m.secret_code ? memberProgressMap[m.secret_code] : undefined) ??
+                memberProgressMap['user1'];
+    if (raw !== undefined && raw !== null) {
+      if (typeof raw === 'object') {
+        if (raw.updatedAt) {
+          const entryDate = getLocalDateKey(new Date(raw.updatedAt));
+          const todayKey = getLocalDateKey();
+          if (entryDate === todayKey) {
+            storedVal = Number(raw.value) || 0;
+          }
+        } else {
+          storedVal = Number(raw.value) || 0;
+        }
+      } else {
+        storedVal = Number(raw) || 0;
+      }
     }
-    return Number(raw.value) || 0;
   }
-  return Number(raw) || 0;
+
+  if (!currentGoal) return storedVal;
+
+  // 1. If this member is ME, cross-reference my active habits for instantaneous projection
+  const isMe = (currentUser?.id && String(currentUser.id) === String(m.id)) ||
+               (currentUser?.username && m.username && String(currentUser.username).toLowerCase() === String(m.username).toLowerCase()) ||
+               (currentUser?.secretCode && m.secretCode && String(currentUser.secretCode).toUpperCase() === String(m.secretCode).toUpperCase());
+
+  if (isMe && Array.isArray(userHabits) && userHabits.length > 0) {
+    const matchedH = userHabits.find((h) => isHabitMatchingSharedGoal(h, currentGoal));
+    if (matchedH) {
+      const hVal = typeof matchedH.user1 === 'boolean'
+        ? (matchedH.user1 ? 1 : 0)
+        : Math.max(0, Number(matchedH.user1) || 0);
+      return Math.max(storedVal, hVal);
+    }
+  }
+
+  // 2. If this member is in trackedPartners, cross-reference their habits for instantaneous projection
+  if (Array.isArray(trackedPartners) && trackedPartners.length > 0) {
+    const partner = trackedPartners.find((tp) =>
+      (tp.id && m.id && String(tp.id) === String(m.id)) ||
+      (tp.username && m.username && String(tp.username).toLowerCase() === String(m.username).toLowerCase()) ||
+      (tp.secretCode && m.secretCode && String(tp.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+      (tp.secret_code && m.secretCode && String(tp.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+    );
+
+    if (partner) {
+      let partnerVal = 0;
+      if (Array.isArray(partner.habits)) {
+        const partnerHabit = partner.habits.find((h) => isHabitMatchingSharedGoal(h, currentGoal));
+        if (partnerHabit) {
+          partnerVal = typeof partnerHabit.user1 === 'boolean'
+            ? (partnerHabit.user1 ? 1 : 0)
+            : Math.max(0, Number(partnerHabit.user1) || 0);
+        }
+      }
+      if (partner?.preferences?.healthData?.steps && (currentGoal.unit === 'steps' || currentGoal.name?.toLowerCase().includes('step'))) {
+        const hSynced = partner.preferences.healthData.syncedAt;
+        const isTodayHealth = hSynced ? (getLocalDateKey(new Date(hSynced)) === getLocalDateKey()) : false;
+        if (isTodayHealth) {
+          partnerVal = Math.max(partnerVal, Number(partner.preferences.healthData.steps) || 0);
+        }
+      }
+      return Math.max(storedVal, partnerVal);
+    }
+  }
+
+  return storedVal;
 };
 
 const EditGroupNameModal = ({ currentName, podCode, onClose, onSave }) => {
@@ -1058,7 +1117,7 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
                 // Calculate completed count
                 let completedCount = 0;
                 members.forEach((m) => {
-                  const mVal = getMemberProgressVal(memberProgressMap, m);
+                  const mVal = getMemberProgressVal(memberProgressMap, m, sg, user, habits, trackedPartners);
                   if (mVal >= target) {
                     completedCount += 1;
                   }
@@ -1122,7 +1181,7 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
                         const mId = m.id;
                         const isMe = (user?.id && String(user.id) === String(mId)) ||
                                      (user?.username && m.username && String(user.username).toLowerCase() === String(m.username).toLowerCase());
-                        const mVal = getMemberProgressVal(memberProgressMap, m);
+                        const mVal = getMemberProgressVal(memberProgressMap, m, sg, user, habits, trackedPartners);
                         const isDone = mVal >= target;
                         const pct = Math.min(100, Math.round((mVal / target) * 100));
 
