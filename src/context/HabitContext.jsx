@@ -321,12 +321,58 @@ export function calculateConsecutiveStreak(history, target, isBoolean) {
   return streak;
 }
 
+export function cleanHistory(raw) {
+  const result = {};
+  function extract(item) {
+    if (item === null || item === undefined) return;
+    if (typeof item === 'string') {
+      try {
+        let parsed = JSON.parse(item);
+        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        extract(parsed);
+      } catch {}
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(extract);
+      return;
+    }
+    if (typeof item === 'object') {
+      for (const [k, v] of Object.entries(item)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
+          let val = v;
+          if (typeof val === 'string') {
+            if (val === 'true') val = true;
+            else if (val === 'false') val = false;
+            else if (!isNaN(Number(val))) val = Number(val);
+          }
+          const isBool = typeof val === 'boolean';
+          const numVal = isBool ? (val ? 1 : 0) : (Number(val) || 0);
+
+          if (result[k] === undefined) {
+            result[k] = isBool ? val : numVal;
+          } else {
+            const curIsBool = typeof result[k] === 'boolean';
+            const curNum = curIsBool ? (result[k] ? 1 : 0) : (Number(result[k]) || 0);
+            if (numVal > curNum) {
+              result[k] = isBool ? val : numVal;
+            }
+          }
+        } else if (/^\d+$/.test(k) || k === 'history' || typeof v === 'object') {
+          extract(v);
+        }
+      }
+    }
+  }
+  extract(raw);
+  return result;
+}
+
 export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey(), priorDateKey = null) {
   if (!rawHabits || !Array.isArray(rawHabits)) return INITIAL_HABITS;
-  const yesterdayKey = getIstYesterdayKey();
   return rawHabits.map((h) => {
     const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-    const history = (h.history && typeof h.history === 'object') ? { ...h.history } : {};
+    const history = cleanHistory(h.history);
 
     // Archive prior day's info into history if it existed and wasn't archived yet
     if (priorDateKey && priorDateKey !== targetDateKey) {
@@ -340,20 +386,10 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
       history[targetDateKey] = isBool ? false : 0;
     }
 
-    // Self-heal: If today has a positive value but yesterday has no entry at all:
-    // Any value recorded without an entry for yesterday belongs to yesterday, and today must be 0!
-    if (yesterdayKey && history[yesterdayKey] === undefined && history[targetDateKey] !== undefined) {
-      const candidate = isBool ? (history[targetDateKey] ? 1 : 0) : (Number(history[targetDateKey]) || 0);
-      if (candidate > 0) {
-        history[yesterdayKey] = isBool ? true : candidate;
-        history[targetDateKey] = isBool ? false : 0;
-      }
-    }
-
     const hasTodayEntry = history[targetDateKey] !== undefined;
     const todayVal = hasTodayEntry
       ? history[targetDateKey]
-      : (isBool ? false : 0);
+      : (h.user1 !== undefined && h.user1 !== null ? (isBool ? Boolean(h.user1) : (Number(h.user1) || 0)) : (isBool ? false : 0));
 
     const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= (Number(h.target) || 1);
     const streak = calculateConsecutiveStreak(history, h.target, isBool);
@@ -378,7 +414,7 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
   });
 }
 
-export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser, remotePrefs, groupPod, targetDateKey = getLocalDateKey()) {
+export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser, remotePrefs, groupPod, targetDateKey = getLocalDateKey(), allGroupPods = []) {
   let habitsList = Array.isArray(partnerHabits) ? [...partnerHabits] : [];
   const remoteHealth = remotePrefs?.healthData || remoteUser?.preferences?.healthData;
   const pId = remoteUser?.id ? String(remoteUser.id) : null;
@@ -394,34 +430,37 @@ export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser,
     }
   }
 
-  // 2. Cross-reference groupPod.sharedGoals ONLY IF updated today!
-  if (groupPod && Array.isArray(groupPod.sharedGoals)) {
-    for (const sg of groupPod.sharedGoals) {
-      const su = (sg.unit || '').toLowerCase();
-      const sn = (sg.name || '').toLowerCase();
-      if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
-        const memberProg = sg.memberProgress || {};
-        const entry = (pId && memberProg[pId] !== undefined)
-          ? memberProg[pId]
-          : (pUsername && memberProg[pUsername] !== undefined)
-            ? memberProg[pUsername]
-            : (pCode && memberProg[pCode] !== undefined)
-              ? memberProg[pCode]
-              : undefined;
-        if (entry !== undefined && entry !== null) {
-          let isEntryToday = false;
-          let num = 0;
-          if (typeof entry === 'object') {
-            const entryDate = entry.updatedAt ? getLocalDateKey(new Date(entry.updatedAt)) : null;
-            isEntryToday = (entryDate === targetDateKey);
-            num = isEntryToday ? Number(entry.value) : 0;
-          } else {
-            const podDate = groupPod.updatedAt ? getLocalDateKey(new Date(groupPod.updatedAt)) : null;
-            isEntryToday = (podDate === targetDateKey);
-            num = isEntryToday ? Number(entry) : 0;
-          }
-          if (isEntryToday && !isNaN(num) && num > stepsVal) {
-            stepsVal = num;
+  // 2. Cross-reference groupPod & allGroupPods sharedGoals ONLY IF updated today!
+  const podsToCheck = [groupPod, ...(Array.isArray(allGroupPods) ? allGroupPods : [])].filter(Boolean);
+  for (const gp of podsToCheck) {
+    if (Array.isArray(gp.sharedGoals)) {
+      for (const sg of gp.sharedGoals) {
+        const su = (sg.unit || '').toLowerCase();
+        const sn = (sg.name || '').toLowerCase();
+        if (su === 'steps' || sn.includes('step') || sn.includes('walk')) {
+          const memberProg = sg.memberProgress || {};
+          const entry = (pId && memberProg[pId] !== undefined)
+            ? memberProg[pId]
+            : (pUsername && memberProg[pUsername] !== undefined)
+              ? memberProg[pUsername]
+              : (pCode && memberProg[pCode] !== undefined)
+                ? memberProg[pCode]
+                : undefined;
+          if (entry !== undefined && entry !== null) {
+            let isEntryToday = false;
+            let num = 0;
+            if (typeof entry === 'object') {
+              const entryDate = entry.updatedAt ? getLocalDateKey(new Date(entry.updatedAt)) : null;
+              isEntryToday = (entryDate === targetDateKey);
+              num = isEntryToday ? Number(entry.value) : 0;
+            } else {
+              const podDate = gp.updatedAt ? getLocalDateKey(new Date(gp.updatedAt)) : null;
+              isEntryToday = (podDate === targetDateKey);
+              num = isEntryToday ? Number(entry) : 0;
+            }
+            if (isEntryToday && !isNaN(num) && num > stepsVal) {
+              stepsVal = num;
+            }
           }
         }
       }

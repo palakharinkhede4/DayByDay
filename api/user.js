@@ -26,6 +26,53 @@ function parseSafeJson(val, fallback = {}) {
   return fallback;
 }
 
+export function cleanHistory(raw) {
+  const result = {};
+  function extract(item) {
+    if (item === null || item === undefined) return;
+    if (typeof item === 'string') {
+      try {
+        let parsed = JSON.parse(item);
+        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        extract(parsed);
+      } catch {}
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(extract);
+      return;
+    }
+    if (typeof item === 'object') {
+      for (const [k, v] of Object.entries(item)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
+          let val = v;
+          if (typeof val === 'string') {
+            if (val === 'true') val = true;
+            else if (val === 'false') val = false;
+            else if (!isNaN(Number(val))) val = Number(val);
+          }
+          const isBool = typeof val === 'boolean';
+          const numVal = isBool ? (val ? 1 : 0) : (Number(val) || 0);
+
+          if (result[k] === undefined) {
+            result[k] = isBool ? val : numVal;
+          } else {
+            const curIsBool = typeof result[k] === 'boolean';
+            const curNum = curIsBool ? (result[k] ? 1 : 0) : (Number(result[k]) || 0);
+            if (numVal > curNum) {
+              result[k] = isBool ? val : numVal;
+            }
+          }
+        } else if (/^\d+$/.test(k) || k === 'history' || typeof v === 'object') {
+          extract(v);
+        }
+      }
+    }
+  }
+  extract(raw);
+  return result;
+}
+
 function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, ...safe } = u;
@@ -76,12 +123,12 @@ function getIstYesterdayKey(date = new Date()) {
   }
 }
 
-function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
+function formatHabitFromRow(row, explicitSql = null) {
   if (!row) return null;
   const sql = (typeof explicitSql === 'function') ? explicitSql : getDb();
   const todayKey = getIstDateKey();
   const yesterdayKey = getIstYesterdayKey();
-  const history = parseSafeJson(row.history, {});
+  const history = cleanHistory(row.history);
 
   // Determine if this habit row was updated today in IST
   let wasUpdatedToday = false;
@@ -100,6 +147,11 @@ function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
   const rowTodayVal = (row.today_value !== undefined && row.today_value !== null) ? (Number(row.today_value) || 0) : 0;
   let needsDbSelfHeal = false;
 
+  // Detect corrupted history column in DB (arrays, strings, or numeric indexed keys)
+  if (Array.isArray(row.history) || typeof row.history === 'string' || (row.history && row.history['0'] !== undefined)) {
+    needsDbSelfHeal = true;
+  }
+
   // 1. If row was NOT updated today in IST:
   // Any value in row.today_value belongs to lastUpdatedDateKey (yesterday or earlier)
   if (!wasUpdatedToday && lastUpdatedDateKey) {
@@ -114,10 +166,8 @@ function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
     }
   }
 
-
   // 3. Authoritative today's value:
   // If row was NOT updated today, todayVal is strictly 0.
-  // If row was updated today, but today's entry was reset to 0, todayVal is 0.
   let todayVal;
   if (!wasUpdatedToday) {
     todayVal = isBool ? false : 0;
@@ -134,10 +184,11 @@ function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
     needsDbSelfHeal = true;
   }
 
-  // Self-heal the database row in PostgreSQL if stale/un-reset states were resolved
+  // Self-heal the database row in PostgreSQL if stale/un-reset states or corrupted history were resolved
   if (needsDbSelfHeal && sql && row.id) {
     const cleanDbVal = isBool ? (todayVal ? 1 : 0) : (Number(todayVal) || 0);
-    const p = sql`
+    // Fire-and-forget: async self-heal in background, never block client responses
+    sql`
       UPDATE daybyday_habits
       SET today_value = ${cleanDbVal},
           completed = ${Boolean(isCompleted)},
@@ -147,9 +198,6 @@ function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
     `.catch((err) => {
       console.warn('Notice self-healing habit row in DB:', err.message);
     });
-    if (pendingPromises && Array.isArray(pendingPromises)) {
-      pendingPromises.push(p);
-    }
   }
 
   return {
@@ -474,7 +522,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
           ON CONFLICT (user_id, habit_id) DO UPDATE SET
             today_value = EXCLUDED.today_value,
             completed = EXCLUDED.completed,
-            history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
+            history = EXCLUDED.history,
             updated_at = CURRENT_TIMESTAMP
         `;
       }
@@ -710,11 +758,7 @@ export default async function handler(req, res) {
           const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
           const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
-            const pPending = [];
-            partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql, pPending)) };
-            if (pPending.length > 0) {
-              try { await Promise.all(pPending); } catch {}
-            }
+            partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)) };
           }
         }
 
@@ -782,8 +826,7 @@ export default async function handler(req, res) {
           }
         }
 
-        const pendingHeals = [];
-        let formattedHabits = habits.map((h) => formatHabitFromRow(h, sql, pendingHeals)).map((h) => {
+        let formattedHabits = habits.map((h) => formatHabitFromRow(h, sql)).map((h) => {
           if (remoteHealthSteps > 0) {
             const isStep = (h.id || '').toLowerCase() === 'steps' ||
                            (h.unit || '').toLowerCase() === 'steps' ||
@@ -859,7 +902,7 @@ export default async function handler(req, res) {
                         entry.completed = false;
                       }
                       if (sql && groupPod.id) {
-                        const gpPromise = sql`
+                        sql`
                           UPDATE daybyday_group_pods
                           SET shared_goals = ${JSON.stringify(groupPod.sharedGoals)}::jsonb,
                               updated_at = CURRENT_TIMESTAMP
@@ -867,7 +910,6 @@ export default async function handler(req, res) {
                         `.catch((gpErr) => {
                           console.warn('Notice resetting group pod steps in DB:', gpErr.message);
                         });
-                        pendingHeals.push(gpPromise);
                       }
                     } else if ((Number(stepH.user1) || 0) < pVal) {
                       stepH.user1 = pVal;
@@ -888,13 +930,6 @@ export default async function handler(req, res) {
         const todayPercent = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
         const streak = formattedHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
 
-        if (pendingHeals.length > 0) {
-          try {
-            await Promise.all(pendingHeals);
-          } catch (healErr) {
-            console.warn('Notice awaiting habit self-heals in GET /api/user:', healErr.message);
-          }
-        }
 
         return res.status(200).json({
           user: sanitizeUser(user),
@@ -1211,11 +1246,7 @@ export default async function handler(req, res) {
             const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
             const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
             if (partnerRows.length > 0) {
-              const pPending = [];
-              partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql, pPending)) };
-              if (pPending.length > 0) {
-                try { await Promise.all(pPending); } catch {}
-              }
+              partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)) };
             }
           }
 
@@ -1273,11 +1304,7 @@ export default async function handler(req, res) {
             console.warn('Notice querying user group pods on login:', gpErr.message);
           }
 
-          const uPending = [];
-          const userHabitsFormatted = habits.map((h) => formatHabitFromRow(h, sql, uPending));
-          if (uPending.length > 0) {
-            try { await Promise.all(uPending); } catch {}
-          }
+          const userHabitsFormatted = habits.map((h) => formatHabitFromRow(h, sql));
 
           return res.status(200).json({
             user: sanitizeUser(user),
@@ -1458,9 +1485,15 @@ export default async function handler(req, res) {
           const clientActiveDate = lastActiveDate || (preferences && preferences.lastActiveDate);
           const isPriorDaySync = Boolean(clientActiveDate && clientActiveDate !== todayStr);
 
+          // Fetch existing habits for user to merge & preserve all historical dates in memory before writing
+          const existingHabits = await sql`SELECT habit_id, history FROM daybyday_habits WHERE user_id = ${userId}`;
+          const existingHistoryMap = new Map(existingHabits.map((r) => [r.habit_id, cleanHistory(r.history)]));
+
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
-            const historyObj = parseSafeJson(h.history, {});
+            const existingHist = existingHistoryMap.get(h.id) || {};
+            const incomingHist = cleanHistory(h.history);
+            const historyObj = { ...existingHist, ...incomingHist };
             const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
             const habitVal = h.user1 ?? h.todayValue ?? (historyObj[todayStr] !== undefined ? historyObj[todayStr] : 0);
             const numOrBoolVal = isBool ? Boolean(habitVal) : (Number(habitVal) || 0);
@@ -1470,18 +1503,14 @@ export default async function handler(req, res) {
 
             if (isPriorDaySync) {
               // The incoming habit data is from clientActiveDate (yesterday or earlier).
-              // Archive value to clientActiveDate
               historyObj[clientActiveDate] = numOrBoolVal;
-              // Today must be reset to 0
               historyObj[todayStr] = isBool ? false : 0;
-              todayValueToSave = isBool ? 0 : 0;
+              todayValueToSave = isBool ? false : 0;
               completedToSave = false;
             } else {
               todayValueToSave = isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal;
               completedToSave = Boolean(h.completed);
-              if (historyObj[todayStr] === undefined) {
-                historyObj[todayStr] = todayValueToSave;
-              }
+              historyObj[todayStr] = todayValueToSave;
             }
 
             await sql`
@@ -1506,16 +1535,12 @@ export default async function handler(req, res) {
                 reminder_time = EXCLUDED.reminder_time,
                 reminder_days = EXCLUDED.reminder_days,
                 streak = EXCLUDED.streak,
-                history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
+                history = EXCLUDED.history,
                 updated_at = CURRENT_TIMESTAMP
             `;
           }
           const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;
-          const sPending = [];
-          const formattedSaved = savedHabits.map((h) => formatHabitFromRow(h, sql, sPending));
-          if (sPending.length > 0) {
-            try { await Promise.all(sPending); } catch {}
-          }
+          const formattedSaved = savedHabits.map((h) => formatHabitFromRow(h, sql));
           return res.status(200).json({ success: true, habits: formattedSaved });
         }
 

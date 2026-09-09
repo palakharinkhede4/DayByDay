@@ -8,7 +8,7 @@ def getAppVersionCode() {
     if (project.hasProperty('versionCode')) {
         return project.property('versionCode').toInteger()
     }
-    return 410
+    return 420
 }
 
 android {
@@ -19,7 +19,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode getAppVersionCode()
-        versionName "4.1.0"
+        versionName "4.2.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

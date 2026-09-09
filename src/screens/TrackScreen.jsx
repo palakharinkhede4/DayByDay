@@ -21,6 +21,7 @@ export const TrackScreen = () => {
     user,
     pod,
     groupPod,
+    groupPods = [],
     trackedPartner,
     trackedPartners = [],
     activeTrackedCode,
@@ -48,13 +49,14 @@ export const TrackScreen = () => {
       p,
       p.preferences,
       groupPod,
-      todayKey
+      todayKey,
+      groupPods
     );
   };
 
   const activePartnerHabits = useMemo(() => {
     return getPartnerDisplayHabits(trackedPartner);
-  }, [trackedPartner, groupPod]);
+  }, [trackedPartner, groupPod, groupPods]);
 
   const myCode = user?.secretCode || user?.secret_code || pod?.code || 'DAY-1000';
 

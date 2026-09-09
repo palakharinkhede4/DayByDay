@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useHabits, getLocalDateKey } from '../context/HabitContext';
+import { useHabits, getLocalDateKey, cleanHistory } from '../context/HabitContext';
 import {
   Flame,
   Award,
@@ -85,14 +85,15 @@ export const InsightsScreen = () => {
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
         const target = Number(h.target) || 1;
-        if (h.history && h.history[dateKey] !== undefined) {
-          const val = h.history[dateKey];
+        const cleanHist = cleanHistory(h.history);
+        if (cleanHist[dateKey] !== undefined) {
+          const val = cleanHist[dateKey];
           if (isBool ? Boolean(val) : (Number(val) || 0) >= target) {
             completedOnDate++;
           }
         } else if (isToday) {
-          const val = Math.max(Number(h.history?.[dateKey]) || 0, Number(h.user1) || 0);
-          if (isBool ? (Boolean(h.user1) || Boolean(h.history?.[dateKey])) : val >= target) {
+          const val = Math.max(Number(cleanHist[dateKey]) || 0, Number(h.user1) || 0);
+          if (isBool ? (Boolean(h.user1) || Boolean(cleanHist[dateKey])) : val >= target) {
             completedOnDate++;
           }
         }
@@ -135,13 +136,14 @@ export const InsightsScreen = () => {
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
         const target = Number(h.target) || 1;
-        if (h.history && h.history[dateKey] !== undefined) {
-          const val = h.history[dateKey];
+        const cleanHist = cleanHistory(h.history);
+        if (cleanHist[dateKey] !== undefined) {
+          const val = cleanHist[dateKey];
           const isDone = isBool ? Boolean(val) : (Number(val) || 0) >= target;
           if (isDone) completedCount++;
         } else if (isToday) {
-          const val = Math.max(Number(h.history?.[dateKey]) || 0, Number(h.user1) || 0);
-          const isDone = isBool ? (Boolean(h.user1) || Boolean(h.history?.[dateKey])) : val >= target;
+          const val = Math.max(Number(cleanHist[dateKey]) || 0, Number(h.user1) || 0);
+          const isDone = isBool ? (Boolean(h.user1) || Boolean(cleanHist[dateKey])) : val >= target;
           if (isDone) completedCount++;
         }
       });
@@ -184,9 +186,10 @@ export const InsightsScreen = () => {
       const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
       let recordedValue = 0;
       let hasRecord = false;
+      const cleanHist = cleanHistory(h.history);
 
-      if (h.history && h.history[selectedDateKey] !== undefined) {
-        recordedValue = h.history[selectedDateKey];
+      if (cleanHist[selectedDateKey] !== undefined) {
+        recordedValue = cleanHist[selectedDateKey];
         hasRecord = true;
       } else if (isToday) {
         recordedValue = h.user1;
