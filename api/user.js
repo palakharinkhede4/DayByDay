@@ -114,17 +114,6 @@ function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
     }
   }
 
-  // 2. SELF-HEAL MIGRATION FOR YESTERDAY'S LINGERING VALUE:
-  // If history[todayKey] has a value, but history[yesterdayKey] is completely missing:
-  // Any non-zero value that was recorded without an entry for yesterday belongs to yesterday!
-  if (yesterdayKey && history[yesterdayKey] === undefined && history[todayKey] !== undefined) {
-    const candidateVal = Number(history[todayKey]) || (isBool ? (history[todayKey] ? 1 : 0) : 0);
-    if (candidateVal > 0) {
-      history[yesterdayKey] = isBool ? true : candidateVal;
-      history[todayKey] = isBool ? false : 0;
-      needsDbSelfHeal = true;
-    }
-  }
 
   // 3. Authoritative today's value:
   // If row was NOT updated today, todayVal is strictly 0.
@@ -485,7 +474,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
           ON CONFLICT (user_id, habit_id) DO UPDATE SET
             today_value = EXCLUDED.today_value,
             completed = EXCLUDED.completed,
-            history = EXCLUDED.history,
+            history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
             updated_at = CURRENT_TIMESTAMP
         `;
       }
@@ -1488,35 +1477,11 @@ export default async function handler(req, res) {
               todayValueToSave = isBool ? 0 : 0;
               completedToSave = false;
             } else {
-              // The sync is for today. But if the client sent no record in history for todayStr:
+              todayValueToSave = isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal;
+              completedToSave = Boolean(h.completed);
               if (historyObj[todayStr] === undefined) {
-                // If yesterday has no entry, archive numOrBoolVal to yesterdayStr and reset today to 0!
-                if (yesterdayStr && historyObj[yesterdayStr] === undefined && numOrBoolVal > 0) {
-                  historyObj[yesterdayStr] = numOrBoolVal;
-                  historyObj[todayStr] = isBool ? false : 0;
-                  todayValueToSave = 0;
-                  completedToSave = false;
-                } else {
-                  historyObj[todayStr] = isBool ? false : 0;
-                  todayValueToSave = 0;
-                  completedToSave = false;
-                }
-              } else {
-                // Check if historyObj[todayStr] has yesterday's lingering value with yesterday missing
-                if (yesterdayStr && historyObj[yesterdayStr] === undefined && Number(historyObj[todayStr]) > 0) {
-                  historyObj[yesterdayStr] = historyObj[todayStr];
-                  historyObj[todayStr] = isBool ? false : 0;
-                  todayValueToSave = 0;
-                  completedToSave = false;
-                } else {
-                  todayValueToSave = isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal;
-                  completedToSave = Boolean(h.completed);
-                }
+                historyObj[todayStr] = todayValueToSave;
               }
-            }
-
-            if (yesterdayStr && historyObj[yesterdayStr] === undefined && isPriorDaySync) {
-              historyObj[yesterdayStr] = numOrBoolVal;
             }
 
             await sql`
@@ -1541,7 +1506,7 @@ export default async function handler(req, res) {
                 reminder_time = EXCLUDED.reminder_time,
                 reminder_days = EXCLUDED.reminder_days,
                 streak = EXCLUDED.streak,
-                history = EXCLUDED.history,
+                history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
                 updated_at = CURRENT_TIMESTAMP
             `;
           }

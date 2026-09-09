@@ -259,6 +259,74 @@ export const InsightsScreen = () => {
     return Math.max(max, pod?.bestStreak || 0);
   }, [habits, activeStreak, pod?.bestStreak]);
 
+  const renderDayInspector = () => {
+    if (!selectedDayDetails) return null;
+    return (
+      <div className="selected-day-inspector-card">
+        <div className="inspector-header">
+          <div>
+            <span className="inspector-date-title font-extrabold">
+              {selectedDayDetails.dateFormatted}
+            </span>
+            <span className="inspector-date-key font-mono">
+              {selectedDayDetails.selectedDateKey}
+            </span>
+          </div>
+          <div className="inspector-score-pill font-bold">
+            <span>
+              {selectedDayDetails.completedCount}/{selectedDayDetails.total} Completed
+            </span>
+            <span className="inspector-pct-tag font-mono">
+              {selectedDayDetails.percent}%
+            </span>
+          </div>
+        </div>
+
+        {/* Habit Status Breakdown */}
+        <div className="inspector-habits-list">
+          {selectedDayDetails.items.map((item) => (
+            <div
+              key={item.id}
+              className={`inspector-habit-row ${item.isDone ? 'done' : 'pending'}`}
+            >
+              <div className="inspector-habit-left">
+                <div
+                  className={`inspector-status-icon ${
+                    item.isDone ? 'done' : 'incomplete'
+                  }`}
+                >
+                  {item.isDone ? (
+                    <Check size={13} strokeWidth={3} />
+                  ) : (
+                    <span className="pending-dot"></span>
+                  )}
+                </div>
+                <div>
+                  <span className="inspector-habit-name font-bold">
+                    {item.name}
+                  </span>
+                  <span className="inspector-habit-meta">
+                    {item.category}
+                  </span>
+                </div>
+              </div>
+
+              <div className="inspector-habit-right">
+                <span className="inspector-recorded-val font-mono font-bold">
+                  {item.isBool
+                    ? item.isDone
+                      ? 'Completed'
+                      : 'Pending'
+                    : `${item.recordedValue || 0} / ${item.target} ${item.unit}`}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="screen-insights-container">
       {/* Header */}
@@ -338,28 +406,33 @@ export const InsightsScreen = () => {
 
         {/* View 1: 7-Day Pulse */}
         {viewMode === 'weekly' && (
-          <div className="weekly-calendar-row">
-            {weekDays.map((d, idx) => (
-              <div
-                key={idx}
-                className={`calendar-day-col ${d.isToday ? 'today-col' : ''}`}
-                onClick={() => {
-                  setSelectedDateKey(d.dateKey);
-                  setViewMode('calendar');
-                }}
-                title={`View ${d.dateKey}`}
-              >
-                <span className="cal-day-letter font-medium">{d.dayName}</span>
-                <div className={`cal-indicator-circle ${d.isSuccess ? 'completed' : ''}`}>
-                  {d.isSuccess ? (
-                    <CheckCircle2 size={16} strokeWidth={2.8} />
-                  ) : (
-                    <span className="empty-dot"></span>
-                  )}
+          <div className="weekly-pulse-container">
+            <div className="weekly-calendar-row">
+              {weekDays.map((d, idx) => (
+                <div
+                  key={idx}
+                  className={`calendar-day-col ${d.isToday ? 'today-col' : ''} ${
+                    selectedDateKey === d.dateKey ? 'selected-col' : ''
+                  }`}
+                  onClick={() => {
+                    setSelectedDateKey(d.dateKey);
+                  }}
+                  title={`View ${d.dateKey}`}
+                >
+                  <span className="cal-day-letter font-medium">{d.dayName}</span>
+                  <div className={`cal-indicator-circle ${d.isSuccess ? 'completed' : ''}`}>
+                    {d.isSuccess ? (
+                      <CheckCircle2 size={16} strokeWidth={2.8} />
+                    ) : (
+                      <span className="empty-dot"></span>
+                    )}
+                  </div>
+                  <span className="cal-date-num font-mono">{d.dateNum}</span>
                 </div>
-                <span className="cal-date-num font-mono">{d.dateNum}</span>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {renderDayInspector()}
           </div>
         )}
 
@@ -455,70 +528,7 @@ export const InsightsScreen = () => {
             </div>
 
             {/* Selected Day Inspector */}
-            {selectedDayDetails && (
-              <div className="selected-day-inspector-card">
-                <div className="inspector-header">
-                  <div>
-                    <span className="inspector-date-title font-extrabold">
-                      {selectedDayDetails.dateFormatted}
-                    </span>
-                    <span className="inspector-date-key font-mono">
-                      {selectedDayDetails.selectedDateKey}
-                    </span>
-                  </div>
-                  <div className="inspector-score-pill font-bold">
-                    <span>
-                      {selectedDayDetails.completedCount}/{selectedDayDetails.total} Completed
-                    </span>
-                    <span className="inspector-pct-tag font-mono">
-                      {selectedDayDetails.percent}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Habit Status Breakdown */}
-                <div className="inspector-habits-list">
-                  {selectedDayDetails.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`inspector-habit-row ${item.isDone ? 'done' : 'pending'}`}
-                    >
-                      <div className="inspector-habit-left">
-                        <div
-                          className={`inspector-status-icon ${
-                            item.isDone ? 'done' : 'incomplete'
-                          }`}
-                        >
-                          {item.isDone ? (
-                            <Check size={13} strokeWidth={3} />
-                          ) : (
-                            <span className="pending-dot"></span>
-                          )}
-                        </div>
-                        <div>
-                          <span className="inspector-habit-name font-bold">
-                            {item.name}
-                          </span>
-                          <span className="inspector-habit-meta">
-                            {item.category}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="inspector-habit-right">
-                        <span className="inspector-recorded-val font-mono font-bold">
-                          {item.isBool
-                            ? item.isDone
-                              ? 'Completed'
-                              : 'Pending'
-                            : `${item.recordedValue || 0} / ${item.target} ${item.unit}`}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {renderDayInspector()}
           </div>
         )}
       </div>

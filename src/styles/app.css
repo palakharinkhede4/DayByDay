@@ -8560,6 +8560,13 @@ button:active {
   color: #475569;
 }
 
+.weekly-pulse-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
 .weekly-calendar-row {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -8591,6 +8598,8 @@ button:active {
   max-width: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  cursor: pointer;
+  user-select: none;
 }
 
 @media (max-width: 640px) {
@@ -8613,6 +8622,18 @@ button:active {
 
 [data-theme-mode="light"] .calendar-day-col.today-col {
   background: rgba(0, 210, 132, 0.1);
+}
+
+.calendar-day-col.selected-col {
+  border-color: var(--primary, #1A56C4);
+  box-shadow: 0 0 0 2px rgba(26, 86, 196, 0.35);
+  background: rgba(26, 86, 196, 0.14);
+}
+
+[data-theme-mode="light"] .calendar-day-col.selected-col {
+  border-color: #1A56C4;
+  box-shadow: 0 0 0 2px rgba(26, 86, 196, 0.25);
+  background: rgba(26, 86, 196, 0.08);
 }
 
 .cal-day-letter {
