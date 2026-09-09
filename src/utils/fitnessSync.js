@@ -378,6 +378,15 @@ export const importDeviceHealthStats = async (user = null, hintSteps = 0) => {
       saveHealthHistoryEntry(lastSaved.yesterdayDate, lastSaved.yesterdaySteps);
     }
 
+    // On web browsers without native hardware sensors or external webhook sync:
+    // The user's habit step count (hintSteps) is the authoritative source of truth.
+    if (!window.Capacitor?.isNativePlatform?.() && !urlPayload && hintSteps > 0) {
+      lastSaved.steps = hintSteps;
+      lastSaved.calories = Math.round(hintSteps * 0.04);
+      lastSaved.distanceKm = Math.round(hintSteps * 0.000762 * 100) / 100;
+      isToday = true;
+    }
+
     const steps = isToday
       ? (typeof lastSaved?.steps === 'number' ? Math.max(0, lastSaved.steps) : (Number(lastSaved?.steps) || 0))
       : 0;
@@ -574,13 +583,16 @@ export const syncHealthDataToHabitsAndPod = async ({
     const curVal = Number(h[activeUserId]) || 0;
     const hasTodayActiveLog = h.history && (Number(h.history[todayKey]) > 0 || h.history[todayKey] === true);
 
-    // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an empty device sync during the active day!
-    // BUT if the user has NO active record for today (meaning curVal is lingering from yesterday), or if healthData is a daily reset, allow resetting to 0!
-    if (targetVal <= 0 && curVal > 0 && hasTodayActiveLog && healthData.source !== 'reset') continue;
+    const isManual = Boolean(healthData.isManualOverride || healthData.source === 'manual_entry');
 
-    // CRITICAL: If incoming device sync is LOWER than the current habit (e.g. uncalibrated hardware sensor reporting 258 while habit is 3570),
-    // NEVER downgrade the user's progress! Instead, auto-calibrate the native sensor forward to match the habit!
-    if (targetVal < curVal && curVal > 0 && healthData.source !== 'reset') {
+    // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an automated background device sync!
+    // BUT if the user manually entered a value, or if healthData is a daily reset, allow it!
+    if (!isManual && targetVal <= 0 && curVal > 0 && hasTodayActiveLog && healthData.source !== 'reset') continue;
+
+    // CRITICAL: If incoming AUTOMATED device sync is LOWER than current habit (e.g. uncalibrated hardware sensor reporting 258 while habit is 3570),
+    // do not downgrade from background sensor noise; instead auto-calibrate the native sensor forward.
+    // However, if the user MANUALLY entered or edited this value, the manual value is authoritative!
+    if (!isManual && targetVal < curVal && curVal > 0 && healthData.source !== 'reset') {
       if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
         window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: curVal }).catch(() => {});
       }
@@ -590,6 +602,11 @@ export const syncHealthDataToHabitsAndPod = async ({
     if (curVal !== targetVal && typeof onUpdateHabit === 'function') {
       onUpdateHabit(h.id, activeUserId, targetVal, true, silent);
       updatedHabitsCount++;
+
+      // If user manually updated steps, calibrate native sensor directly to new manual value
+      if (isManual && window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
+        window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: targetVal }).catch(() => {});
+      }
     }
   }
 

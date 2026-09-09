@@ -136,7 +136,7 @@ public class FitnessSyncPlugin extends Plugin {
                     .apply();
             } else {
                 int rawDiff = Math.max(0, currentTotalHardwareSteps - baselineSteps);
-                if (hintSteps > 0 && manualOffset == 0 && (rawDiff + manualOffset) < hintSteps) {
+                if (hintSteps > 0 && (rawDiff + manualOffset) < hintSteps) {
                     manualOffset = hintSteps - rawDiff;
                     prefs.edit().putInt(KEY_MANUAL_OFFSET, manualOffset).apply();
                 }
