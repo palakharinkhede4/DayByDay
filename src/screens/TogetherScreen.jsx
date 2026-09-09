@@ -18,14 +18,22 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Pencil,
+  Footprints,
+  Droplets,
+  Dumbbell,
+  BookOpen,
+  Brain,
+  Sparkles,
+  Moon,
 } from 'lucide-react';
 const POD_GOAL_PRESETS = [
-  { name: '10,000 Steps', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
-  { name: 'Daily Hydration', category: 'Health', target: 8, unit: 'glasses', delta: 1 },
-  { name: 'Group Workout', category: 'Fitness', target: 30, unit: 'min', delta: 5 },
-  { name: 'Book Reading', category: 'Mind', target: 20, unit: 'pages', delta: 5 },
-  { name: 'Deep Work', category: 'Productivity', target: 60, unit: 'min', delta: 15 },
-  { name: 'Mindfulness', category: 'Mind', target: 10, unit: 'min', delta: 5 },
+  { name: '10,000 Steps', iconName: 'footprints', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
+  { name: 'Daily Hydration', iconName: 'droplets', category: 'Health', target: 8, unit: 'glasses', delta: 1 },
+  { name: 'Group Workout', iconName: 'dumbbell', category: 'Fitness', target: 30, unit: 'min', delta: 5 },
+  { name: 'Book Reading', iconName: 'book', category: 'Mind', target: 20, unit: 'pages', delta: 5 },
+  { name: 'Deep Work', iconName: 'brain', category: 'Productivity', target: 60, unit: 'min', delta: 15 },
+  { name: 'Mindfulness', iconName: 'sparkles', category: 'Mind', target: 10, unit: 'min', delta: 5 },
+  { name: 'Sleep', iconName: 'moon', category: 'Health', target: 8, unit: 'Hours', delta: 1 },
 ];
 
 const getMemberProgressVal = (memberProgressMap, m) => {
@@ -119,9 +127,22 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
     onClose();
   };
 
+  const getPresetIcon = (iconName) => {
+    switch (iconName) {
+      case 'footprints': return <Footprints size={14} className="preset-icon" />;
+      case 'droplets': return <Droplets size={14} className="preset-icon" />;
+      case 'dumbbell': return <Dumbbell size={14} className="preset-icon" />;
+      case 'book': return <BookOpen size={14} className="preset-icon" />;
+      case 'brain': return <Brain size={14} className="preset-icon" />;
+      case 'sparkles': return <Sparkles size={14} className="preset-icon" />;
+      case 'moon': return <Moon size={14} className="preset-icon" />;
+      default: return <Target size={14} className="preset-icon" />;
+    }
+  };
+
   return (
     <div className="habit-modal-backdrop" onClick={onClose}>
-      <div className="habit-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Add Pod Goal">
+      <div className="habit-modal-card pod-add-goal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Add Pod Goal">
         <div className="habit-modal-header">
           <div className="habit-modal-title-group">
             <h2 className="habit-modal-title font-extrabold">New Shared Pod Goal</h2>
@@ -136,24 +157,28 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
           {/* Quick Presets */}
           <div className="habit-modal-field">
             <label className="habit-modal-label font-bold">Quick Presets</label>
-            <div className="preset-chips-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
-              {POD_GOAL_PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  className="pod-preset-pill"
-                  onClick={() => {
-                    sound.selection();
-                    setName(p.name);
-                    setCategory(p.category);
-                    setTarget(p.target);
-                    setUnit(p.unit);
-                    setDelta(p.delta);
-                  }}
-                >
-                  {p.name}
-                </button>
-              ))}
+            <div className="preset-chips-scroll">
+              {POD_GOAL_PRESETS.map((p) => {
+                const isSelected = name.trim().toLowerCase() === p.name.toLowerCase();
+                return (
+                  <button
+                    key={p.name}
+                    type="button"
+                    className={`pod-preset-pill ${isSelected ? 'active' : ''}`}
+                    onClick={() => {
+                      sound.selection();
+                      setName(p.name);
+                      setCategory(p.category);
+                      setTarget(p.target);
+                      setUnit(p.unit);
+                      setDelta(p.delta);
+                    }}
+                  >
+                    {getPresetIcon(p.iconName)}
+                    <span>{p.name}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -165,7 +190,7 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
               className="habit-modal-input font-medium"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. 10,000 Steps, 3L Hydration"
+              placeholder="e.g. 10,000 Steps, 3L Hydration, Sleep"
               required
             />
           </div>
@@ -187,7 +212,7 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
           </div>
 
           {/* Target, Unit & Increment */}
-          <div className="habit-modal-row-split">
+          <div className="pod-modal-triplet">
             <div className="habit-modal-field">
               <label className="habit-modal-label font-bold">Target / Person</label>
               <input
@@ -208,7 +233,7 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
                 className="habit-modal-input font-medium"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                placeholder="steps, min, reps"
+                placeholder="steps, glasses, Hours"
                 required
               />
             </div>
@@ -224,6 +249,19 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
                 onChange={(e) => setDelta(e.target.value)}
                 required
               />
+            </div>
+          </div>
+
+          {/* Live Preview Card */}
+          <div className="pod-goal-preview-card">
+            <div className="pod-goal-preview-header">
+              <span className="pod-goal-preview-badge">{category}</span>
+              <span className="pod-goal-preview-sub">
+                Target: <strong>{target || 1} {unit || 'times'}</strong> / person
+              </span>
+            </div>
+            <div className="pod-goal-preview-title font-bold">
+              {name.trim() || 'Goal Name Preview'}
             </div>
           </div>
 
@@ -307,7 +345,7 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
           </div>
 
           {/* Target, Unit & Increment */}
-          <div className="habit-modal-row-split">
+          <div className="pod-modal-triplet">
             <div className="habit-modal-field">
               <label className="habit-modal-label font-bold">Target per Person</label>
               <input
@@ -328,7 +366,7 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
                 className="habit-modal-input font-medium"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                placeholder="steps, min, reps"
+                placeholder="steps, glasses, Hours"
                 required
               />
             </div>
@@ -345,6 +383,19 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
                 placeholder="e.g. 1000, 5, 1"
                 required
               />
+            </div>
+          </div>
+
+          {/* Live Preview Card */}
+          <div className="pod-goal-preview-card">
+            <div className="pod-goal-preview-header">
+              <span className="pod-goal-preview-badge">{category}</span>
+              <span className="pod-goal-preview-sub">
+                Target: <strong>{target || 1} {unit || 'times'}</strong> / person
+              </span>
+            </div>
+            <div className="pod-goal-preview-title font-bold">
+              {name.trim() || 'Goal Name Preview'}
             </div>
           </div>
 

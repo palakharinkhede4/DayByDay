@@ -181,11 +181,74 @@ function formatHabitFromRow(row, explicitSql = null, pendingPromises = null) {
   };
 }
 
-function formatGroupPodFromRow(row) {
+function formatGroupPodFromRow(row, sql = null) {
   if (!row) return null;
   const todayKey = getIstDateKey();
-  const rawGoals = parseSafeJson(row.shared_goals, []);
-  const cleanGoals = (Array.isArray(rawGoals) ? rawGoals : []).map((sg) => {
+  let rawGoals = parseSafeJson(row.shared_goals, []);
+
+  // Self-healing database check: detect corrupted single-char spread goals or string-split artifacts
+  if (Array.isArray(rawGoals) && rawGoals.length > 0) {
+    const hasCorruptedGoals = rawGoals.some(
+      (g) => !g || typeof g !== 'object' || !g.name || typeof g.name !== 'string' || g['0'] !== undefined
+    );
+
+    if (hasCorruptedGoals) {
+      console.warn(`[AutoHeal Pod] Detected corrupted goals in pod ${row.code || row.id} (total items: ${rawGoals.length}). Healing...`);
+      const fragments = rawGoals.filter((g) => g && (g['0'] !== undefined || typeof g === 'string'));
+      let reconstructed = [];
+      if (fragments.length > 0) {
+        try {
+          const jsonStr = fragments.map((g) => (typeof g === 'string' ? g : g['0'] !== undefined ? g['0'] : '')).join('');
+          const parsed = JSON.parse(jsonStr);
+          if (Array.isArray(parsed)) {
+            reconstructed = parsed;
+          }
+        } catch (healParseErr) {
+          console.warn('[AutoHeal Pod] JSON reconstruct failed:', healParseErr.message);
+        }
+      }
+
+      // Keep any valid whole goals that were appended (e.g., Sleep)
+      const validWholeGoals = rawGoals.filter(
+        (g) => g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '' && g['0'] === undefined
+      );
+
+      // Merge and deduplicate by id or lowercase trimmed name
+      const goalMap = new Map();
+      [...reconstructed, ...validWholeGoals].forEach((g) => {
+        if (g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '') {
+          const key = (g.id || g.name).toLowerCase().trim();
+          goalMap.set(key, g);
+        }
+      });
+
+      const healedGoals = Array.from(goalMap.values());
+      rawGoals = healedGoals;
+
+      // Asynchronously repair in PostgreSQL if sql client and pod id/code are present
+      if (sql && (row.id || row.code)) {
+        const podId = row.id;
+        const podCode = (row.code || '').toUpperCase();
+        sql`
+          UPDATE daybyday_group_pods
+          SET shared_goals = ${JSON.stringify(healedGoals)}::jsonb,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE ${podId ? sql`id = ${podId}` : sql`UPPER(code) = ${podCode}`}
+        `.then(() => {
+          console.log(`[AutoHeal Pod] Successfully repaired and persisted ${healedGoals.length} clean goals for pod ${podCode || podId}`);
+        }).catch((dbHealErr) => {
+          console.warn(`[AutoHeal Pod] Async DB write failed for pod ${podCode || podId}:`, dbHealErr.message);
+        });
+      }
+    }
+  }
+
+  // Filter rawGoals to strictly valid goal objects with string names
+  const validGoalsList = (Array.isArray(rawGoals) ? rawGoals : []).filter(
+    (sg) => sg && typeof sg === 'object' && typeof sg.name === 'string' && sg.name.trim() !== '' && sg['0'] === undefined
+  );
+
+  const cleanGoals = validGoalsList.map((sg) => {
     const memberProgress = { ...(sg.memberProgress || {}) };
     let activeTotal = 0;
     const cleanMemberProg = {};
@@ -681,7 +744,7 @@ export default async function handler(req, res) {
             LIMIT 5
           `;
           if (groupRows.length > 0) {
-            groupPods = groupRows.map(formatGroupPodFromRow);
+            groupPods = groupRows.map((r) => formatGroupPodFromRow(r, sql));
 
             // Enrich members with latest profilePicture & secretCode so avatars load instantly
             const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
@@ -1182,7 +1245,7 @@ export default async function handler(req, res) {
               LIMIT 5
             `;
             if (groupRows.length > 0) {
-              groupPods = groupRows.map(formatGroupPodFromRow);
+              groupPods = groupRows.map((r) => formatGroupPodFromRow(r, sql));
 
               // Enrich members with latest profilePicture & secretCode so avatars load instantly
               const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
@@ -1693,7 +1756,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0]);
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1789,7 +1852,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0]);
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -1865,7 +1928,7 @@ export default async function handler(req, res) {
             ORDER BY updated_at DESC
             LIMIT 5
           `;
-          pods = groupRows.map(formatGroupPodFromRow);
+          pods = groupRows.map((r) => formatGroupPodFromRow(r, sql));
 
           // Enrich members with latest profilePicture & secretCode
           if (pods.length > 0) {
@@ -1920,16 +1983,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-              createdAt: r.created_at,
-              maxMembers: 10,
-            };
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2028,7 +2082,10 @@ export default async function handler(req, res) {
           createdAt: new Date().toISOString(),
         };
 
-        const updatedGoals = [...(pod.sharedGoals || []), newGoal];
+        const existingGoals = Array.isArray(pod.sharedGoals)
+          ? pod.sharedGoals.filter((g) => g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '' && g['0'] === undefined)
+          : [];
+        const updatedGoals = [...existingGoals, newGoal];
         pod.sharedGoals = updatedGoals;
 
         if (sql) {
@@ -2057,7 +2114,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0]);
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2140,7 +2197,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0]);
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2179,7 +2236,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            pod = formatGroupPodFromRow(rows[0]);
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2237,7 +2294,7 @@ export default async function handler(req, res) {
               SET name = ${cleanName}, updated_at = CURRENT_TIMESTAMP
               WHERE UPPER(code) = ${cleanCode}
             `;
-            pod = { ...formatGroupPodFromRow(r), name: cleanName };
+            pod = { ...formatGroupPodFromRow(r, sql), name: cleanName };
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -2489,14 +2546,7 @@ export default async function handler(req, res) {
         if (sql) {
           const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
           if (rows.length > 0) {
-            const r = rows[0];
-            pod = {
-              id: r.id,
-              name: r.name,
-              code: r.code,
-              members: r.members || [],
-              sharedGoals: r.shared_goals || [],
-            };
+            pod = formatGroupPodFromRow(rows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);

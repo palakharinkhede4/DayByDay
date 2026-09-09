@@ -462,6 +462,63 @@ export function enrichPartnerHabitsWithHealthAndGroup(partnerHabits, remoteUser,
   return habitsList;
 }
 
+export function sanitizePodSharedGoals(pod) {
+  if (!pod) return null;
+  let rawGoals = pod.sharedGoals ?? pod.shared_goals;
+  if (typeof rawGoals === 'string') {
+    try { rawGoals = JSON.parse(rawGoals); } catch { rawGoals = []; }
+  }
+  if (!Array.isArray(rawGoals)) rawGoals = [];
+
+  const hasCorruptedGoals = rawGoals.some(
+    (g) => !g || typeof g !== 'object' || !g.name || typeof g.name !== 'string' || g['0'] !== undefined
+  );
+
+  let cleanedGoals = rawGoals;
+  if (hasCorruptedGoals) {
+    const fragments = rawGoals.filter((g) => g && (g['0'] !== undefined || typeof g === 'string'));
+    let reconstructed = [];
+    if (fragments.length > 0) {
+      try {
+        const jsonStr = fragments.map((g) => (typeof g === 'string' ? g : g['0'] !== undefined ? g['0'] : '')).join('');
+        const parsed = JSON.parse(jsonStr);
+        if (Array.isArray(parsed)) {
+          reconstructed = parsed;
+        }
+      } catch {}
+    }
+
+    const validWhole = rawGoals.filter(
+      (g) => g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '' && g['0'] === undefined
+    );
+
+    const goalMap = new Map();
+    [...reconstructed, ...validWhole].forEach((g) => {
+      if (g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '') {
+        const key = (g.id || g.name).toLowerCase().trim();
+        goalMap.set(key, g);
+      }
+    });
+    cleanedGoals = Array.from(goalMap.values());
+  }
+
+  // Strictly filter out any items missing valid name
+  cleanedGoals = cleanedGoals.filter(
+    (g) => g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '' && g['0'] === undefined
+  );
+
+  let mem = pod.members;
+  if (typeof mem === 'string') {
+    try { mem = JSON.parse(mem); } catch { mem = []; }
+  }
+
+  return {
+    ...pod,
+    sharedGoals: cleanedGoals,
+    members: Array.isArray(mem) ? mem : [],
+  };
+}
+
 export const HabitProvider = ({ children }) => {
   const firedRemindersRef = useRef(new Set());
   const isCrossSyncingRef = useRef(false);
@@ -609,22 +666,7 @@ export const HabitProvider = ({ children }) => {
   // Group Pods State (up to 5 pods)
   const [groupPods, setGroupPods] = useState(() => {
     try {
-      const cleanPodItem = (p) => {
-        if (!p) return null;
-        let sg = p.sharedGoals ?? p.shared_goals;
-        if (typeof sg === 'string') {
-          try { sg = JSON.parse(sg); } catch { sg = []; }
-        }
-        let mem = p.members;
-        if (typeof mem === 'string') {
-          try { mem = JSON.parse(mem); } catch { mem = []; }
-        }
-        return {
-          ...p,
-          sharedGoals: Array.isArray(sg) ? sg : [],
-          members: Array.isArray(mem) ? mem : [],
-        };
-      };
+      const cleanPodItem = (p) => sanitizePodSharedGoals(p);
 
       const savedMulti = localStorage.getItem('daybyday_group_pods');
       if (savedMulti) {
@@ -660,20 +702,7 @@ export const HabitProvider = ({ children }) => {
     }
     const raw = found || groupPods[0];
     if (!raw) return null;
-
-    let sg = raw.sharedGoals ?? raw.shared_goals;
-    if (typeof sg === 'string') {
-      try { sg = JSON.parse(sg); } catch { sg = []; }
-    }
-    let mem = raw.members;
-    if (typeof mem === 'string') {
-      try { mem = JSON.parse(mem); } catch { mem = []; }
-    }
-    return {
-      ...raw,
-      sharedGoals: Array.isArray(sg) ? sg : [],
-      members: Array.isArray(mem) ? mem : [],
-    };
+    return sanitizePodSharedGoals(raw);
   }, [groupPods, activeGroupPodCode]);
 
   const selectGroupPod = useCallback((code) => {
@@ -689,9 +718,9 @@ export const HabitProvider = ({ children }) => {
       let updatedActive;
       if (typeof podOrUpdater === 'function') {
         const active = (activeGroupPodCode && prev.find(p => (p.code || '').toUpperCase() === activeGroupPodCode.toUpperCase())) || prev[0] || null;
-        updatedActive = podOrUpdater(active);
+        updatedActive = sanitizePodSharedGoals(podOrUpdater(active));
       } else {
-        updatedActive = podOrUpdater;
+        updatedActive = sanitizePodSharedGoals(podOrUpdater);
       }
 
       if (!updatedActive) {
@@ -2785,8 +2814,11 @@ export const HabitProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
     };
 
-    const updatedGoals = [...(groupPod.sharedGoals || []), newGoal];
-    const updatedPod = { ...groupPod, sharedGoals: updatedGoals };
+    const existingGoals = Array.isArray(groupPod.sharedGoals)
+      ? groupPod.sharedGoals.filter((g) => g && typeof g === 'object' && typeof g.name === 'string' && g.name.trim() !== '' && g['0'] === undefined)
+      : [];
+    const updatedGoals = [...existingGoals, newGoal];
+    const updatedPod = sanitizePodSharedGoals({ ...groupPod, sharedGoals: updatedGoals });
     setGroupPod(updatedPod);
     localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedPod));
 
@@ -2794,8 +2826,9 @@ export const HabitProvider = ({ children }) => {
       try {
         const res = await addGroupGoalRemote(groupPod.code, newGoal);
         if (res) {
-          setGroupPod(res);
-          localStorage.setItem('daybyday_group_pod', JSON.stringify(res));
+          const cleanRes = sanitizePodSharedGoals(res);
+          setGroupPod(cleanRes);
+          localStorage.setItem('daybyday_group_pod', JSON.stringify(cleanRes));
         }
       } catch (err) {
         console.warn('Remote add group goal notice:', err);

@@ -7251,6 +7251,132 @@ button:active {
   padding: 0.85rem;
 }
 
+/* Redesigned Pod Goal Preset Pills */
+.preset-chips-scroll {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.45rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.preset-chips-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.pod-preset-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--border-medium, rgba(255, 255, 255, 0.12));
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.05));
+  color: var(--text-secondary, #94a3b8);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  outline: none;
+}
+
+.pod-preset-pill .preset-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition: transform 0.2s ease;
+}
+
+.pod-preset-pill:hover {
+  background: var(--bg-surface-hover, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary, #f8fafc);
+  border-color: rgba(16, 185, 129, 0.5);
+  transform: translateY(-1px);
+}
+
+.pod-preset-pill:hover .preset-icon {
+  transform: scale(1.15);
+}
+
+.pod-preset-pill:active {
+  transform: scale(0.96);
+}
+
+.pod-preset-pill.active {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.pod-preset-pill.active .preset-icon {
+  opacity: 1;
+}
+
+/* Symmetrical 3-column Grid for Target, Unit, Delta */
+.pod-modal-triplet {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+  width: 100%;
+}
+
+@media (max-width: 360px) {
+  .pod-modal-triplet {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Interactive Goal Preview Card */
+.pod-goal-preview-card {
+  background: var(--bg-surface-container, rgba(255, 255, 255, 0.04));
+  border: 1px dashed var(--border-medium, rgba(255, 255, 255, 0.16));
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: all 0.25s ease;
+}
+
+.pod-goal-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pod-goal-preview-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-emerald, #10b981);
+  background: rgba(16, 185, 129, 0.14);
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
+.pod-goal-preview-sub {
+  font-size: 0.76rem;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.pod-goal-preview-title {
+  font-size: 0.95rem;
+  color: var(--text-primary, #f8fafc);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .form-row {
   display: flex;
   align-items: center;
@@ -11818,9 +11944,34 @@ button:active {
 }
 
 [data-theme-mode="light"] .pod-preset-pill {
-  background: #ffffff !important;
+  background: #f8fafc !important;
   border: 1px solid #cbd5e1 !important;
   color: #475569 !important;
+}
+
+[data-theme-mode="light"] .pod-preset-pill:hover {
+  background: #f1f5f9 !important;
+  border-color: #059669 !important;
+  color: #0f172a !important;
+}
+
+[data-theme-mode="light"] .pod-preset-pill.active {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: #059669 !important;
+  color: #059669 !important;
+}
+
+[data-theme-mode="light"] .pod-goal-preview-card {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme-mode="light"] .pod-goal-preview-title {
+  color: #0f172a !important;
+}
+
+[data-theme-mode="light"] .pod-goal-preview-sub {
+  color: #64748b !important;
 }
 
 [data-theme-mode="light"] .group-onboard-card {
