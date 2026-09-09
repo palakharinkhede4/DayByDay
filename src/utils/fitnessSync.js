@@ -19,6 +19,9 @@ export const isHealthSyncEnabled = () => {
 export const setHealthSyncEnabled = (enabled) => {
   try {
     localStorage.setItem(ENABLED_KEY, enabled ? 'true' : 'false');
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.setFitnessSyncEnabled) {
+      window.Capacitor.Plugins.FitnessSync.setFitnessSyncEnabled({ enabled: Boolean(enabled) }).catch(() => {});
+    }
   } catch {}
 };
 
@@ -48,16 +51,16 @@ export const getStoredHealthHistory = () => {
   }
 };
 
-export const saveHealthHistoryEntry = (dateKey, steps) => {
+export const saveHealthHistoryEntry = (dateKey, steps, isOverride = false) => {
   if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
   const stepsNum = Math.max(0, Math.round(Number(steps) || 0));
-  if (stepsNum <= 0) return;
   try {
     const hist = getStoredHealthHistory();
-    hist[dateKey] = Math.max(Number(hist[dateKey]) || 0, stepsNum);
+    hist[dateKey] = isOverride ? stepsNum : Math.max(Number(hist[dateKey]) || 0, stepsNum);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
   } catch {}
 };
+
 
 export const mergeStoredHealthHistory = (incomingMap) => {
   if (!incomingMap || typeof incomingMap !== 'object') return getStoredHealthHistory();
@@ -260,7 +263,9 @@ export const importDeviceHealthStats = async (user = null) => {
 
     // 2. Native Android Hardware Step Counter via Capacitor Plugin
     if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync) {
-      const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats();
+      const existingStored = getStoredHealthData() || {};
+      const hintSteps = Math.max(0, Number(existingStored.steps) || 0);
+      const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats({ currentSteps: hintSteps });
       if (stats && stats.success) {
         const steps = Math.max(0, Number(stats.steps) || 0);
         const todayKey = getIstDateKey();
@@ -412,21 +417,26 @@ export const updateCustomHealthStats = (input) => {
 
   if (typeof input === 'number') {
     const steps = Math.max(0, Math.round(input));
-    saveHealthHistoryEntry(todayKey, steps);
+    saveHealthHistoryEntry(todayKey, steps, true);
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
+      window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: steps }).catch(() => {});
+    }
     payload = {
       ...current,
       steps,
       calories: Math.round(steps * 0.04),
       distanceKm: Math.round(steps * 0.000762 * 100) / 100,
-      source: 'apple_health',
+      source: 'manual_entry',
+      isManualOverride: true,
       syncedAt: new Date().toISOString(),
       history: getStoredHealthHistory(),
     };
   } else if (input && typeof input === 'object') {
     const steps = input.steps !== undefined ? Math.max(0, Math.round(Number(input.steps) || 0)) : (current.steps || 0);
     const targetDate = input.date || todayKey;
-    if (steps > 0) {
-      saveHealthHistoryEntry(targetDate, steps);
+    saveHealthHistoryEntry(targetDate, steps, true);
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
+      window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: steps }).catch(() => {});
     }
     if (input.history && typeof input.history === 'object') {
       mergeStoredHealthHistory(input.history);
@@ -437,7 +447,8 @@ export const updateCustomHealthStats = (input) => {
       steps,
       calories: input.calories !== undefined ? Number(input.calories) : (current.calories || Math.round(steps * 0.04)),
       distanceKm: input.distanceKm !== undefined ? Number(input.distanceKm) : (current.distanceKm || Math.round(steps * 0.000762 * 100) / 100),
-      source: input.source || 'apple_health',
+      source: input.source || 'manual_entry',
+      isManualOverride: true,
       syncedAt: new Date().toISOString(),
       history: getStoredHealthHistory(),
     };

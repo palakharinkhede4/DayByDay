@@ -1508,6 +1508,11 @@ export const HabitProvider = ({ children }) => {
         localStorage.removeItem('daybyday_focus_habit_id');
       }
     }
+    if (prefs.healthSyncEnabled !== undefined) {
+      const isEnabled = Boolean(prefs.healthSyncEnabled);
+      setHealthSyncEnabled(isEnabled);
+      setHealthSyncEnabledState(isEnabled);
+    }
     if (prefs.beyondGoals && Array.isArray(prefs.beyondGoals) && prefs.beyondGoals.length) {
       setBeyondGoals(prefs.beyondGoals);
       localStorage.setItem('daybyday_beyond', JSON.stringify(prefs.beyondGoals));
@@ -3281,6 +3286,9 @@ export const HabitProvider = ({ children }) => {
     }
     setHealthSyncEnabled(true);
     setHealthSyncEnabledState(true);
+    if (user?.id) {
+      syncPreferencesRemote(user.id, { ...(user.preferences || {}), healthSyncEnabled: true }).catch(() => {});
+    }
     const data = await syncDeviceHealth({ silent: false, force: true });
     return { success: true, data };
   };
@@ -3290,6 +3298,9 @@ export const HabitProvider = ({ children }) => {
     sound.press();
     setHealthSyncEnabled(false);
     setHealthSyncEnabledState(false);
+    if (user?.id) {
+      syncPreferencesRemote(user.id, { ...(user.preferences || {}), healthSyncEnabled: false }).catch(() => {});
+    }
     triggerIslandNotification('Health sync paused', 'info');
   };
 
@@ -3344,8 +3355,8 @@ export const HabitProvider = ({ children }) => {
       habits: habitsRef.current || habits,
       sharedGoals: groupPod?.sharedGoals || [],
       activeUserId: 'user1',
-      onUpdateHabit: (hId, uId, val, isAbs, isSil) => updateHabit(hId, uId, val, isAbs, isSil, 'health'),
-      onUpdateSharedGoal: (gId, d, exp, isSil) => updateSharedGoalProgress(gId, d, exp, isSil, 'health'),
+      onUpdateHabit: (hId, uId, val, isAbs, isSil) => updateHabit(hId, uId, val, isAbs, isSil, 'user'),
+      onUpdateSharedGoal: (gId, d, exp, isSil) => updateSharedGoalProgress(gId, d, exp, isSil, 'user'),
       triggerIslandNotification,
     });
     const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
@@ -3636,7 +3647,7 @@ export const HabitProvider = ({ children }) => {
       currentHistory[todayKey] = nextValue;
       const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps';
       if (isStep && Number(nextValue) > 0) {
-        saveHealthHistoryEntry(todayKey, Number(nextValue));
+        saveHealthHistoryEntry(todayKey, Number(nextValue), origin === 'user');
       }
 
       const isCompleted = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
@@ -3714,14 +3725,18 @@ export const HabitProvider = ({ children }) => {
         if (isStepHabit) {
           const steps = Math.max(0, Math.round(Number(computedNextValue) || 0));
           const calories = Math.round(steps * 0.04);
-          const distanceKm = Math.round(steps * 0.000762 * 100) / 100;
+          const isUserEdit = origin === 'user';
           const healthPayload = {
             steps,
             calories,
             distanceKm,
-            source: 'habit_entry',
+            source: isUserEdit ? 'manual_entry' : 'habit_entry',
+            isManualOverride: isUserEdit,
             syncedAt: new Date().toISOString(),
           };
+          if (isUserEdit && window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
+            window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: steps }).catch(() => {});
+          }
           setHealthStats((prev) => {
             const updated = {
               ...(prev || {}),

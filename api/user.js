@@ -440,6 +440,9 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
             incomingHist[payloadDate] = steps;
           }
           const history = cleanHistory([sh.history, incomingHist]);
+          if (isToday) {
+            history[payloadDate] = steps;
+          }
 
           if (isToday) {
             const completed = steps >= target;
@@ -1116,6 +1119,9 @@ export default async function handler(req, res) {
                     incomingHist[syncDate] = cleanHealthData.steps;
                   }
                   const history = cleanHistory([h.history, incomingHist]);
+                  if (isToday) {
+                    history[syncDate] = cleanHealthData.steps;
+                  }
 
                   if (isToday) {
                     const targetNum = Number(h.target) || 10000;
@@ -1544,6 +1550,27 @@ export default async function handler(req, res) {
                 history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
                 updated_at = CURRENT_TIMESTAMP
             `;
+
+            if ((h.id === 'steps' || (h.unit || '').toLowerCase() === 'steps') && !isPriorDaySync) {
+              try {
+                const stepVal = Number(todayValueToSave) || 0;
+                const uRows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
+                if (uRows.length > 0) {
+                  const curPrefs = parseSafeJson(uRows[0].preferences, {});
+                  const curH = curPrefs.healthData || {};
+                  curPrefs.healthData = {
+                    ...curH,
+                    steps: stepVal,
+                    calories: Math.round(stepVal * 0.04),
+                    distanceKm: Math.round(stepVal * 0.000762 * 100) / 100,
+                    source: 'manual_entry',
+                    isManualOverride: true,
+                    syncedAt: new Date().toISOString(),
+                  };
+                  await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(curPrefs)}::jsonb WHERE id = ${userId}`;
+                }
+              } catch (prefErr) {}
+            }
           }
           const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;
           const formattedSaved = savedHabits.map((h) => formatHabitFromRow(h, sql));

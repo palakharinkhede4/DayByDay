@@ -44,6 +44,8 @@ public class FitnessSyncPlugin extends Plugin {
     private static final String KEY_BASELINE_STEPS = "baseline_steps";
     private static final String KEY_LAST_STEPS = "last_known_steps";
     private static final String KEY_STEP_HISTORY = "step_history_json";
+    private static final String KEY_MANUAL_OFFSET = "manual_step_offset";
+    private static final String KEY_FITNESS_SYNC_ENABLED = "fitness_sync_enabled";
 
     private SensorManager sensorManager;
     private Sensor stepCounterSensor;
@@ -90,7 +92,7 @@ public class FitnessSyncPlugin extends Plugin {
             sensorManager.registerListener(new SensorEventListener() {
                 @Override
                 public void onSensorChanged(SensorEvent event) {
-                    processSensorUpdate(event);
+                    processSensorUpdate(event, 0);
                 }
 
                 @Override
@@ -99,7 +101,7 @@ public class FitnessSyncPlugin extends Plugin {
         } catch (Exception ignored) {}
     }
 
-    private synchronized void processSensorUpdate(SensorEvent event) {
+    private synchronized void processSensorUpdate(SensorEvent event, int hintSteps) {
         if (event == null || event.values == null || event.values.length == 0) return;
         Context context = getContext();
         if (context == null) return;
@@ -112,6 +114,7 @@ public class FitnessSyncPlugin extends Plugin {
             int currentTotalHardwareSteps = (int) event.values[0];
             int baselineSteps = prefs.getInt(KEY_BASELINE_STEPS, -1);
             int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+            int manualOffset = prefs.getInt(KEY_MANUAL_OFFSET, 0);
 
             if (!today.equals(savedDate) || baselineSteps == -1 || baselineSteps > currentTotalHardwareSteps) {
                 if (!today.equals(savedDate) && !savedDate.isEmpty() && lastKnown > 0) {
@@ -121,14 +124,19 @@ public class FitnessSyncPlugin extends Plugin {
                         .apply();
                     updateStepHistory(prefs, savedDate, lastKnown);
                 }
-                baselineSteps = currentTotalHardwareSteps;
+                // Mid-day initialization: If we already have known steps today, initialize baselineSteps
+                // so that: currentTotalHardwareSteps - baselineSteps == knownSteps. Never reset to 0 mid-day!
+                int knownStepsToday = Math.max(lastKnown, hintSteps);
+                baselineSteps = Math.max(0, currentTotalHardwareSteps - knownStepsToday);
+                
                 prefs.edit()
                     .putString(KEY_BASELINE_DATE, today)
                     .putInt(KEY_BASELINE_STEPS, baselineSteps)
-                    .putInt(KEY_LAST_STEPS, 0)
+                    .putInt(KEY_LAST_STEPS, knownStepsToday)
                     .apply();
             } else {
-                int dailySteps = Math.max(0, currentTotalHardwareSteps - baselineSteps);
+                int rawDiff = Math.max(0, currentTotalHardwareSteps - baselineSteps);
+                int dailySteps = Math.max(0, rawDiff + manualOffset);
                 prefs.edit().putInt(KEY_LAST_STEPS, dailySteps).apply();
                 if (dailySteps > 0) {
                     updateStepHistory(prefs, today, dailySteps);
@@ -144,7 +152,7 @@ public class FitnessSyncPlugin extends Plugin {
                     .apply();
                 updateStepHistory(prefs, savedDate, lastKnown);
             }
-            int currentDaily = today.equals(savedDate) ? lastKnown : 0;
+            int currentDaily = today.equals(savedDate) ? lastKnown : Math.max(0, hintSteps);
             currentDaily += (int) event.values[0];
             prefs.edit()
                 .putString(KEY_BASELINE_DATE, today)
@@ -154,6 +162,65 @@ public class FitnessSyncPlugin extends Plugin {
                 updateStepHistory(prefs, today, currentDaily);
             }
         }
+    }
+
+    @PluginMethod
+    public void setFitnessSyncEnabled(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", true);
+        Context context = getContext();
+        if (context != null) {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().putBoolean(KEY_FITNESS_SYNC_ENABLED, enabled).apply();
+        }
+        JSObject ret = new JSObject();
+        ret.put("success", true);
+        ret.put("enabled", enabled);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void isFitnessSyncEnabled(PluginCall call) {
+        Context context = getContext();
+        boolean enabled = false;
+        if (context != null) {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            enabled = prefs.getBoolean(KEY_FITNESS_SYNC_ENABLED, false);
+        }
+        JSObject ret = new JSObject();
+        ret.put("enabled", enabled);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void calibrateSteps(PluginCall call) {
+        int targetSteps = call.getInt("targetSteps", 0);
+        Context context = getContext();
+        if (context == null) {
+            call.reject("Context unavailable");
+            return;
+        }
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+
+        int baselineSteps = prefs.getInt(KEY_BASELINE_STEPS, -1);
+        int currentTotalLast = prefs.getInt(KEY_LAST_STEPS, 0);
+        int currentOffset = prefs.getInt(KEY_MANUAL_OFFSET, 0);
+        int rawSensorSteps = Math.max(0, currentTotalLast - currentOffset);
+        int newOffset = targetSteps - rawSensorSteps;
+
+        prefs.edit()
+            .putString(KEY_BASELINE_DATE, today)
+            .putInt(KEY_MANUAL_OFFSET, newOffset)
+            .putInt(KEY_LAST_STEPS, targetSteps)
+            .apply();
+
+        updateStepHistory(prefs, today, targetSteps);
+
+        JSObject ret = new JSObject();
+        ret.put("success", true);
+        ret.put("calibratedSteps", targetSteps);
+        ret.put("offset", newOffset);
+        call.resolve(ret);
     }
 
     @PluginMethod
@@ -212,6 +279,8 @@ public class FitnessSyncPlugin extends Plugin {
             return;
         }
 
+        final int hintSteps = call.getInt("currentSteps", 0);
+
         Sensor stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
         if (stepSensor == null) {
             stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
@@ -222,7 +291,7 @@ public class FitnessSyncPlugin extends Plugin {
 
         if (stepSensor == null) {
             // Hardware sensor is completely absent on this device (e.g. tablet or emulator)
-            int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+            int lastKnown = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
             JSObject ret = new JSObject();
             ret.put("success", true);
             ret.put("hasSensor", false);
@@ -247,9 +316,9 @@ public class FitnessSyncPlugin extends Plugin {
                     sensorManager.unregisterListener(this);
                 } catch (Exception ignored) {}
 
-                processSensorUpdate(event);
+                processSensorUpdate(event, hintSteps);
 
-                int dailySteps = prefs.getInt(KEY_LAST_STEPS, 0);
+                int dailySteps = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
                 int calories = (int) Math.round(dailySteps * 0.04);
                 double distanceKm = (double) Math.round(dailySteps * 0.000762 * 100.0) / 100.0;
                 int activeMinutes = (int) Math.round(dailySteps / 100.0);
@@ -276,7 +345,7 @@ public class FitnessSyncPlugin extends Plugin {
 
         if (!registered) {
             // Could not register listener, return last known cached steps
-            int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+            int lastKnown = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
             JSObject ret = new JSObject();
             ret.put("success", true);
             ret.put("hasSensor", true);
@@ -299,7 +368,7 @@ public class FitnessSyncPlugin extends Plugin {
                     sensorManager.unregisterListener(holder[0]);
                 } catch (Exception ignored) {}
 
-                int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+                int lastKnown = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
                 JSObject ret = new JSObject();
                 ret.put("success", true);
                 ret.put("hasSensor", true);
