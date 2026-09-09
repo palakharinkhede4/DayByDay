@@ -64,6 +64,9 @@ import {
   setHealthSyncEnabled,
   getStoredHealthData,
   updateCustomHealthStats,
+  getStoredHealthHistory,
+  saveHealthHistoryEntry,
+  mergeStoredHealthHistory,
 } from '../utils/fitnessSync';
 
 export const resolveEffectiveTheme = (mode) => {
@@ -386,10 +389,17 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
       history[targetDateKey] = isBool ? false : 0;
     }
 
-    // Restore yesterday's steps from daybyday_health_yesterday if missing from step habit history
+    // Restore multi-day steps from daybyday_health_history and daybyday_health_yesterday
     const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps' || (h.name || '').toLowerCase().includes('step');
     if (isStep && typeof window !== 'undefined') {
       try {
+        const healthHist = getStoredHealthHistory();
+        for (const [d, s] of Object.entries(healthHist)) {
+          const sNum = Number(s) || 0;
+          if (sNum > 0 && (!history[d] || Number(history[d]) === 0)) {
+            history[d] = sNum;
+          }
+        }
         const rawY = localStorage.getItem('daybyday_health_yesterday');
         if (rawY) {
           const yObj = JSON.parse(rawY);
@@ -891,6 +901,9 @@ export const HabitProvider = ({ children }) => {
             localStorage.setItem('daybyday_last_active_date', todayKey);
             const storedH = getStoredHealthData();
             if (storedH && (storedH.steps > 0 || storedH.calories > 0)) {
+              if (lastActiveDate) {
+                saveHealthHistoryEntry(lastActiveDate, storedH.steps);
+              }
               localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
                 date: lastActiveDate,
                 steps: storedH.steps || 0,
@@ -1196,7 +1209,19 @@ export const HabitProvider = ({ children }) => {
               if (remoteData.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
                 const todayKey = getLocalDateKey();
                 const lastActive = localStorage.getItem('daybyday_last_active_date') || todayKey;
-                const cleanRemote = getCleanDailyHabits(remoteData.habits, todayKey, lastActive);
+                const currentLocalHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : [];
+                const localHistoryMap = new Map(currentLocalHabits.map((lh) => [lh.id, cleanHistory(lh.history)]));
+                const mergedRemoteHabits = remoteData.habits.map((rh) => {
+                  const locHist = localHistoryMap.get(rh.id) || {};
+                  const remHist = cleanHistory(rh.history);
+                  const isStep = (rh.id || '').toLowerCase() === 'steps' || (rh.unit || '').toLowerCase() === 'steps';
+                  const healthHist = isStep ? getStoredHealthHistory() : {};
+                  return {
+                    ...rh,
+                    history: cleanHistory([remHist, locHist, healthHist]),
+                  };
+                });
+                const cleanRemote = getCleanDailyHabits(mergedRemoteHabits, todayKey, lastActive);
                 setHabits(cleanRemote);
                 habitsRef.current = cleanRemote;
                 localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
@@ -2221,6 +2246,20 @@ export const HabitProvider = ({ children }) => {
           }
           if (prevVal > 0) {
             history[prevDateKey] = prevVal;
+            if (isStep) {
+              saveHealthHistoryEntry(prevDateKey, prevVal);
+            }
+          }
+        }
+
+        const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps';
+        if (isStep) {
+          const healthHist = getStoredHealthHistory();
+          for (const [d, s] of Object.entries(healthHist)) {
+            const sNum = Number(s) || 0;
+            if (sNum > 0 && (!history[d] || Number(history[d]) === 0)) {
+              history[d] = sNum;
+            }
           }
         }
 
@@ -2262,6 +2301,9 @@ export const HabitProvider = ({ children }) => {
     setHealthStats((prev) => {
       if (prev && (prev.steps > 0 || prev.calories > 0)) {
         try {
+          if (prevDateKey && prev.steps > 0) {
+            saveHealthHistoryEntry(prevDateKey, prev.steps);
+          }
           localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
             date: prevDateKey,
             steps: prev.steps || 0,
@@ -3271,7 +3313,11 @@ export const HabitProvider = ({ children }) => {
         });
         const targetIdOrCode = user?.id || user?.secretCode || user?.secret_code;
         if (targetIdOrCode) {
-          syncHealthDataRemote(targetIdOrCode, healthData).catch(() => {});
+          const healthPayloadWithHistory = {
+            ...healthData,
+            history: getStoredHealthHistory(),
+          };
+          syncHealthDataRemote(targetIdOrCode, healthPayloadWithHistory).catch(() => {});
         }
         return healthData;
       } else {
@@ -3584,6 +3630,10 @@ export const HabitProvider = ({ children }) => {
       // Maintain single-row history map: { "YYYY-MM-DD": value }
       const currentHistory = cleanHistory(h.history);
       currentHistory[todayKey] = nextValue;
+      const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps';
+      if (isStep && Number(nextValue) > 0) {
+        saveHealthHistoryEntry(todayKey, Number(nextValue));
+      }
 
       const isCompleted = typeof nextValue === 'boolean' ? nextValue : nextValue >= h.target;
       const newStreak = calculateConsecutiveStreak(currentHistory, h.target, typeof nextValue === 'boolean');

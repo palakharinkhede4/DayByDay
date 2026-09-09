@@ -6,6 +6,7 @@
 
 const STORAGE_KEY = 'daybyday_health_sync_data';
 const ENABLED_KEY = 'daybyday_health_sync_enabled';
+const HISTORY_KEY = 'daybyday_health_history';
 
 export const isHealthSyncEnabled = () => {
   try {
@@ -36,6 +37,51 @@ export function getIstDateKey(date = new Date()) {
   }
 }
 
+export const getStoredHealthHistory = () => {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveHealthHistoryEntry = (dateKey, steps) => {
+  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+  const stepsNum = Math.max(0, Math.round(Number(steps) || 0));
+  if (stepsNum <= 0) return;
+  try {
+    const hist = getStoredHealthHistory();
+    hist[dateKey] = Math.max(Number(hist[dateKey]) || 0, stepsNum);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+  } catch {}
+};
+
+export const mergeStoredHealthHistory = (incomingMap) => {
+  if (!incomingMap || typeof incomingMap !== 'object') return getStoredHealthHistory();
+  try {
+    const hist = getStoredHealthHistory();
+    let changed = false;
+    for (const [k, v] of Object.entries(incomingMap)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
+        const num = Math.max(0, Math.round(Number(v) || 0));
+        if (num > (Number(hist[k]) || 0)) {
+          hist[k] = num;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+    }
+    return hist;
+  } catch {
+    return {};
+  }
+};
+
 export const getStoredHealthData = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -48,8 +94,12 @@ export const getStoredHealthData = () => {
         // Stale from yesterday or un-timestamped! Archive previous day's info if not already saved
         if (parsed.steps > 0 || parsed.calories > 0) {
           try {
+            const histDate = syncDate || 'previous';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(histDate)) {
+              saveHealthHistoryEntry(histDate, parsed.steps);
+            }
             localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
-              date: syncDate || 'previous',
+              date: histDate,
               steps: parsed.steps || 0,
               calories: parsed.calories || 0,
               distanceKm: parsed.distanceKm || 0,
@@ -146,6 +196,9 @@ export const ingestUrlHealthData = () => {
       if (getVal('distance') || getVal('distanceKm')) {
         payload.distanceKm = Math.max(0, parseFloat(getVal('distance') || getVal('distanceKm')) || 0);
       }
+      if (getVal('date')) payload.date = getVal('date');
+      if (getVal('yesterdaySteps')) payload.yesterdaySteps = Math.max(0, parseInt(getVal('yesterdaySteps'), 10) || 0);
+      if (getVal('yesterdayDate')) payload.yesterdayDate = getVal('yesterdayDate');
     }
 
     if (payload.steps !== undefined && payload.steps !== null) {
@@ -157,11 +210,23 @@ export const ingestUrlHealthData = () => {
       }
     }
 
+    if (payload.history && typeof payload.history === 'object') {
+      mergeStoredHealthHistory(payload.history);
+    }
+    if (payload.yesterdaySteps > 0 && payload.yesterdayDate) {
+      saveHealthHistoryEntry(payload.yesterdayDate, payload.yesterdaySteps);
+    }
+    if (payload.steps > 0) {
+      const targetDate = payload.date || getIstDateKey();
+      saveHealthHistoryEntry(targetDate, payload.steps);
+    }
+
     if (Object.keys(payload).length > 0) {
       const stored = getStoredHealthData() || {};
       const merged = {
         ...stored,
         ...payload,
+        history: getStoredHealthHistory(),
         source: 'apple_health',
         syncedAt: new Date().toISOString(),
       };
@@ -198,7 +263,14 @@ export const importDeviceHealthStats = async (user = null) => {
       const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats();
       if (stats && stats.success) {
         const steps = Math.max(0, Number(stats.steps) || 0);
+        const todayKey = getIstDateKey();
+
+        if (stats.history && typeof stats.history === 'object') {
+          mergeStoredHealthHistory(stats.history);
+        }
+
         if (stats.yesterdaySteps > 0 && stats.yesterdayDate) {
+          saveHealthHistoryEntry(stats.yesterdayDate, stats.yesterdaySteps);
           try {
             localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
               date: stats.yesterdayDate,
@@ -209,6 +281,12 @@ export const importDeviceHealthStats = async (user = null) => {
             }));
           } catch {}
         }
+
+        if (steps > 0) {
+          saveHealthHistoryEntry(todayKey, steps);
+        }
+
+        const healthHist = getStoredHealthHistory();
         const payload = {
           steps,
           calories: Number(stats.calories) || Math.round(steps * 0.04),
@@ -217,6 +295,7 @@ export const importDeviceHealthStats = async (user = null) => {
           syncedAt: new Date().toISOString(),
           yesterdaySteps: stats.yesterdaySteps || 0,
           yesterdayDate: stats.yesterdayDate || null,
+          history: healthHist,
         };
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -266,14 +345,25 @@ export const importDeviceHealthStats = async (user = null) => {
     }
 
     if (!isToday && lastSaved && (lastSaved.steps > 0 || lastSaved.calories > 0)) {
+      const pastDate = lastSaved.syncedAt ? getIstDateKey(new Date(lastSaved.syncedAt)) : null;
+      if (pastDate) {
+        saveHealthHistoryEntry(pastDate, lastSaved.steps);
+      }
       try {
         localStorage.setItem('daybyday_health_yesterday', JSON.stringify({
-          date: lastSaved.syncedAt ? getIstDateKey(new Date(lastSaved.syncedAt)) : null,
+          date: pastDate,
           steps: lastSaved.steps || 0,
           calories: lastSaved.calories || 0,
           distanceKm: lastSaved.distanceKm || 0,
         }));
       } catch {}
+    }
+
+    if (lastSaved?.history && typeof lastSaved.history === 'object') {
+      mergeStoredHealthHistory(lastSaved.history);
+    }
+    if (lastSaved?.yesterdaySteps > 0 && lastSaved?.yesterdayDate) {
+      saveHealthHistoryEntry(lastSaved.yesterdayDate, lastSaved.yesterdaySteps);
     }
 
     const steps = isToday
@@ -282,12 +372,20 @@ export const importDeviceHealthStats = async (user = null) => {
     const calories = isToday ? (Number(lastSaved?.calories) || Math.round(steps * 0.04)) : 0;
     const distanceKm = isToday ? (Number(lastSaved?.distanceKm) || Math.round(steps * 0.000762 * 100) / 100) : 0;
 
+    if (isToday && steps > 0) {
+      saveHealthHistoryEntry(todayDate, steps);
+    }
+
+    const healthHist = getStoredHealthHistory();
     const payload = {
       steps,
       calories,
       distanceKm,
       source: isToday && lastSaved?.source ? lastSaved.source : 'apple_health',
       syncedAt: isToday && lastSaved?.syncedAt ? lastSaved.syncedAt : new Date().toISOString(),
+      yesterdaySteps: lastSaved?.yesterdaySteps || 0,
+      yesterdayDate: lastSaved?.yesterdayDate || null,
+      history: healthHist,
     };
 
     try {
@@ -309,10 +407,12 @@ export const importDeviceHealthStats = async (user = null) => {
  */
 export const updateCustomHealthStats = (input) => {
   const current = getStoredHealthData() || {};
+  const todayKey = getIstDateKey();
   let payload = {};
 
   if (typeof input === 'number') {
     const steps = Math.max(0, Math.round(input));
+    saveHealthHistoryEntry(todayKey, steps);
     payload = {
       ...current,
       steps,
@@ -320,9 +420,17 @@ export const updateCustomHealthStats = (input) => {
       distanceKm: Math.round(steps * 0.000762 * 100) / 100,
       source: 'apple_health',
       syncedAt: new Date().toISOString(),
+      history: getStoredHealthHistory(),
     };
   } else if (input && typeof input === 'object') {
     const steps = input.steps !== undefined ? Math.max(0, Math.round(Number(input.steps) || 0)) : (current.steps || 0);
+    const targetDate = input.date || todayKey;
+    if (steps > 0) {
+      saveHealthHistoryEntry(targetDate, steps);
+    }
+    if (input.history && typeof input.history === 'object') {
+      mergeStoredHealthHistory(input.history);
+    }
     payload = {
       ...current,
       ...input,
@@ -331,6 +439,7 @@ export const updateCustomHealthStats = (input) => {
       distanceKm: input.distanceKm !== undefined ? Number(input.distanceKm) : (current.distanceKm || Math.round(steps * 0.000762 * 100) / 100),
       source: input.source || 'apple_health',
       syncedAt: new Date().toISOString(),
+      history: getStoredHealthHistory(),
     };
   }
 

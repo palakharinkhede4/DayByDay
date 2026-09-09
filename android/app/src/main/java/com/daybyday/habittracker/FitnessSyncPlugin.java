@@ -25,6 +25,9 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
+import org.json.JSONObject;
+import java.util.Iterator;
+
 @CapacitorPlugin(
     name = "FitnessSync",
     permissions = {
@@ -40,10 +43,29 @@ public class FitnessSyncPlugin extends Plugin {
     private static final String KEY_BASELINE_DATE = "baseline_date";
     private static final String KEY_BASELINE_STEPS = "baseline_steps";
     private static final String KEY_LAST_STEPS = "last_known_steps";
+    private static final String KEY_STEP_HISTORY = "step_history_json";
 
     private SensorManager sensorManager;
     private Sensor stepCounterSensor;
     private Sensor stepDetectorSensor;
+
+    private synchronized void updateStepHistory(SharedPreferences prefs, String date, int steps) {
+        if (prefs == null || date == null || date.isEmpty() || steps <= 0) return;
+        try {
+            String rawJson = prefs.getString(KEY_STEP_HISTORY, "{}");
+            JSONObject historyObj = new JSONObject(rawJson);
+            historyObj.put(date, steps);
+
+            // Keep up to 60 days
+            if (historyObj.length() > 60) {
+                Iterator<String> keys = historyObj.keys();
+                if (keys.hasNext()) {
+                    historyObj.remove(keys.next());
+                }
+            }
+            prefs.edit().putString(KEY_STEP_HISTORY, historyObj.toString()).apply();
+        } catch (Exception ignored) {}
+    }
 
     @Override
     public void load() {
@@ -97,6 +119,7 @@ public class FitnessSyncPlugin extends Plugin {
                         .putString("yesterday_date", savedDate)
                         .putInt("yesterday_steps", lastKnown)
                         .apply();
+                    updateStepHistory(prefs, savedDate, lastKnown);
                 }
                 baselineSteps = currentTotalHardwareSteps;
                 prefs.edit()
@@ -107,6 +130,9 @@ public class FitnessSyncPlugin extends Plugin {
             } else {
                 int dailySteps = Math.max(0, currentTotalHardwareSteps - baselineSteps);
                 prefs.edit().putInt(KEY_LAST_STEPS, dailySteps).apply();
+                if (dailySteps > 0) {
+                    updateStepHistory(prefs, today, dailySteps);
+                }
             }
         } else if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
             // Incremental step detector
@@ -116,6 +142,7 @@ public class FitnessSyncPlugin extends Plugin {
                     .putString("yesterday_date", savedDate)
                     .putInt("yesterday_steps", lastKnown)
                     .apply();
+                updateStepHistory(prefs, savedDate, lastKnown);
             }
             int currentDaily = today.equals(savedDate) ? lastKnown : 0;
             currentDaily += (int) event.values[0];
@@ -123,6 +150,9 @@ public class FitnessSyncPlugin extends Plugin {
                 .putString(KEY_BASELINE_DATE, today)
                 .putInt(KEY_LAST_STEPS, currentDaily)
                 .apply();
+            if (currentDaily > 0) {
+                updateStepHistory(prefs, today, currentDaily);
+            }
         }
     }
 
@@ -292,6 +322,26 @@ public class FitnessSyncPlugin extends Plugin {
         if (ySteps > 0 && !yDate.isEmpty()) {
             ret.put("yesterdaySteps", ySteps);
             ret.put("yesterdayDate", yDate);
+            updateStepHistory(prefs, yDate, ySteps);
         }
+
+        // Attach multi-day step history
+        try {
+            String rawJson = prefs.getString(KEY_STEP_HISTORY, "{}");
+            JSONObject historyObj = new JSONObject(rawJson);
+            JSObject jsHistory = new JSObject();
+            Iterator<String> keys = historyObj.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                int sVal = historyObj.optInt(key, 0);
+                if (sVal > 0) {
+                    jsHistory.put(key, sVal);
+                }
+            }
+            if (ySteps > 0 && !yDate.isEmpty() && !jsHistory.has(yDate)) {
+                jsHistory.put(yDate, ySteps);
+            }
+            ret.put("history", jsHistory);
+        } catch (Exception ignored) {}
     }
 }

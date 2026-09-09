@@ -68,11 +68,12 @@ export const InsightsScreen = () => {
     setSelectedDateKey(getLocalDateKey(today));
   };
 
-  // Helper to resolve clean historical value with fallback to daybyday_health_yesterday for steps
+  // Helper to resolve clean historical value with fallback to daybyday_health_history & daybyday_health_yesterday for steps
   const getHistoricalValue = (h, dateKey, isToday) => {
     const cleanHist = cleanHistory(h.history);
-    if (cleanHist[dateKey] !== undefined) {
-      return { val: cleanHist[dateKey], hasRecord: true };
+    const histVal = cleanHist[dateKey];
+    if (histVal !== undefined && (histVal > 0 || typeof histVal === 'boolean')) {
+      return { val: histVal, hasRecord: true };
     }
     if (isToday) {
       const val = Math.max(Number(cleanHist[dateKey]) || 0, Number(h.user1) || 0);
@@ -81,6 +82,13 @@ export const InsightsScreen = () => {
     const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps' || (h.name || '').toLowerCase().includes('step');
     if (isStep && typeof window !== 'undefined') {
       try {
+        const rawH = localStorage.getItem('daybyday_health_history');
+        if (rawH) {
+          const hObj = JSON.parse(rawH);
+          if (hObj && Number(hObj[dateKey]) > 0) {
+            return { val: Number(hObj[dateKey]), hasRecord: true };
+          }
+        }
         const rawY = localStorage.getItem('daybyday_health_yesterday');
         if (rawY) {
           const yObj = JSON.parse(rawY);
@@ -90,6 +98,9 @@ export const InsightsScreen = () => {
           }
         }
       } catch {}
+    }
+    if (histVal !== undefined) {
+      return { val: histVal, hasRecord: true };
     }
     return { val: (typeof h.user1 === 'boolean' || h.unit === 'check') ? false : 0, hasRecord: false };
   };

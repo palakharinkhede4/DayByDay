@@ -432,8 +432,14 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
       if (stepHabits.length > 0) {
         for (const sh of stepHabits) {
           const target = Number(sh.target) || 10000;
-          const history = cleanHistory(sh.history);
-          history[payloadDate] = steps;
+          const incomingHist = cleanHistory(healthPayload.history || {});
+          if (Number(healthPayload.yesterdaySteps) > 0 && healthPayload.yesterdayDate) {
+            incomingHist[healthPayload.yesterdayDate] = Math.max(Number(incomingHist[healthPayload.yesterdayDate]) || 0, Number(healthPayload.yesterdaySteps));
+          }
+          if (steps > 0 || incomingHist[payloadDate] === undefined) {
+            incomingHist[payloadDate] = steps;
+          }
+          const history = cleanHistory([sh.history, incomingHist]);
 
           if (isToday) {
             const completed = steps >= target;
@@ -446,10 +452,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
               WHERE id = ${sh.id}
             `;
           } else {
-            // Stale sync from yesterday: archive to payloadDate, ensure today remains 0
-            if (history[todayStr] === undefined) {
-              history[todayStr] = 0;
-            }
+            // Stale sync from past date: archive to history, ensure today's value is untouched
             await sql`
               UPDATE daybyday_habits
               SET history = ${JSON.stringify(history)}::jsonb,
@@ -460,8 +463,16 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
         }
       } else {
         // If user doesn't have a step habit row yet, create one
-        const history = { [payloadDate]: steps };
-        if (!isToday) history[todayStr] = 0;
+        const incomingHist = cleanHistory(healthPayload.history || {});
+        if (Number(healthPayload.yesterdaySteps) > 0 && healthPayload.yesterdayDate) {
+          incomingHist[healthPayload.yesterdayDate] = Math.max(Number(incomingHist[healthPayload.yesterdayDate]) || 0, Number(healthPayload.yesterdaySteps));
+        }
+        if (steps > 0 || incomingHist[payloadDate] === undefined) {
+          incomingHist[payloadDate] = steps;
+        }
+        if (!isToday && incomingHist[todayStr] === undefined) {
+          incomingHist[todayStr] = 0;
+        }
         const completed = isToday ? (steps >= 10000) : false;
         const todayVal = isToday ? steps : 0;
         await sql`
@@ -471,12 +482,12 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
           )
           VALUES (
             ${targetUser.id}, 'steps', 'Steps', 'Daily steps from device', 10000, 'steps', 'steps', 'Daily',
-            ${todayVal}, ${completed}, null, null, 1, ${JSON.stringify(history)}::jsonb, CURRENT_TIMESTAMP
+            ${todayVal}, ${completed}, null, null, 1, ${JSON.stringify(incomingHist)}::jsonb, CURRENT_TIMESTAMP
           )
           ON CONFLICT (user_id, habit_id) DO UPDATE SET
             today_value = EXCLUDED.today_value,
             completed = EXCLUDED.completed,
-            history = EXCLUDED.history,
+            history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
             updated_at = CURRENT_TIMESTAMP
         `;
       }
@@ -1095,8 +1106,15 @@ export default async function handler(req, res) {
                                (h.name || '').toLowerCase().includes('step') ||
                                (h.name || '').toLowerCase().includes('walk');
                 if (isStep) {
-                  const history = cleanHistory(h.history);
-                  history[syncDate] = cleanHealthData.steps;
+                  const incomingHist = cleanHistory(healthData.history || {});
+                  if (Number(healthData.yesterdaySteps) > 0 && healthData.yesterdayDate) {
+                    incomingHist[healthData.yesterdayDate] = Math.max(Number(incomingHist[healthData.yesterdayDate]) || 0, Number(healthData.yesterdaySteps));
+                  }
+                  if (cleanHealthData.steps > 0 || incomingHist[syncDate] === undefined) {
+                    incomingHist[syncDate] = cleanHealthData.steps;
+                  }
+                  const history = cleanHistory([h.history, incomingHist]);
+
                   if (isToday) {
                     const targetNum = Number(h.target) || 10000;
                     const isDone = cleanHealthData.steps >= targetNum;
@@ -1106,10 +1124,9 @@ export default async function handler(req, res) {
                       WHERE id = ${h.id}
                     `;
                   } else {
-                    if (history[todayKey] === undefined) history[todayKey] = 0;
                     await sql`
                       UPDATE daybyday_habits 
-                      SET today_value = 0, completed = false, history = ${JSON.stringify(history)}::jsonb, updated_at = CURRENT_TIMESTAMP
+                      SET history = ${JSON.stringify(history)}::jsonb, updated_at = CURRENT_TIMESTAMP
                       WHERE id = ${h.id}
                     `;
                   }
@@ -1447,7 +1464,7 @@ export default async function handler(req, res) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
             const existingHist = existingHistoryMap.get(h.id) || {};
             const incomingHist = cleanHistory(h.history);
-            const historyObj = { ...existingHist, ...incomingHist };
+            const historyObj = cleanHistory([existingHist, incomingHist]);
             const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
             const habitVal = h.user1 ?? h.todayValue ?? (historyObj[todayStr] !== undefined ? historyObj[todayStr] : 0);
             const numOrBoolVal = isBool ? Boolean(habitVal) : (Number(habitVal) || 0);
