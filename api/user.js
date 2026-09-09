@@ -192,6 +192,20 @@ function formatHabitFromRow(row, explicitSql = null) {
   const isBool = row.unit === 'check';
   const target = Number(row.target) || 1;
   const rowTodayVal = (row.today_value !== undefined && row.today_value !== null) ? (Number(row.today_value) || 0) : 0;
+
+  // ── Carry-over guard (server side) ───────────────────────────────────────────
+  // If history[today] === history[yesterday], the stale sync-loop wrote yesterday's
+  // value into today's slot. Wipe it so the server never serves it back to the app.
+  const yesterdayHistVal = history[yesterdayKey] !== undefined ? (Number(history[yesterdayKey]) || 0) : null;
+  if (!isBool && yesterdayHistVal !== null && yesterdayHistVal > 0) {
+    if (Number(history[todayKey]) === yesterdayHistVal && rowTodayVal === yesterdayHistVal) {
+      // Both the history slot AND the DB column still hold yesterday's value → carry-over
+      history[todayKey] = 0;
+      // wasUpdatedToday stays as-is; todayVal logic below will use rowTodayVal = yesterdayHistVal
+      // but we override that below explicitly.
+    }
+  }
+
   // 1. If row was NOT updated today in IST:
   // Any value in row.today_value belongs to lastUpdatedDateKey (yesterday or earlier)
   if (!wasUpdatedToday && lastUpdatedDateKey) {
@@ -204,15 +218,23 @@ function formatHabitFromRow(row, explicitSql = null) {
     }
   }
 
-  // 3. Authoritative today's value:
+  // 2. Authoritative today's value:
   // If row was NOT updated today, todayVal is strictly 0.
+  // If updated today, use the DB column (today_value) as ground truth — NOT history[todayKey],
+  // which can be polluted by carry-over writes from the stale sync loop.
   let todayVal;
   if (!wasUpdatedToday) {
     todayVal = isBool ? false : 0;
-  } else if (history[todayKey] !== undefined) {
-    todayVal = isBool ? Boolean(history[todayKey]) : (Number(history[todayKey]) || 0);
   } else {
-    todayVal = isBool ? Boolean(row.completed) : rowTodayVal;
+    // Prefer the actual DB column; if it was a carry-over it was already cleared to 0 in history above
+    const histTodayVal = history[todayKey] !== undefined ? (isBool ? Boolean(history[todayKey]) : (Number(history[todayKey]) || 0)) : null;
+    const colVal = isBool ? Boolean(row.completed) : rowTodayVal;
+    // If history slot was cleared by carry-over guard above (now 0) but column still has carry-over, use 0
+    if (!isBool && yesterdayHistVal !== null && yesterdayHistVal > 0 && colVal === yesterdayHistVal) {
+      todayVal = 0;
+    } else {
+      todayVal = histTodayVal !== null ? histTodayVal : colVal;
+    }
   }
 
   const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= target;
@@ -593,34 +615,61 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
       if (stepHabits.length > 0) {
         for (const sh of stepHabits) {
           const target = Number(sh.target) || 10000;
+          const existingHist = cleanHistory(sh.history);
           const incomingHist = cleanHistory(healthPayload.history || {});
+
+          // ── GUARD 1: Respect manual overrides ──────────────────────────────────
+          // If the user manually set their steps today (isManualOverride: true in prefs),
+          // automatic health syncs must not overwrite the user's explicit input.
+          if (isToday && !isReset) {
+            const prefs = parseSafeJson(targetUser.preferences, {});
+            const hd = prefs.healthData || {};
+            const overrideDate = hd.manualOverrideDate || (hd.isManualOverride ? getIstDateKey(new Date(hd.syncedAt || 0)) : null);
+            if (overrideDate === todayStr) {
+              continue; // user is the authority — skip this auto sync
+            }
+          }
+
+          // ── GUARD 2: Midnight carry-over detection ─────────────────────────────
+          // Apple Health at midnight still reports yesterday's final step count as
+          // today's because the device hasn't reset yet. Detect and suppress it.
+          const yesterdayKey = getIstYesterdayKey();
+          const yesterdayFinal = existingHist[yesterdayKey] !== undefined ? (Number(existingHist[yesterdayKey]) || 0) : null;
+          const currentTodayVal = Number(sh.today_value) || 0;
+          let effectiveSteps = steps;
+          if (isToday && effectiveSteps > 0 && currentTodayVal === 0 && yesterdayFinal !== null && effectiveSteps === yesterdayFinal) {
+            // Exact match with yesterday's final count at start of day → carry-over
+            effectiveSteps = 0;
+          }
+
           if (Number(healthPayload.yesterdaySteps) > 0 && healthPayload.yesterdayDate) {
             incomingHist[healthPayload.yesterdayDate] = Math.max(Number(incomingHist[healthPayload.yesterdayDate]) || 0, Number(healthPayload.yesterdaySteps));
           }
-          if (steps > 0 || incomingHist[payloadDate] === undefined) {
-            incomingHist[payloadDate] = steps;
+          // Only write to incomingHist for past dates — never pre-populate today's slot from a stale sync
+          if (!isToday && (effectiveSteps > 0 || incomingHist[payloadDate] === undefined)) {
+            incomingHist[payloadDate] = effectiveSteps;
           }
           const history = cleanHistory([sh.history, incomingHist]);
           if (isToday) {
-            history[payloadDate] = steps;
+            history[todayStr] = effectiveSteps; // authoritative today value
           }
 
           if (isToday) {
-            const completed = steps >= target;
+            const completed = effectiveSteps >= target;
             await sql`
               UPDATE daybyday_habits
-              SET today_value = ${steps},
+              SET today_value = ${effectiveSteps},
                   completed = ${completed},
                   history = ${JSON.stringify(history)}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${sh.id}
             `;
           } else {
-            // Stale sync from past date: archive to history, ensure today's value is untouched
+            // Stale sync: archive to history ONLY — do NOT touch today_value or updated_at
+            // (touching updated_at would make wasUpdatedToday=true and show stale data)
             await sql`
               UPDATE daybyday_habits
-              SET history = ${JSON.stringify(history)}::jsonb,
-                  updated_at = CURRENT_TIMESTAMP
+              SET history = ${JSON.stringify(history)}::jsonb
               WHERE id = ${sh.id}
             `;
           }
@@ -1276,30 +1325,52 @@ export default async function handler(req, res) {
                                (h.name || '').toLowerCase().includes('walk');
                 if (isStep) {
                   foundStepHabit = true;
+                  const existingHist2 = cleanHistory(h.history);
                   const incomingHist = cleanHistory(healthData.history || {});
+
+                  // ── GUARD 1: Respect manual overrides ────────────────────────────────
+                  if (isToday) {
+                    const userPrefs2 = user.preferences ? parseSafeJson(user.preferences, {}) : {};
+                    const hd2 = userPrefs2.healthData || {};
+                    const overrideDate2 = hd2.manualOverrideDate || (hd2.isManualOverride ? getIstDateKey(new Date(hd2.syncedAt || 0)) : null);
+                    if (overrideDate2 === todayKey) {
+                      continue; // user manually set today's value — do not overwrite
+                    }
+                  }
+
+                  // ── GUARD 2: Midnight carry-over detection ───────────────────────────
+                  const yKey2 = getIstYesterdayKey();
+                  const yFinal2 = existingHist2[yKey2] !== undefined ? (Number(existingHist2[yKey2]) || 0) : null;
+                  const curTodayVal2 = Number(h.today_value) || 0;
+                  let effectiveSteps2 = cleanHealthData.steps;
+                  if (isToday && effectiveSteps2 > 0 && curTodayVal2 === 0 && yFinal2 !== null && effectiveSteps2 === yFinal2) {
+                    effectiveSteps2 = 0; // midnight carry-over suppressed
+                  }
+
                   if (Number(healthData.yesterdaySteps) > 0 && healthData.yesterdayDate) {
                     incomingHist[healthData.yesterdayDate] = Math.max(Number(incomingHist[healthData.yesterdayDate]) || 0, Number(healthData.yesterdaySteps));
                   }
-                  if (cleanHealthData.steps > 0 || incomingHist[syncDate] === undefined) {
-                    incomingHist[syncDate] = cleanHealthData.steps;
+                  if (!isToday && (effectiveSteps2 > 0 || incomingHist[syncDate] === undefined)) {
+                    incomingHist[syncDate] = effectiveSteps2;
                   }
                   const history = cleanHistory([h.history, incomingHist]);
                   if (isToday) {
-                    history[syncDate] = cleanHealthData.steps;
+                    history[syncDate] = effectiveSteps2;
                   }
 
                   if (isToday) {
                     const targetNum = Number(h.target) || 10000;
-                    const isDone = cleanHealthData.steps >= targetNum;
+                    const isDone = effectiveSteps2 >= targetNum;
                     await sql`
                       UPDATE daybyday_habits 
-                      SET today_value = ${cleanHealthData.steps}, history = ${JSON.stringify(history)}::jsonb, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
+                      SET today_value = ${effectiveSteps2}, history = ${JSON.stringify(history)}::jsonb, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
                       WHERE id = ${h.id}
                     `;
                   } else {
+                    // Stale sync: archive to history ONLY — do NOT touch today_value or updated_at
                     await sql`
                       UPDATE daybyday_habits 
-                      SET history = ${JSON.stringify(history)}::jsonb, updated_at = CURRENT_TIMESTAMP
+                      SET history = ${JSON.stringify(history)}::jsonb
                       WHERE id = ${h.id}
                     `;
                   }
@@ -1730,6 +1801,8 @@ export default async function handler(req, res) {
                     distanceKm: Math.round(stepVal * 0.000762 * 100) / 100,
                     source: 'manual_entry',
                     isManualOverride: true,
+                    // manualOverrideDate: store today's IST date so health sync guards can check it
+                    manualOverrideDate: getIstDateKey(),
                     syncedAt: new Date().toISOString(),
                   };
                   await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(curPrefs)}::jsonb WHERE id = ${userId}`;

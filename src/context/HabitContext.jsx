@@ -432,6 +432,20 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
       todayVal = isBool ? false : 0;
     }
 
+    // ── Carry-over guard (client side) ───────────────────────────────────────
+    // If today's value exactly matches yesterday's final count, this is stale
+    // data written by the sync loop (DB history["today"] = yesterday's steps).
+    // Reset to 0 so we never re-sync yesterday's number as today's value.
+    // This does NOT affect the history record for yesterday — that stays intact.
+    if (!isBool && isCurrentUser && isStep && todayVal > 0) {
+      const priorKey = priorDateKey || getIstYesterdayKey();
+      const yesterdayVal = Number(history[priorKey]) || 0;
+      if (yesterdayVal > 0 && todayVal === yesterdayVal) {
+        todayVal = 0;
+        history[targetDateKey] = 0;
+      }
+    }
+
     const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= (Number(h.target) || 1);
     const streak = calculateConsecutiveStreak(history, h.target, isBool);
 
