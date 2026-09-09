@@ -3410,10 +3410,14 @@ export const HabitProvider = ({ children }) => {
     window.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
 
-    // 3. Periodic fetch every 30 minutes while active (every half an hour)
+    // 3. Frequent periodic background sync every 2 minutes while active
     const interval = setInterval(() => {
       syncDeviceHealth({ silent: true, force: true });
-    }, 30 * 60 * 1000);
+      const currentList = habitsRef.current;
+      if (user?.id && Array.isArray(currentList) && currentList.length > 0) {
+        syncUserHabitsRemote(user.id, currentList, null, getLocalDateKey()).catch(() => {});
+      }
+    }, 2 * 60 * 1000);
 
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityOrFocus);

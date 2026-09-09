@@ -113,34 +113,37 @@ public class FitnessSyncPlugin extends Plugin {
         if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
             int currentTotalHardwareSteps = (int) event.values[0];
             int baselineSteps = prefs.getInt(KEY_BASELINE_STEPS, -1);
-            int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
-            int manualOffset = prefs.getInt(KEY_MANUAL_OFFSET, 0);
+            int lastKnown = today.equals(savedDate) ? prefs.getInt(KEY_LAST_STEPS, 0) : 0;
+            int manualOffset = today.equals(savedDate) ? prefs.getInt(KEY_MANUAL_OFFSET, 0) : 0;
 
             if (!today.equals(savedDate) || baselineSteps == -1 || baselineSteps > currentTotalHardwareSteps) {
-                if (!today.equals(savedDate) && !savedDate.isEmpty() && lastKnown > 0) {
+                int yesterdaySteps = prefs.getInt(KEY_LAST_STEPS, 0);
+                if (!today.equals(savedDate) && !savedDate.isEmpty() && yesterdaySteps > 0) {
                     prefs.edit()
                         .putString("yesterday_date", savedDate)
-                        .putInt("yesterday_steps", lastKnown)
+                        .putInt("yesterday_steps", yesterdaySteps)
                         .apply();
-                    updateStepHistory(prefs, savedDate, lastKnown);
+                    updateStepHistory(prefs, savedDate, yesterdaySteps);
                 }
-                // Mid-day initialization: If we already have known steps today, initialize baselineSteps
-                // so that: currentTotalHardwareSteps - baselineSteps == knownSteps. Never reset to 0 mid-day!
+                // Mid-day / new day initialization:
                 int knownStepsToday = Math.max(lastKnown, hintSteps);
                 baselineSteps = Math.max(0, currentTotalHardwareSteps - knownStepsToday);
+                manualOffset = Math.max(0, knownStepsToday - Math.max(0, currentTotalHardwareSteps - baselineSteps));
                 
                 prefs.edit()
                     .putString(KEY_BASELINE_DATE, today)
                     .putInt(KEY_BASELINE_STEPS, baselineSteps)
+                    .putInt(KEY_MANUAL_OFFSET, manualOffset)
                     .putInt(KEY_LAST_STEPS, knownStepsToday)
                     .apply();
             } else {
                 int rawDiff = Math.max(0, currentTotalHardwareSteps - baselineSteps);
-                if (hintSteps > 0 && (rawDiff + manualOffset) < hintSteps) {
-                    manualOffset = hintSteps - rawDiff;
+                int dailyFloor = Math.max(lastKnown, hintSteps);
+                if ((rawDiff + manualOffset) < dailyFloor) {
+                    manualOffset = dailyFloor - rawDiff;
                     prefs.edit().putInt(KEY_MANUAL_OFFSET, manualOffset).apply();
                 }
-                int dailySteps = Math.max(0, rawDiff + manualOffset);
+                int dailySteps = Math.max(dailyFloor, rawDiff + manualOffset);
                 prefs.edit().putInt(KEY_LAST_STEPS, dailySteps).apply();
                 if (dailySteps > 0) {
                     updateStepHistory(prefs, today, dailySteps);
@@ -148,7 +151,7 @@ public class FitnessSyncPlugin extends Plugin {
             }
         } else if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
             // Incremental step detector
-            int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+            int lastKnown = today.equals(savedDate) ? prefs.getInt(KEY_LAST_STEPS, 0) : 0;
             if (!today.equals(savedDate) && !savedDate.isEmpty() && lastKnown > 0) {
                 prefs.edit()
                     .putString("yesterday_date", savedDate)
@@ -156,7 +159,7 @@ public class FitnessSyncPlugin extends Plugin {
                     .apply();
                 updateStepHistory(prefs, savedDate, lastKnown);
             }
-            int currentDaily = today.equals(savedDate) ? lastKnown : Math.max(0, hintSteps);
+            int currentDaily = Math.max(lastKnown, Math.max(0, hintSteps));
             currentDaily += (int) event.values[0];
             prefs.edit()
                 .putString(KEY_BASELINE_DATE, today)
@@ -372,9 +375,10 @@ public class FitnessSyncPlugin extends Plugin {
                     sensorManager.unregisterListener(holder[0]);
                 } catch (Exception ignored) {}
 
-                int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
-                if (hintSteps > 0 && lastKnown < hintSteps) {
-                    lastKnown = hintSteps;
+                int lastKnown = today.equals(savedDate) ? prefs.getInt(KEY_LAST_STEPS, 0) : 0;
+                int dailyFloor = Math.max(lastKnown, hintSteps);
+                if (dailyFloor > lastKnown) {
+                    lastKnown = dailyFloor;
                     prefs.edit().putInt(KEY_LAST_STEPS, lastKnown).apply();
                 }
                 JSObject ret = new JSObject();
