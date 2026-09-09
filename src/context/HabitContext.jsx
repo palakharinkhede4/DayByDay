@@ -324,8 +324,9 @@ export function calculateConsecutiveStreak(history, target, isBoolean) {
   return streak;
 }
 
-export function cleanHistory(raw) {
+export function cleanHistory(raw, todayKey = null) {
   const result = {};
+  const currentToday = todayKey || getLocalDateKey();
   function extract(item) {
     if (item === null || item === undefined) return;
     if (typeof item === 'string') {
@@ -354,7 +355,11 @@ export function cleanHistory(raw) {
 
           if (result[k] === undefined) {
             result[k] = isBool ? val : numVal;
+          } else if (currentToday && k === currentToday) {
+            // For TODAY's date, the latest incoming record takes precedence (authoritative)
+            result[k] = isBool ? val : numVal;
           } else {
+            // For past dates, keep the high-water mark so history is never accidentally diminished
             const curIsBool = typeof result[k] === 'boolean';
             const curNum = curIsBool ? (result[k] ? 1 : 0) : (Number(result[k]) || 0);
             if (numVal > curNum) {
@@ -1220,7 +1225,7 @@ export const HabitProvider = ({ children }) => {
                   const healthHist = isStep ? getStoredHealthHistory() : {};
                   return {
                     ...rh,
-                    history: cleanHistory([remHist, locHist, healthHist]),
+                    history: cleanHistory([locHist, healthHist, remHist], todayKey),
                   };
                 });
                 const cleanRemote = getCleanDailyHabits(mergedRemoteHabits, todayKey);
@@ -1228,6 +1233,15 @@ export const HabitProvider = ({ children }) => {
                 habitsRef.current = cleanRemote;
                 localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
                 localStorage.setItem('daybyday_last_active_date', todayKey);
+
+                // Auto-calibrate native Android sensor to today's authoritative steps count
+                if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
+                  const stepHabit = cleanRemote.find((h) => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
+                  if (stepHabit && Number(stepHabit.user1) > 0) {
+                    window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: Number(stepHabit.user1) }).catch(() => {});
+                  }
+                }
+
                 if (activeUser.id) {
                   syncUserHabitsRemote(activeUser.id, cleanRemote, null, todayKey).catch(() => {});
                 }
@@ -3199,79 +3213,90 @@ export const HabitProvider = ({ children }) => {
     }
   };
 
-  // Auto-reconciliation: Ensure Habits progress always reflects into matching Together Group Pod shared goals
+  // Auto-reconciliation: Ensure Habits progress always reflects into matching Together Group Pod shared goals across all user pods
   useEffect(() => {
-    if (!groupPod || !Array.isArray(groupPod.sharedGoals) || !Array.isArray(habits) || habits.length === 0) return;
+    const podsList = Array.isArray(groupPods) && groupPods.length > 0 ? groupPods : (groupPod ? [groupPod] : []);
+    if (podsList.length === 0 || !Array.isArray(habits) || habits.length === 0) return;
 
-    let podNeedsUpdate = false;
+    let anyPodChanged = false;
     const myKey = user?.id || user?.username || 'usr_me';
 
-    const reconciledGoals = groupPod.sharedGoals.map((sg) => {
-      const matchingHabit = habits.find((h) => isHabitMatchingSharedGoal(h, sg));
-      if (!matchingHabit) return sg;
+    const updatedPods = podsList.map((pod) => {
+      if (!pod || !Array.isArray(pod.sharedGoals)) return pod;
+      let podNeedsUpdate = false;
 
-      const habitVal = typeof matchingHabit.user1 === 'boolean'
-        ? (matchingHabit.user1 ? 1 : 0)
-        : Math.max(0, Number(matchingHabit.user1) || 0);
+      const reconciledGoals = pod.sharedGoals.map((sg) => {
+        const matchingHabit = habits.find((h) => isHabitMatchingSharedGoal(h, sg));
+        if (!matchingHabit) return sg;
 
-      const memberProgress = { ...(sg.memberProgress || {}) };
-      const myEntry = memberProgress[myKey] ??
-                      (user?.id ? memberProgress[user.id] : undefined) ??
-                      (user?.username ? memberProgress[user.username] : undefined) ??
-                      memberProgress['user1'];
+        const habitVal = typeof matchingHabit.user1 === 'boolean'
+          ? (matchingHabit.user1 ? 1 : 0)
+          : Math.max(0, Number(matchingHabit.user1) || 0);
 
-      const currentVal = typeof myEntry === 'object'
-        ? (Number(myEntry?.value) || 0)
-        : (Number(myEntry) || 0);
+        const memberProgress = { ...(sg.memberProgress || {}) };
+        const myEntry = memberProgress[myKey] ??
+                        (user?.id ? memberProgress[user.id] : undefined) ??
+                        (user?.username ? memberProgress[user.username] : undefined) ??
+                        memberProgress['user1'];
 
-      if (habitVal > currentVal) {
-        podNeedsUpdate = true;
-        const newCompleted = habitVal >= (Number(sg.target) || 1);
-        const updatedEntry = {
-          value: habitVal,
-          completed: newCompleted,
-          updatedAt: new Date().toISOString(),
-        };
-        memberProgress[myKey] = updatedEntry;
-        if (user?.id) memberProgress[user.id] = updatedEntry;
-        if (user?.username) memberProgress[user.username] = updatedEntry;
+        const currentVal = typeof myEntry === 'object'
+          ? (Number(myEntry?.value) || 0)
+          : (Number(myEntry) || 0);
 
-        const totalSum = Object.values(memberProgress).reduce(
-          (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
-          0
-        );
+        if (habitVal !== currentVal) {
+          podNeedsUpdate = true;
+          anyPodChanged = true;
+          const newCompleted = habitVal >= (Number(sg.target) || 1);
+          const updatedEntry = {
+            value: habitVal,
+            completed: newCompleted,
+            updatedAt: new Date().toISOString(),
+          };
+          memberProgress[myKey] = updatedEntry;
+          if (user?.id) memberProgress[user.id] = updatedEntry;
+          if (user?.username) memberProgress[user.username] = updatedEntry;
 
-        if (groupPod.code) {
-          updateGroupGoalRemote(
-            groupPod.code,
-            sg.id,
-            0,
-            myKey,
-            habitVal,
-            newCompleted
-          ).catch(() => {});
+          const totalSum = Object.values(memberProgress).reduce(
+            (acc, m) => acc + (typeof m === 'object' ? (Number(m.value) || 0) : (Number(m) || 0)),
+            0
+          );
+
+          if (pod.code) {
+            updateGroupGoalRemote(
+              pod.code,
+              sg.id,
+              0,
+              myKey,
+              habitVal,
+              newCompleted
+            ).catch(() => {});
+          }
+
+          return {
+            ...sg,
+            current: totalSum,
+            memberProgress,
+          };
         }
 
-        return {
-          ...sg,
-          current: totalSum,
-          memberProgress,
-        };
-      }
+        return sg;
+      });
 
-      return sg;
+      if (podNeedsUpdate) {
+        return { ...pod, sharedGoals: reconciledGoals };
+      }
+      return pod;
     });
 
-    if (podNeedsUpdate) {
-      // Use functional updater to avoid stale closure overwriting a freshly renamed pod
-      setGroupPod((prev) => {
-        if (!prev) return prev;
-        const merged = { ...prev, sharedGoals: reconciledGoals };
-        try { localStorage.setItem('daybyday_group_pod', JSON.stringify(merged)); } catch {}
-        return merged;
-      });
+    if (anyPodChanged) {
+      setGroupPods(updatedPods);
+      setGroupPod(updatedPods[0]);
+      try {
+        localStorage.setItem('daybyday_group_pods', JSON.stringify(updatedPods));
+        localStorage.setItem('daybyday_group_pod', JSON.stringify(updatedPods[0]));
+      } catch {}
     }
-  }, [habits, groupPod?.code]);
+  }, [habits, user?.id, user?.username]);
 
   // Enable Native OS / Health App Sync (Asks permission one-time and retains it)
   const enableHealthSync = async () => {
@@ -3313,7 +3338,9 @@ export const HabitProvider = ({ children }) => {
     if (!silent) sound.press();
 
     try {
-      const healthData = await importDeviceHealthStats(user);
+      const stepsHabit = (habitsRef.current || habits || []).find((h) => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
+      const knownSteps = Math.max(0, Number(stepsHabit?.user1) || 0);
+      const healthData = await importDeviceHealthStats(user, knownSteps);
       if (healthData && healthData.success) {
         setHealthStats(healthData);
         await syncHealthDataToHabitsAndPod({
@@ -3755,13 +3782,27 @@ export const HabitProvider = ({ children }) => {
           }
         }
 
-        // UNIFIED SYNC: Update ANY matching shared goal in the Together pod (STRICTLY GUARDED against circular recursion)
+        // UNIFIED SYNC: Update ANY matching shared goal in all user pods (STRICTLY GUARDED against circular recursion)
         if (origin !== 'sharedGoal' && !isCrossSyncingRef.current) {
-          if (groupPod && Array.isArray(groupPod.sharedGoals)) {
-            const valToSync = typeof computedNextValue === 'boolean'
-              ? (computedNextValue ? 1 : 0)
-              : Math.max(0, Number(computedNextValue) || 0);
+          const valToSync = typeof computedNextValue === 'boolean'
+            ? (computedNextValue ? 1 : 0)
+            : Math.max(0, Number(computedNextValue) || 0);
 
+          const podsToSync = Array.isArray(groupPods) && groupPods.length > 0 ? groupPods : (groupPod ? [groupPod] : []);
+          for (const p of podsToSync) {
+            if (p && Array.isArray(p.sharedGoals)) {
+              for (const sg of p.sharedGoals) {
+                if (isHabitMatchingSharedGoal(targetHabit, sg)) {
+                  if (p.code) {
+                    const isDone = valToSync >= (Number(sg.target) || 1);
+                    updateGroupGoalRemote(p.code, sg.id, 0, user?.id || user?.username || 'user1', valToSync, isDone).catch(() => {});
+                  }
+                }
+              }
+            }
+          }
+
+          if (groupPod && Array.isArray(groupPod.sharedGoals)) {
             for (const sg of groupPod.sharedGoals) {
               if (isHabitMatchingSharedGoal(targetHabit, sg)) {
                 try {

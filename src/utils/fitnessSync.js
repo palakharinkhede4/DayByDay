@@ -56,21 +56,28 @@ export const saveHealthHistoryEntry = (dateKey, steps, isOverride = false) => {
   const stepsNum = Math.max(0, Math.round(Number(steps) || 0));
   try {
     const hist = getStoredHealthHistory();
-    hist[dateKey] = isOverride ? stepsNum : Math.max(Number(hist[dateKey]) || 0, stepsNum);
+    const today = getIstDateKey();
+    if (dateKey === today || isOverride) {
+      hist[dateKey] = stepsNum;
+    } else {
+      hist[dateKey] = Math.max(Number(hist[dateKey]) || 0, stepsNum);
+    }
     localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
   } catch {}
 };
-
 
 export const mergeStoredHealthHistory = (incomingMap) => {
   if (!incomingMap || typeof incomingMap !== 'object') return getStoredHealthHistory();
   try {
     const hist = getStoredHealthHistory();
+    const today = getIstDateKey();
     let changed = false;
     for (const [k, v] of Object.entries(incomingMap)) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
         const num = Math.max(0, Math.round(Number(v) || 0));
-        if (num > (Number(hist[k]) || 0)) {
+        if (k === today) {
+          // Do not let stale incoming map overwrite today's authoritative value
+        } else if (num > (Number(hist[k]) || 0)) {
           hist[k] = num;
           changed = true;
         }
@@ -256,7 +263,7 @@ export const ingestUrlHealthData = () => {
  * 3. Remote cloud health sync (from iOS Shortcuts or Webhooks posted to /api/user)
  * 4. Local storage cache calibrated with today's activity
  */
-export const importDeviceHealthStats = async (user = null) => {
+export const importDeviceHealthStats = async (user = null, hintSteps = 0) => {
   try {
     // 1. Ingest any URL parameters from Apple Shortcuts first
     const urlPayload = ingestUrlHealthData();
@@ -264,8 +271,8 @@ export const importDeviceHealthStats = async (user = null) => {
     // 2. Native Android Hardware Step Counter via Capacitor Plugin
     if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync) {
       const existingStored = getStoredHealthData() || {};
-      const hintSteps = Math.max(0, Number(existingStored.steps) || 0);
-      const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats({ currentSteps: hintSteps });
+      const calculatedHint = Math.max(0, Number(hintSteps) || Number(existingStored.steps) || 0);
+      const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats({ currentSteps: calculatedHint });
       if (stats && stats.success) {
         const steps = Math.max(0, Number(stats.steps) || 0);
         const todayKey = getIstDateKey();
@@ -570,6 +577,15 @@ export const syncHealthDataToHabitsAndPod = async ({
     // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an empty device sync during the active day!
     // BUT if the user has NO active record for today (meaning curVal is lingering from yesterday), or if healthData is a daily reset, allow resetting to 0!
     if (targetVal <= 0 && curVal > 0 && hasTodayActiveLog && healthData.source !== 'reset') continue;
+
+    // CRITICAL: If incoming device sync is LOWER than the current habit (e.g. uncalibrated hardware sensor reporting 258 while habit is 3570),
+    // NEVER downgrade the user's progress! Instead, auto-calibrate the native sensor forward to match the habit!
+    if (targetVal < curVal && curVal > 0 && healthData.source !== 'reset') {
+      if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
+        window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: curVal }).catch(() => {});
+      }
+      continue;
+    }
 
     if (curVal !== targetVal && typeof onUpdateHabit === 'function') {
       onUpdateHabit(h.id, activeUserId, targetVal, true, silent);

@@ -136,6 +136,10 @@ public class FitnessSyncPlugin extends Plugin {
                     .apply();
             } else {
                 int rawDiff = Math.max(0, currentTotalHardwareSteps - baselineSteps);
+                if (hintSteps > 0 && manualOffset == 0 && (rawDiff + manualOffset) < hintSteps) {
+                    manualOffset = hintSteps - rawDiff;
+                    prefs.edit().putInt(KEY_MANUAL_OFFSET, manualOffset).apply();
+                }
                 int dailySteps = Math.max(0, rawDiff + manualOffset);
                 prefs.edit().putInt(KEY_LAST_STEPS, dailySteps).apply();
                 if (dailySteps > 0) {
@@ -368,7 +372,11 @@ public class FitnessSyncPlugin extends Plugin {
                     sensorManager.unregisterListener(holder[0]);
                 } catch (Exception ignored) {}
 
-                int lastKnown = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
+                int lastKnown = prefs.getInt(KEY_LAST_STEPS, 0);
+                if (hintSteps > 0 && lastKnown < hintSteps) {
+                    lastKnown = hintSteps;
+                    prefs.edit().putInt(KEY_LAST_STEPS, lastKnown).apply();
+                }
                 JSObject ret = new JSObject();
                 ret.put("success", true);
                 ret.put("hasSensor", true);

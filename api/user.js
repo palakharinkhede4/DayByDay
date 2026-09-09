@@ -26,8 +26,9 @@ function parseSafeJson(val, fallback = {}) {
   return fallback;
 }
 
-export function cleanHistory(raw) {
+export function cleanHistory(raw, todayKey = null) {
   const result = {};
+  const currentToday = todayKey || (typeof getIstDateKey === 'function' ? getIstDateKey() : null);
   function extract(item) {
     if (item === null || item === undefined) return;
     if (typeof item === 'string') {
@@ -56,7 +57,11 @@ export function cleanHistory(raw) {
 
           if (result[k] === undefined) {
             result[k] = isBool ? val : numVal;
+          } else if (currentToday && k === currentToday) {
+            // For TODAY's date, the latest incoming record takes precedence (authoritative)
+            result[k] = isBool ? val : numVal;
           } else {
+            // For past dates, keep the high-water mark so history is never accidentally diminished
             const curIsBool = typeof result[k] === 'boolean';
             const curNum = curIsBool ? (result[k] ? 1 : 0) : (Number(result[k]) || 0);
             if (numVal > curNum) {
@@ -1547,7 +1552,7 @@ export default async function handler(req, res) {
                 reminder_time = EXCLUDED.reminder_time,
                 reminder_days = EXCLUDED.reminder_days,
                 streak = EXCLUDED.streak,
-                history = COALESCE(daybyday_habits.history, '{}'::jsonb) || EXCLUDED.history,
+                history = EXCLUDED.history,
                 updated_at = CURRENT_TIMESTAMP
             `;
 
@@ -1569,7 +1574,41 @@ export default async function handler(req, res) {
                   };
                   await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(curPrefs)}::jsonb WHERE id = ${userId}`;
                 }
-              } catch (prefErr) {}
+
+                // Propagate step progress to all group pods where user is a member
+                const gRows = await sql`SELECT id, shared_goals FROM daybyday_group_pods WHERE members::text LIKE ${'%"' + userId + '"%'}`;
+                for (const gr of gRows) {
+                  let sGoals = parseSafeJson(gr.shared_goals, []);
+                  let changed = false;
+                  sGoals = sGoals.map((g) => {
+                    const isStepGoal = (g.unit || '').toLowerCase() === 'steps' || (g.name || '').toLowerCase().includes('step');
+                    if (isStepGoal) {
+                      const mProg = { ...(g.memberProgress || {}) };
+                      const isDone = stepVal >= (Number(g.target) || 1);
+                      mProg[userId] = {
+                        value: stepVal,
+                        completed: isDone,
+                        updatedAt: new Date().toISOString(),
+                      };
+                      changed = true;
+                      const totalSum = Object.values(mProg).reduce((acc, m) => {
+                        if (m && typeof m === 'object') {
+                          const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
+                          return acc + (entryDate === todayStr ? (Number(m.value) || 0) : 0);
+                        }
+                        return acc;
+                      }, 0);
+                      return { ...g, current: totalSum, memberProgress: mProg };
+                    }
+                    return g;
+                  });
+                  if (changed) {
+                    await sql`UPDATE daybyday_group_pods SET shared_goals = ${JSON.stringify(sGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = ${gr.id}`;
+                  }
+                }
+              } catch (prefErr) {
+                console.warn('Notice syncing steps to preferences/pods in SQL:', prefErr.message);
+              }
             }
           }
           const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;
