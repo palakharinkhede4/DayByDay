@@ -126,10 +126,20 @@ export const HabitCards = ({ onOpenAddGoal }) => {
   };
 
   const handleManualHealthEntry = async ({ steps, calories, distanceKm }) => {
-    if (!setCustomHealthSteps) return;
-    await setCustomHealthSteps({ steps, calories, distanceKm, source: 'manual_entry' });
+    const numSteps = Math.max(0, Math.round(Number(steps) || 0));
+    const stepHabit = (habits || []).find((h) => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
+    const habitId = stepHabit?.id || 'steps';
+
+    // 1. Authoritative direct habit update — immediately updates state, localStorage, and PostgreSQL!
+    updateHabit(habitId, activeUserId, numSteps, true, false, 'user');
+
+    // 2. Also calibrate healthStats and native Android sensor
+    if (setCustomHealthSteps) {
+      await setCustomHealthSteps({ steps: numSteps, calories, distanceKm, source: 'manual_entry' });
+    }
+
     triggerIslandNotification?.(
-      `Logged ${steps.toLocaleString()} steps manually!`,
+      `Logged ${numSteps.toLocaleString()} steps manually!`,
       'check'
     );
   };
