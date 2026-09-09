@@ -378,13 +378,21 @@ export const importDeviceHealthStats = async (user = null, hintSteps = 0) => {
       saveHealthHistoryEntry(lastSaved.yesterdayDate, lastSaved.yesterdaySteps);
     }
 
+    if (!isToday) {
+      lastSaved.steps = 0;
+      lastSaved.calories = 0;
+      lastSaved.distanceKm = 0;
+      lastSaved.syncedAt = new Date().toISOString();
+      lastSaved.source = 'day_reset';
+    }
+
     // On web browsers without native hardware sensors or external webhook sync:
-    // The user's habit step count (hintSteps) is the authoritative source of truth.
-    if (!window.Capacitor?.isNativePlatform?.() && !urlPayload && hintSteps > 0) {
-      lastSaved.steps = hintSteps;
-      lastSaved.calories = Math.round(hintSteps * 0.04);
-      lastSaved.distanceKm = Math.round(hintSteps * 0.000762 * 100) / 100;
-      isToday = true;
+    // Only calibrate with hintSteps if this sync is confirmed to be for TODAY!
+    // A hint from yesterday must NEVER be stamped as today's live steps upon rollover.
+    if (!window.Capacitor?.isNativePlatform?.() && !urlPayload && isToday && hintSteps > 0) {
+      lastSaved.steps = Math.max(Number(lastSaved.steps) || 0, hintSteps);
+      lastSaved.calories = Math.round(lastSaved.steps * 0.04);
+      lastSaved.distanceKm = Math.round(lastSaved.steps * 0.000762 * 100) / 100;
     }
 
     const steps = isToday
