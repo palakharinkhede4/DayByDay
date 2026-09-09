@@ -295,10 +295,11 @@ public class FitnessSyncPlugin extends Plugin {
 
         final SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         final String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+        final String savedDate = prefs.getString(KEY_BASELINE_DATE, "");
 
         if (stepSensor == null) {
             // Hardware sensor is completely absent on this device (e.g. tablet or emulator)
-            int lastKnown = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
+            int lastKnown = today.equals(savedDate) ? prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps)) : Math.max(0, hintSteps);
             JSObject ret = new JSObject();
             ret.put("success", true);
             ret.put("hasSensor", false);
@@ -352,7 +353,7 @@ public class FitnessSyncPlugin extends Plugin {
 
         if (!registered) {
             // Could not register listener, return last known cached steps
-            int lastKnown = prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps));
+            int lastKnown = today.equals(savedDate) ? prefs.getInt(KEY_LAST_STEPS, Math.max(0, hintSteps)) : Math.max(0, hintSteps);
             JSObject ret = new JSObject();
             ret.put("success", true);
             ret.put("hasSensor", true);
