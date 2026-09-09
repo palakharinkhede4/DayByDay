@@ -610,22 +610,8 @@ export const syncHealthDataToHabitsAndPod = async ({
     }
   }
 
-  // 2. Sync matching shared pod goals in Together only if value actually changed
-  for (const sg of sharedGoals) {
-    const metric = identifyHealthMetric(sg);
-    if (!metric) continue;
-
-    const targetVal = resolveMetricValue(metric, sg, healthData);
-    if (targetVal === null || targetVal === undefined || targetVal <= 0) continue;
-
-    const memberEntry = sg.memberProgress?.[activeUserId];
-    const curVal = typeof memberEntry === 'object' ? Number(memberEntry?.value || 0) : Number(memberEntry || 0);
-
-    if (curVal !== targetVal && typeof onUpdateSharedGoal === 'function') {
-      onUpdateSharedGoal(sg.id, 0, targetVal, silent);
-      updatedGoalsCount++;
-    }
-  }
+  // Note: Shared pod goals in Together are pure reactive projections of the Habits SSOT.
+  // When onUpdateHabit updates the habit above, pod state updates reactively without dual-mutation races.
 
   if (!silent && typeof triggerIslandNotification === 'function') {
     if (healthData.steps) summaryItems.push(`${healthData.steps.toLocaleString()} steps`);

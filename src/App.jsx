@@ -196,7 +196,9 @@ const MainAppContent = () => {
 
           {activeTab === 'track' && <TrackScreen />}
 
-          {activeTab === 'together' && <TogetherScreen />}
+          {activeTab === 'together' && (
+            <TogetherScreen onNavigateToHabits={() => setActiveTab('habits')} />
+          )}
 
           {activeTab === 'insights' && <InsightsScreen />}
 

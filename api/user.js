@@ -102,6 +102,48 @@ function sanitizePartner(u) {
   return sanitized;
 }
 
+export function isHabitMatchingSharedGoal(h, sg) {
+  if (!h || !sg) return false;
+  const hId = (h.id || h.habit_id || '').toLowerCase();
+  const hName = (h.name || '').toLowerCase();
+  const hUnit = (h.unit || '').toLowerCase();
+  const sgName = (sg.name || '').toLowerCase();
+  const sgUnit = (sg.unit || '').toLowerCase();
+
+  // 1. Direct name match
+  if (hName === sgName) return true;
+
+  // 2. Unit match (if specific unit like glasses, cups, steps, pages, min, km, etc.)
+  if (hUnit && sgUnit && hUnit === sgUnit) return true;
+
+  // 3. Semantic keyword matching
+  const isWaterH = hId.includes('water') || hName.includes('water') || hName.includes('hydrat') || hUnit.includes('glass') || hUnit.includes('cup');
+  const isWaterSG = sgName.includes('water') || sgName.includes('hydrat') || sgUnit.includes('glass') || sgUnit.includes('cup');
+  if (isWaterH && isWaterSG) return true;
+
+  const isStepH = hId === 'steps' || hUnit === 'steps' || hName.includes('step') || hName.includes('walk') || hName.includes('run');
+  const isStepSG = sgUnit === 'steps' || sgName.includes('step') || sgName.includes('walk') || sgName.includes('run');
+  if (isStepH && isStepSG) return true;
+
+  const isReadH = hId.includes('read') || hName.includes('read') || hName.includes('book') || hUnit.includes('page');
+  const isReadSG = sgName.includes('read') || sgName.includes('book') || sgUnit.includes('page');
+  if (isReadH && isReadSG) return true;
+
+  const isMedH = hId.includes('meditat') || hName.includes('meditat') || hName.includes('mindful');
+  const isMedSG = sgName.includes('meditat') || sgName.includes('mindful');
+  if (isMedH && isMedSG) return true;
+
+  const isWorkH = hId.includes('workout') || hName.includes('workout') || hName.includes('exercise') || hName.includes('gym') || hName.includes('train');
+  const isWorkSG = sgName.includes('workout') || sgName.includes('exercise') || sgName.includes('gym') || sgName.includes('train');
+  if (isWorkH && isWorkSG) return true;
+
+  const isSleepH = hId.includes('sleep') || hName.includes('sleep');
+  const isSleepSG = sgName.includes('sleep');
+  if (isSleepH && isSleepSG) return true;
+
+  return false;
+}
+
 function getIstDateKey(date = new Date()) {
   try {
     return new Intl.DateTimeFormat('en-CA', {
@@ -1574,41 +1616,50 @@ export default async function handler(req, res) {
                   };
                   await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(curPrefs)}::jsonb WHERE id = ${userId}`;
                 }
-
-                // Propagate step progress to all group pods where user is a member
-                const gRows = await sql`SELECT id, shared_goals FROM daybyday_group_pods WHERE members::text LIKE ${'%"' + userId + '"%'}`;
-                for (const gr of gRows) {
-                  let sGoals = parseSafeJson(gr.shared_goals, []);
-                  let changed = false;
-                  sGoals = sGoals.map((g) => {
-                    const isStepGoal = (g.unit || '').toLowerCase() === 'steps' || (g.name || '').toLowerCase().includes('step');
-                    if (isStepGoal) {
-                      const mProg = { ...(g.memberProgress || {}) };
-                      const isDone = stepVal >= (Number(g.target) || 1);
-                      mProg[userId] = {
-                        value: stepVal,
-                        completed: isDone,
-                        updatedAt: new Date().toISOString(),
-                      };
-                      changed = true;
-                      const totalSum = Object.values(mProg).reduce((acc, m) => {
-                        if (m && typeof m === 'object') {
-                          const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
-                          return acc + (entryDate === todayStr ? (Number(m.value) || 0) : 0);
-                        }
-                        return acc;
-                      }, 0);
-                      return { ...g, current: totalSum, memberProgress: mProg };
-                    }
-                    return g;
-                  });
-                  if (changed) {
-                    await sql`UPDATE daybyday_group_pods SET shared_goals = ${JSON.stringify(sGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = ${gr.id}`;
-                  }
-                }
               } catch (prefErr) {
-                console.warn('Notice syncing steps to preferences/pods in SQL:', prefErr.message);
+                console.warn('Notice syncing steps to preferences in SQL:', prefErr.message);
               }
+            }
+          }
+
+          // Unidirectional SSOT: Atomically propagate all updated habits to all group pods where user is a member
+          if (!isPriorDaySync) {
+            try {
+              const gRows = await sql`SELECT id, shared_goals FROM daybyday_group_pods WHERE members::text LIKE ${'%"' + userId + '"%'}`;
+              for (const gr of gRows) {
+                let sGoals = parseSafeJson(gr.shared_goals, []);
+                let changed = false;
+                sGoals = sGoals.map((g) => {
+                  const matchedH = habits.find((h) => isHabitMatchingSharedGoal(h, g));
+                  if (matchedH) {
+                    const hVal = typeof matchedH.user1 === 'boolean'
+                      ? (matchedH.user1 ? 1 : 0)
+                      : Math.max(0, Number(matchedH.user1) || 0);
+                    const isDone = hVal >= (Number(g.target) || 1);
+                    const mProg = { ...(g.memberProgress || {}) };
+                    mProg[userId] = {
+                      value: hVal,
+                      completed: isDone,
+                      updatedAt: new Date().toISOString(),
+                    };
+                    changed = true;
+                    const totalSum = Object.values(mProg).reduce((acc, m) => {
+                      if (m && typeof m === 'object') {
+                        const entryDate = m.updatedAt ? getIstDateKey(new Date(m.updatedAt)) : null;
+                        return acc + (entryDate === todayStr ? (Number(m.value) || 0) : 0);
+                      }
+                      return acc + (Number(m) || 0);
+                    }, 0);
+                    return { ...g, current: totalSum, memberProgress: mProg };
+                  }
+                  return g;
+                });
+                if (changed) {
+                  await sql`UPDATE daybyday_group_pods SET shared_goals = ${JSON.stringify(sGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = ${gr.id}`;
+                }
+              }
+            } catch (podSyncErr) {
+              console.warn('Notice syncing habits to pods in SQL:', podSyncErr.message);
             }
           }
           const savedHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId} ORDER BY id ASC`;

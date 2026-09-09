@@ -3040,26 +3040,8 @@ export const HabitProvider = ({ children }) => {
       ).catch(() => {});
     }
 
-    // Bidirectional sync: propagate updated value to matching habit in Habits tab (STRICTLY GUARDED against recursion)
-    if (origin !== 'habit' && !isCrossSyncingRef.current) {
-      const matchedGoal = updatedGoals.find((g) => g.id === goalId);
-      if (matchedGoal) {
-        const latestHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
-        const targetHabit = latestHabits.find((h) => isHabitMatchingSharedGoal(h, matchedGoal));
-        if (targetHabit) {
-          const myEntry = matchedGoal.memberProgress?.[myKey];
-          const myVal = typeof myEntry === 'object' ? Number(myEntry.value) : Number(myEntry);
-          if (myVal !== undefined && !isNaN(myVal) && Number(targetHabit.user1) !== myVal) {
-            try {
-              isCrossSyncingRef.current = true;
-              updateHabit(targetHabit.id, 'user1', myVal, true, true, 'sharedGoal');
-            } finally {
-              isCrossSyncingRef.current = false;
-            }
-          }
-        }
-      }
-    }
+    // Unidirectional SSOT: Shared pod goals never mutate habits backward.
+    // All stats are logged and updated strictly in the Habits tab.
   };
 
   // Instant sync: Reconciles all shared goals with user's current habits (called on mount, goal add, & Together tab open)

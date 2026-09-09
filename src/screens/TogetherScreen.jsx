@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useHabits, getLocalDateKey } from '../context/HabitContext';
+import { useHabits, getLocalDateKey, isHabitMatchingSharedGoal } from '../context/HabitContext';
 import { sound } from '../utils/sound';
 import {
   Users,
@@ -25,6 +25,8 @@ import {
   Brain,
   Sparkles,
   Moon,
+  AlertCircle,
+  Info,
 } from 'lucide-react';
 const POD_GOAL_PRESETS = [
   { name: '10,000 Steps', iconName: 'footprints', category: 'Fitness', target: 10000, unit: 'steps', delta: 1000 },
@@ -107,23 +109,96 @@ const EditGroupNameModal = ({ currentName, podCode, onClose, onSave }) => {
   );
 };
 
-const AddSharedGoalModal = ({ onClose, onSave }) => {
+const AddSharedGoalModal = ({
+  onClose,
+  onSave,
+  userHabits = [],
+  podMembers = [],
+  trackedPartners = [],
+  onAddHabit,
+  currentUser,
+}) => {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Daily');
   const [target, setTarget] = useState(10);
   const [unit, setUnit] = useState('times');
   const [delta, setDelta] = useState(1);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [pendingGoal, setPendingGoal] = useState(null);
+  const [promptState, setPromptState] = useState({ hasMyHabit: true, missingPartners: [] });
+
+  const checkHabitPresence = (candidate) => {
+    const hasMyHabit = (userHabits || []).some((h) => isHabitMatchingSharedGoal(h, candidate));
+    const otherMembers = (podMembers || []).filter((m) => {
+      const isMe = (currentUser?.id && String(currentUser.id) === String(m.id)) ||
+                   (currentUser?.username && m.username && String(currentUser.username).toLowerCase() === String(m.username).toLowerCase());
+      return !isMe;
+    });
+
+    const missingPartners = otherMembers.filter((m) => {
+      const partner = (trackedPartners || []).find((tp) =>
+        (tp.id && m.id && String(tp.id) === String(m.id)) ||
+        (tp.username && m.username && String(tp.username).toLowerCase() === String(m.username).toLowerCase()) ||
+        (tp.secretCode && m.secretCode && String(tp.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+        (tp.secret_code && m.secretCode && String(tp.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+      );
+      if (partner && Array.isArray(partner.habits)) {
+        return !partner.habits.some((h) => isHabitMatchingSharedGoal(h, candidate));
+      }
+      return true; // Missing or not yet confirmed
+    });
+
+    return { hasMyHabit, missingPartners };
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onSave({
+
+    const goalCandidate = {
       name: name.trim(),
       category,
       target: Math.max(1, Number(target) || 1),
       unit: unit.trim() || 'times',
       delta: Math.max(1, Number(delta) || 1),
-    });
+    };
+
+    const result = checkHabitPresence(goalCandidate);
+
+    if (!result.hasMyHabit || result.missingPartners.length > 0) {
+      setPendingGoal(goalCandidate);
+      setPromptState(result);
+      setShowPrompt(true);
+      return;
+    }
+
+    onSave(goalCandidate);
+    onClose();
+  };
+
+  const handleConfirmWithAddHabit = () => {
+    if (!pendingGoal) return;
+    if (typeof onAddHabit === 'function') {
+      const habitId = `h_${pendingGoal.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString(36)}`;
+      onAddHabit({
+        id: habitId,
+        name: pendingGoal.name,
+        category: pendingGoal.category,
+        target: pendingGoal.target,
+        unit: pendingGoal.unit,
+        delta: pendingGoal.delta,
+        icon: 'target',
+        user1: 0,
+        user2: 0,
+      });
+    }
+    onSave(pendingGoal);
+    onClose();
+  };
+
+  const handleConfirmAnyway = () => {
+    if (!pendingGoal) return;
+    onSave(pendingGoal);
     onClose();
   };
 
@@ -139,6 +214,81 @@ const AddSharedGoalModal = ({ onClose, onSave }) => {
       default: return <Target size={14} className="preset-icon" />;
     }
   };
+
+  if (showPrompt && pendingGoal) {
+    const { hasMyHabit, missingPartners } = promptState;
+    return (
+      <div className="habit-modal-backdrop" onClick={onClose}>
+        <div className="habit-modal-card pod-add-goal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Habit Sync Notice">
+          <div className="habit-modal-header">
+            <div className="habit-modal-title-group">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {!hasMyHabit ? (
+                  <AlertCircle size={20} className="text-amber-400" />
+                ) : (
+                  <Info size={20} className="text-blue-400" />
+                )}
+                <h2 className="habit-modal-title font-extrabold">
+                  {!hasMyHabit ? 'Habit Missing in Habits Tab' : 'Notice for Group Members'}
+                </h2>
+              </div>
+              <p className="habit-modal-subtitle">
+                All group goal progress is tracked directly from each member's main Habits tab.
+              </p>
+            </div>
+            <button className="habit-modal-close-btn" onClick={() => setShowPrompt(false)} aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="habit-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 1.25rem' }}>
+            {!hasMyHabit ? (
+              <div className="pod-goal-preview-card" style={{ borderLeft: '4px solid #f59e0b', background: 'rgba(245, 158, 11, 0.08)' }}>
+                <p style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f1f5f9', margin: 0 }}>
+                  You don't have <strong>"{pendingGoal.name}"</strong> in your Habits tab yet.
+                </p>
+                <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.35rem', margin: 0 }}>
+                  Would you like to add it to your Habits tab now with a target of <strong>{pendingGoal.target} {pendingGoal.unit}</strong>?
+                </p>
+              </div>
+            ) : null}
+
+            {missingPartners.length > 0 ? (
+              <div style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.25)', background: 'rgba(59, 130, 246, 0.08)', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                <strong style={{ color: '#93c5fd' }}>Partner notice:</strong> {missingPartners.map(m => m.displayName || m.username).join(', ')} {missingPartners.length > 1 ? "need" : "needs"} to add "{pendingGoal.name}" in their Habits tab too. Their progress will automatically reflect here once added!
+              </div>
+            ) : null}
+
+            <div className="habit-modal-footer" style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="habit-footer-btn cancel font-semibold" onClick={() => setShowPrompt(false)}>
+                Back
+              </button>
+              {!hasMyHabit ? (
+                <button
+                  type="button"
+                  className="habit-footer-btn save font-bold"
+                  onClick={handleConfirmWithAddHabit}
+                  style={{ background: 'var(--primary, #1A56C4)' }}
+                >
+                  <Plus size={16} strokeWidth={2.6} />
+                  <span>Add to My Habits & Continue</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="habit-footer-btn save font-bold"
+                  onClick={handleConfirmAnyway}
+                >
+                  <Check size={16} strokeWidth={2.6} />
+                  <span>Create Shared Goal</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="habit-modal-backdrop" onClick={onClose}>
@@ -467,9 +617,11 @@ const EditSharedGoalModal = ({ goal, onClose, onSave, onDelete }) => {
   );
 };
 
-export const TogetherScreen = () => {
+export const TogetherScreen = ({ onNavigateToHabits }) => {
   const {
     user,
+    habits = [],
+    addGoal,
     groupPod,
     groupPods = [],
     activeGroupPodCode,
@@ -480,7 +632,6 @@ export const TogetherScreen = () => {
     editGroupName,
     addSharedGoal,
     editSharedGoal,
-    updateSharedGoalProgress,
     deleteSharedGoal,
     syncTogetherPodWithHabits,
     sendCheer,
@@ -1042,56 +1193,36 @@ export const TogetherScreen = () => {
                               </div>
 
                               <div className="together-actions-side">
-                                {isMe ? (
-                                  <div className="together-user-controls">
-                                    {/* Circular completion button (replaces big Mark Done button) */}
-                                    <button
-                                      type="button"
-                                      className={`member-check-circle-btn ${isDone ? 'checked' : ''}`}
-                                      onClick={() => {
-                                        if (isDone) {
-                                          sound.step();
-                                          updateSharedGoalProgress(sg.id, 0, 0);
-                                        } else {
-                                          sound.complete();
-                                          updateSharedGoalProgress(sg.id, 0, target);
-                                        }
-                                      }}
-                                      title={isDone ? 'Mark Incomplete' : 'Mark Complete'}
-                                      aria-label={isDone ? 'Mark Incomplete' : 'Mark Complete'}
-                                    >
-                                      <Check size={17} strokeWidth={2.8} />
-                                    </button>
-
-                                    {/* Compact steppers (+ / -) */}
-                                    <div className="together-steppers">
+                                  {isMe ? (
+                                    <div className="together-ssot-badge-wrap">
                                       <button
                                         type="button"
-                                        className="together-step-btn minus"
+                                        className={`together-synced-pill ${isDone ? 'done' : ''}`}
                                         onClick={() => {
-                                          sound.step();
-                                          updateSharedGoalProgress(sg.id, -deltaAmount);
+                                          sound.tap();
+                                          if (typeof onNavigateToHabits === 'function') {
+                                            onNavigateToHabits();
+                                          } else {
+                                            triggerIslandNotification?.('Log your progress in the Habits tab', 'info');
+                                          }
                                         }}
-                                        disabled={mVal <= 0}
-                                        title={`Subtract ${deltaAmount} ${sg.unit}`}
+                                        title="Tracked via Habits tab • Click to open Habits"
                                       >
-                                        <Minus size={13} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="together-step-btn plus"
-                                        onClick={() => {
-                                          sound.step();
-                                          updateSharedGoalProgress(sg.id, deltaAmount);
-                                        }}
-                                        title={`Add ${deltaAmount} ${sg.unit}`}
-                                      >
-                                        <Plus size={13} />
-                                        <span>{deltaAmount >= 1000 ? `${deltaAmount / 1000}k` : deltaAmount}</span>
+                                        {isDone ? (
+                                          <>
+                                            <CheckCircle2 size={13} className="text-emerald-400" />
+                                            <span>Completed in Habits</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="together-pulse-dot" />
+                                            <span>Tracked in Habits</span>
+                                            <ArrowRight size={11} className="opacity-70 ml-0.5" />
+                                          </>
+                                        )}
                                       </button>
                                     </div>
-                                  </div>
-                                ) : (
+                                  ) : (
                                   (() => {
                                     const mKey = m.id || m.username;
                                     const isGoalCheered = cheeredKeys.has(`${mKey}_${sg.name}`) || cheeredKeys.has(mKey);
@@ -1236,6 +1367,11 @@ export const TogetherScreen = () => {
         <AddSharedGoalModal
           onClose={() => setIsAddingGoal(false)}
           onSave={addSharedGoal}
+          userHabits={habits}
+          podMembers={groupPod?.members || []}
+          trackedPartners={trackedPartners}
+          onAddHabit={addGoal}
+          currentUser={user}
         />
       )}
 
