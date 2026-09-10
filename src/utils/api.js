@@ -197,26 +197,21 @@ export async function apiFetch(url, options = {}) {
 // Safe JSON parser to handle both native responses and standard fetch responses
 async function parseJsonSafe(res) {
   if (!res) return null;
-  if (typeof res.json === 'function') {
-    try {
-      const data = await res.json();
-      if (data && typeof data === 'object') return data;
-    } catch { }
+  // If already parsed object (e.g. from CapacitorHttp wrapper)
+  if (typeof res.text !== 'function' && typeof res.json !== 'function') {
+    return res;
   }
-
-  if (typeof res.text === 'function') {
-    try {
-      const text = await res.text();
-      if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
-        throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
-      }
-      return JSON.parse(text);
-    } catch (e) {
-      if (e.message && e.message.includes('unreachable')) throw e;
-      throw new Error('Invalid response from cloud service');
+  try {
+    const rawText = await res.text();
+    if (!rawText || !rawText.trim()) return null;
+    if (rawText.trim().startsWith('<') || rawText.includes('<!DOCTYPE')) {
+      throw new Error('Cloud service is currently unreachable. Please check your internet connection.');
     }
+    return JSON.parse(rawText);
+  } catch (err) {
+    if (err.message && err.message.includes('unreachable')) throw err;
+    return null;
   }
-  return null;
 }
 
 export const checkApiHealth = async (url) => {

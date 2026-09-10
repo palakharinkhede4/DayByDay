@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 
 test.describe('DayByDay Production Reliability Suite', () => {
   test('Fast Login, Instant Track Data, and Bulletproof Session Persistence Across Reloads', async ({ page }) => {
+    // Monitor console and errors
+    page.on('console', msg => console.log(`[PAGE ${msg.type().toUpperCase()}] ${msg.text()}`));
+    page.on('pageerror', err => console.log(`[PAGE ERROR] ${err.message}\n${err.stack}`));
+
     // Monitor API calls
     const apiCalls = [];
     page.on('response', res => {
@@ -28,7 +32,8 @@ test.describe('DayByDay Production Reliability Suite', () => {
     await usernameInput.fill('palakharinkhede');
     await passwordInput.fill('Habit@123');
 
-    const signInBtn = page.locator('button:has-text("Sign In"), button:has-text("Sign in")').first();
+    const signInBtn = page.locator('button.auth-primary-submit-btn, button[type="submit"]').first();
+    console.log('3. Clicking submit button and measuring response time ...');
     const loginClickTime = Date.now();
 
     const loginResponsePromise = page.waitForResponse(

@@ -659,12 +659,16 @@ export const HabitProvider = ({ children }) => {
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
     try {
-      if (localStorage.getItem('daybyday_signed_out') === 'true') {
-        return null;
-      }
       const saved = localStorage.getItem('daybyday_user') || localStorage.getItem('duotrack_user');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.username) {
+          try { localStorage.removeItem('daybyday_signed_out'); } catch {}
+          return parsed;
+        }
+      }
+      if (localStorage.getItem('daybyday_signed_out') === 'true') {
+        return null;
       }
     } catch (e) { }
     return null; // Triggers OnboardingModal if null
@@ -1890,8 +1894,8 @@ export const HabitProvider = ({ children }) => {
     const prevUser = (user?.username || localStorage.getItem('daybyday_last_username') || '').toLowerCase().trim();
     const isSameAccount = Boolean(prevUser && prevUser === cleanUsername);
 
-    // If logging into a DIFFERENT account, immediately flush all old data to guarantee zero leakage!
-    if (!isSameAccount) {
+    // If logging into a DIFFERENT account that was previously active, flush old data to guarantee zero leakage!
+    if (!isSameAccount && prevUser) {
       await wipeAllLocalUserData();
     }
 
@@ -1944,38 +1948,47 @@ export const HabitProvider = ({ children }) => {
 
         // 2. Ingest pre-fetched tracked partners from server response immediately
         if (res.trackedPartners && Array.isArray(res.trackedPartners) && res.trackedPartners.length > 0) {
-          const todayKey = getLocalDateKey();
-          const formattedTracked = res.trackedPartners.map((tp) => {
-            const rawHabits = tp.habits || [];
-            const cleanHabits = getCleanDailyHabits(rawHabits, todayKey, null, false);
-            const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
-              cleanHabits,
-              tp,
-              tp.preferences,
-              res.groupPod,
-              todayKey
-            );
-            const calcPct = calculatePartnerCompletionPercent(partnerHabits);
-            const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
-            return {
-              ...tp,
-              habits: partnerHabits,
-              streak: tp.streak ?? calcStreak,
-              todayPercent: (partnerHabits.length > 0) ? calcPct : (tp.todayPercent ?? 0),
-              profilePicture: tp.preferences?.profilePicture || tp.profilePicture || null,
-              lastActive: 'Active today',
-              secretCode: tp.secret_code || tp.secretCode,
-              secret_code: tp.secret_code || tp.secretCode,
-            };
-          });
-          setTrackedPartners(formattedTracked);
           try {
-            localStorage.setItem('daybyday_tracked_partners', JSON.stringify(formattedTracked));
-            if (formattedTracked[0]?.secretCode) {
-              setActiveTrackedCode(formattedTracked[0].secretCode);
-              localStorage.setItem('daybyday_active_tracked_code', formattedTracked[0].secretCode);
-            }
-          } catch {}
+            const todayKey = getLocalDateKey();
+            const formattedTracked = res.trackedPartners.map((tp) => {
+              const rawHabits = tp.habits || [];
+              const cleanHabits = getCleanDailyHabits(rawHabits, todayKey, null, false);
+              let partnerHabits = cleanHabits;
+              try {
+                partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
+                  cleanHabits,
+                  tp,
+                  tp.preferences,
+                  res.groupPod,
+                  todayKey
+                );
+              } catch {
+                partnerHabits = cleanHabits;
+              }
+              const calcPct = calculatePartnerCompletionPercent(partnerHabits);
+              const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+              return {
+                ...tp,
+                habits: partnerHabits,
+                streak: tp.streak ?? calcStreak,
+                todayPercent: (partnerHabits.length > 0) ? calcPct : (tp.todayPercent ?? 0),
+                profilePicture: tp.preferences?.profilePicture || tp.profilePicture || null,
+                lastActive: 'Active today',
+                secretCode: tp.secret_code || tp.secretCode,
+                secret_code: tp.secret_code || tp.secretCode,
+              };
+            });
+            setTrackedPartners(formattedTracked);
+            try {
+              localStorage.setItem('daybyday_tracked_partners', JSON.stringify(formattedTracked));
+              if (formattedTracked[0]?.secretCode) {
+                setActiveTrackedCode(formattedTracked[0].secretCode);
+                localStorage.setItem('daybyday_active_tracked_code', formattedTracked[0].secretCode);
+              }
+            } catch {}
+          } catch (tpErr) {
+            console.warn('Tracked partners ingest notice:', tpErr.message);
+          }
         }
 
         // 3. Restore all Preferences & Customizations from DB

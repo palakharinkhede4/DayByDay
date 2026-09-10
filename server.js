@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 // Explicitly load .env from project root directory
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-import userHandler from './api/user.js';
+import userHandler, { cleanPreferences } from './api/user.js';
 import activityHandler from './api/activity.js';
 import podHandler from './api/pod.js';
 import { getDb, ensureTables } from './api/db.js';
@@ -133,6 +133,24 @@ app.listen(PORT, '0.0.0.0', async () => {
       console.log('Pre-warming PostgreSQL connection & ensuring tables...');
       await ensureTables();
       console.log('PostgreSQL tables ensured and ready.');
+
+      // Auto-heal any bloated/corrupted user preferences in PostgreSQL once on boot
+      try {
+        const dirtyUsers = await sql`
+          SELECT id, preferences FROM daybyday_users 
+          WHERE jsonb_typeof(preferences) != 'object' 
+             OR octet_length(preferences::text) > 5000
+        `;
+        if (dirtyUsers && dirtyUsers.length > 0) {
+          for (const u of dirtyUsers) {
+            const cleaned = cleanPreferences(u.preferences);
+            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(cleaned)}::jsonb WHERE id = ${u.id}`;
+            console.log(`[AutoHeal] Restored clean preferences for user ${u.id} (was ${JSON.stringify(u.preferences).length} chars)`);
+          }
+        }
+      } catch (hErr) {
+        console.warn('Startup preferences auto-heal notice:', hErr.message);
+      }
     }
   } catch (e) {
     console.warn('Startup database notice:', e.message);

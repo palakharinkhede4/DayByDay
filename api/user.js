@@ -78,10 +78,105 @@ export function cleanHistory(raw, todayKey = null) {
   return result;
 }
 
+export function cleanPreferences(raw) {
+  if (!raw) return {};
+  let cur = raw;
+
+  // Unpack stringified JSON up to 10 levels
+  let depth = 0;
+  while (typeof cur === 'string' && depth < 10) {
+    depth++;
+    const trimmed = cur.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) break;
+    try {
+      cur = JSON.parse(cur);
+    } catch {
+      break;
+    }
+  }
+
+  // If cur is an array, try to find the first valid object inside it or unpack recursive arrays
+  depth = 0;
+  while (Array.isArray(cur) && depth < 10) {
+    depth++;
+    const objCandidate = cur.find((item) => item && typeof item === 'object' && !Array.isArray(item));
+    if (objCandidate) {
+      cur = objCandidate;
+      break;
+    }
+    const strCandidate = cur.find((item) => typeof item === 'string' && (item.trim().startsWith('{') || item.trim().startsWith('[')));
+    if (strCandidate) {
+      try {
+        cur = JSON.parse(strCandidate);
+      } catch {
+        cur = {};
+        break;
+      }
+    } else {
+      cur = {};
+      break;
+    }
+  }
+
+  // If cur has numeric keys resulting from string-split objects (e.g. { '0': ... })
+  if (cur && typeof cur === 'object' && !Array.isArray(cur) && cur['0'] !== undefined) {
+    try {
+      const keys = Object.keys(cur).sort((a, b) => Number(a) - Number(b));
+      const reconstructedStr = keys.map((k) => cur[k]).join('');
+      cur = JSON.parse(reconstructedStr);
+    } catch {
+      cur = {};
+    }
+  }
+
+  if (Array.isArray(cur)) {
+    cur = cur.find((item) => item && typeof item === 'object' && !Array.isArray(item)) || {};
+  }
+
+  if (!cur || typeof cur !== 'object' || Array.isArray(cur)) {
+    return {};
+  }
+
+  const safe = {};
+  if (typeof cur.themeColor === 'string') safe.themeColor = cur.themeColor.slice(0, 50);
+  if (typeof cur.themeMode === 'string') safe.themeMode = cur.themeMode.slice(0, 20);
+  if (typeof cur.useMaterial3Theme === 'boolean') safe.useMaterial3Theme = cur.useMaterial3Theme;
+  if (typeof cur.profilePicture === 'string' && cur.profilePicture.length < 2500000) {
+    safe.profilePicture = cur.profilePicture;
+  }
+  if (Array.isArray(cur.trackedPartnerCodes)) {
+    safe.trackedPartnerCodes = cur.trackedPartnerCodes
+      .filter((c) => typeof c === 'string' && c.trim().length > 0 && c.length < 30 && !c.includes('{') && !c.includes('['))
+      .map((c) => c.trim().toUpperCase());
+  }
+  if (Array.isArray(cur.groupPodCodes)) {
+    safe.groupPodCodes = cur.groupPodCodes
+      .filter((c) => typeof c === 'string' && c.trim().length > 0 && c.length < 30 && !c.includes('{') && !c.includes('['))
+      .map((c) => c.trim().toUpperCase());
+  }
+  if (typeof cur.healthSyncEnabled === 'boolean') safe.healthSyncEnabled = cur.healthSyncEnabled;
+  if (cur.healthData && typeof cur.healthData === 'object' && !Array.isArray(cur.healthData)) {
+    safe.healthData = {
+      steps: Number(cur.healthData.steps) || 0,
+      activeCalories: Number(cur.healthData.activeCalories) || 0,
+      distanceKm: Number(cur.healthData.distanceKm) || 0,
+      syncedAt: typeof cur.healthData.syncedAt === 'string' ? cur.healthData.syncedAt : null,
+    };
+  }
+  if (Array.isArray(cur.customCategories)) {
+    safe.customCategories = cur.customCategories
+      .filter((c) => typeof c === 'string' && c.trim().length > 0 && c.length < 50);
+  }
+  if (typeof cur.lastActiveDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cur.lastActiveDate)) {
+    safe.lastActiveDate = cur.lastActiveDate;
+  }
+  return safe;
+}
+
 function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, ...safe } = u;
-  safe.preferences = parseSafeJson(safe.preferences, {});
+  safe.preferences = cleanPreferences(safe.preferences);
   if (safe.preferences.profilePicture) {
     safe.profilePicture = safe.preferences.profilePicture;
   }
@@ -1465,139 +1560,114 @@ export default async function handler(req, res) {
             }
           }
 
+          // Clean user preferences and auto-heal bloated database records immediately
+          const userPrefs = cleanPreferences(user.preferences);
+          user.preferences = userPrefs;
+          try {
+            sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(userPrefs)}::jsonb WHERE id = ${user.id}`.catch(() => {});
+          } catch {}
+
           // Ensure user has a distinct, unique secret code (upgrade legacy/missing/dummy codes)
           if (!user.secret_code || user.secret_code === 'DAY-1000' || user.secret_code === 'DBD-1000' || user.secret_code === 'DUO-1000') {
             user.secret_code = generateSecretCode(user.username);
             try {
-              await sql`UPDATE daybyday_users SET secret_code = ${user.secret_code} WHERE id = ${user.id}`;
-            } catch (err) {
-              console.warn('Notice updating legacy secret_code:', err.message);
-            }
+              sql`UPDATE daybyday_users SET secret_code = ${user.secret_code} WHERE id = ${user.id}`.catch(() => {});
+            } catch {}
           }
 
-          // Fetch habits
-          const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id} ORDER BY id ASC`;
+          const trackedCodes = Array.isArray(userPrefs.trackedPartnerCodes)
+            ? userPrefs.trackedPartnerCodes.filter(Boolean).map((c) => String(c).trim().toUpperCase())
+            : [];
+          const userPodCodes = Array.isArray(userPrefs.groupPodCodes)
+            ? userPrefs.groupPodCodes.filter(Boolean)
+            : [];
 
-          // Check pairing
-          const pairings = await sql`
-            SELECT p.*, 
-              u1.username as u1_name, u1.secret_code as u1_code,
-              u2.username as u2_name, u2.secret_code as u2_code
-            FROM daybyday_pairings p
-            JOIN daybyday_users u1 ON p.user1_id = u1.id
-            JOIN daybyday_users u2 ON p.user2_id = u2.id
-            WHERE (p.user1_id = ${user.id} OR p.user2_id = ${user.id}) AND p.status = 'active'
-            LIMIT 1
-          `;
+          // Execute habits, pairings, group pods, and tracked partners in PARALLEL
+          const [habits, pairings, groupRows, partnerRows] = await Promise.all([
+            sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id} ORDER BY id ASC`,
+            sql`
+              SELECT p.*, 
+                u1.username as u1_name, u1.secret_code as u1_code,
+                u2.username as u2_name, u2.secret_code as u2_code
+              FROM daybyday_pairings p
+              JOIN daybyday_users u1 ON p.user1_id = u1.id
+              JOIN daybyday_users u2 ON p.user2_id = u2.id
+              WHERE (p.user1_id = ${user.id} OR p.user2_id = ${user.id}) AND p.status = 'active'
+              LIMIT 1
+            `,
+            sql`
+              SELECT * FROM daybyday_group_pods 
+              WHERE (members::text LIKE ${'%"' + user.id + '"%'})
+                 OR (members::text LIKE ${'%"' + user.username + '"%'})
+                 ${userPodCodes.length > 0 ? sql`OR code = ANY(${userPodCodes})` : sql``}
+              ORDER BY updated_at DESC
+              LIMIT 5
+            `,
+            trackedCodes.length > 0
+              ? sql`
+                  SELECT id, username, display_name, avatar, secret_code, preferences, last_active
+                  FROM daybyday_users
+                  WHERE UPPER(secret_code) = ANY(${trackedCodes})
+                `
+              : Promise.resolve([]),
+          ]);
 
+          // Process 1-on-1 partner if paired
           let partner = null;
           let podCode = null;
           if (pairings.length > 0) {
             const pair = pairings[0];
             podCode = pair.pod_code;
             const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-            const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
-            const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
-            if (partnerRows.length > 0) {
-              partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)) };
+            const [partnerUserRows, partnerHabits] = await Promise.all([
+              sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`,
+              sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`,
+            ]);
+            if (partnerUserRows.length > 0) {
+              partner = { ...sanitizePartner(partnerUserRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)) };
             }
           }
 
-          // Check if user belongs to active Together Group Pods (up to 5 pods)
+          // Process group pods
           let groupPods = [];
           let groupPod = null;
-          try {
-            const userPodCodes = Array.isArray(user.preferences?.groupPodCodes) ? user.preferences.groupPodCodes.filter(Boolean) : [];
-            const groupRows = await sql`
-              SELECT * FROM daybyday_group_pods 
-              WHERE (members::text LIKE ${'%"' + user.id + '"%'})
-                 OR (members::text LIKE ${'%"' + user.username + '"%'})
-                 OR ( ${user.secret_code ? sql`members::text LIKE ${'%"' + user.secret_code + '"%'}` : sql`FALSE`} )
-                 ${userPodCodes.length > 0 ? sql`OR code = ANY(${userPodCodes})` : sql``}
-              ORDER BY updated_at DESC
-              LIMIT 5
-            `;
-            if (groupRows.length > 0) {
+          if (groupRows.length > 0) {
+            try {
               groupPods = await Promise.all(groupRows.map((r) => formatGroupPodFromRow(r, sql)));
-
-              // Enrich members with latest profilePicture & secretCode so avatars load instantly
-              const allMemberIds = [...new Set(groupPods.flatMap((p) => (p.members || []).map((m) => m.id)).filter(Boolean))];
-              if (allMemberIds.length > 0) {
-                try {
-                  const memberRows = await sql`
-                    SELECT id, username, display_name, avatar, secret_code, preferences
-                    FROM daybyday_users
-                    WHERE id = ANY(${allMemberIds})
-                  `;
-                  const uMap = new Map(memberRows.map((u) => [u.id, u]));
-                  groupPods.forEach((p) => {
-                    p.members = (p.members || []).map((m) => {
-                      const u = uMap.get(m.id);
-                      if (u) {
-                        return {
-                          ...m,
-                          username: u.username || m.username,
-                          displayName: u.display_name || u.username || m.displayName,
-                          avatar: u.avatar || m.avatar || 'star',
-                          secretCode: u.secret_code || m.secretCode,
-                          profilePicture: parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
-                        };
-                      }
-                      return m;
-                    });
-                  });
-                } catch (uErr) {
-                  // Non-blocking, best effort
-                }
-              }
-
               groupPod = groupPods[0] || null;
+            } catch (gpErr) {
+              console.warn('Notice processing group pods on login:', gpErr.message);
             }
-          } catch (gpErr) {
-            console.warn('Notice querying user group pods on login:', gpErr.message);
           }
 
-          // Pre-fetch tracked partners so client receives them immediately on login
+          // Process tracked partners
           let trackedPartners = [];
-          const userPrefs = parseSafeJson(user.preferences, {});
-          const trackedCodes = Array.isArray(userPrefs.trackedPartnerCodes)
-            ? userPrefs.trackedPartnerCodes.filter(Boolean)
-            : [];
-
-          if (trackedCodes.length > 0) {
+          if (partnerRows.length > 0) {
             try {
-              const cleanCodes = trackedCodes.map(c => String(c).trim().toUpperCase());
-              const partnerRows = await sql`
-                SELECT id, username, display_name, avatar, secret_code, preferences, last_active
-                FROM daybyday_users
-                WHERE UPPER(secret_code) = ANY(${cleanCodes})
+              const partnerUserIds = partnerRows.map((u) => u.id);
+              const allPartnerHabits = await sql`
+                SELECT * FROM daybyday_habits
+                WHERE user_id = ANY(${partnerUserIds})
+                ORDER BY id ASC
               `;
-              if (partnerRows.length > 0) {
-                const partnerUserIds = partnerRows.map(u => u.id);
-                const allPartnerHabits = await sql`
-                  SELECT * FROM daybyday_habits
-                  WHERE user_id = ANY(${partnerUserIds})
-                  ORDER BY id ASC
-                `;
-                const habitMap = new Map();
-                allPartnerHabits.forEach(h => {
-                  if (!habitMap.has(h.user_id)) habitMap.set(h.user_id, []);
-                  habitMap.get(h.user_id).push(formatHabitFromRow(h, sql));
-                });
+              const habitMap = new Map();
+              allPartnerHabits.forEach((h) => {
+                if (!habitMap.has(h.user_id)) habitMap.set(h.user_id, []);
+                habitMap.get(h.user_id).push(formatHabitFromRow(h, sql));
+              });
 
-                trackedPartners = partnerRows.map(u => {
-                  const uHabits = habitMap.get(u.id) || [];
-                  const uStreak = uHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
-                  return {
-                    ...sanitizePartner(u),
-                    habits: uHabits,
-                    streak: uStreak,
-                    todayPercent: 0,
-                    secretCode: u.secret_code,
-                    secret_code: u.secret_code,
-                  };
-                });
-              }
+              trackedPartners = partnerRows.map((u) => {
+                const uHabits = habitMap.get(u.id) || [];
+                const uStreak = uHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                return {
+                  ...sanitizePartner(u),
+                  habits: uHabits,
+                  streak: uStreak,
+                  todayPercent: 0,
+                  secretCode: u.secret_code,
+                  secret_code: u.secret_code,
+                };
+              });
             } catch (tpErr) {
               console.warn('Notice pre-fetching tracked partners on login:', tpErr.message);
             }
@@ -1614,7 +1684,7 @@ export default async function handler(req, res) {
             groupPod,
             groupPods,
             trackedPartners,
-            isSolo: !partner
+            isSolo: !partner,
           });
         }
 
@@ -1783,7 +1853,8 @@ export default async function handler(req, res) {
       try {
         if (sql) {
           if (preferences) {
-            await sql`UPDATE daybyday_users SET preferences = COALESCE(preferences, '{}'::jsonb) || ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
+            const safePrefs = cleanPreferences(preferences);
+            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(safePrefs)}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
           }
           const todayStr = getIstDateKey();
           const yesterdayStr = getIstYesterdayKey();
