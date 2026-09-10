@@ -2,12 +2,18 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import userHandler from './api/user.js';
-import activityHandler from './api/activity.js';
-import podHandler from './api/pod.js';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from project root directory
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+import userHandler from './api/user.js';
+import activityHandler from './api/activity.js';
+import podHandler from './api/pod.js';
+import { getDb, ensureTables } from './api/db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,9 +39,34 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'daybyday', timestamp: new Date().toISOString() });
+// Health check endpoint with real-time PostgreSQL database check
+app.get('/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  let dbError = null;
+  let userCount = 0;
+  try {
+    const sql = getDb();
+    if (sql) {
+      await ensureTables();
+      const [row] = await sql`SELECT COUNT(*)::int AS count FROM daybyday_users`;
+      dbStatus = 'connected';
+      userCount = row?.count ?? 0;
+    } else {
+      dbStatus = 'no_database_url';
+    }
+  } catch (err) {
+    dbStatus = 'error';
+    dbError = err.message;
+  }
+
+  res.status(200).json({
+    status: 'ok',
+    service: 'daybyday',
+    database: dbStatus,
+    usersInDb: userCount,
+    error: dbError,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // API Routes
