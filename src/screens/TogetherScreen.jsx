@@ -728,12 +728,13 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
   const [cheeredKeys, setCheeredKeys] = useState(new Set());
 
   // Fast profile picture resolution (pod member -> trackedPartner match -> local cache)
+  const isValidPic = (p) => typeof p === 'string' && p.length > 250 && !p.includes('AAAAEAAAAB');
   const getMemberProfilePic = (m) => {
     if (!m) return null;
     const isMe = (user?.id && String(user.id) === String(m.id)) ||
                  (user?.username && m.username && String(user.username).toLowerCase() === String(m.username).toLowerCase());
-    if (isMe && profilePicture) return profilePicture;
-    if (m.profilePicture) return m.profilePicture;
+    if (isMe && isValidPic(profilePicture)) return profilePicture;
+    if (isValidPic(m.profilePicture)) return m.profilePicture;
 
     const partner = (trackedPartners || []).find((tp) =>
       (tp.id && m.id && String(tp.id) === String(m.id)) ||
@@ -741,11 +742,11 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
       (tp.secretCode && m.secretCode && String(tp.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
       (tp.secret_code && m.secretCode && String(tp.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
     );
-    if (partner?.profilePicture) return partner.profilePicture;
+    if (isValidPic(partner?.profilePicture)) return partner.profilePicture;
 
     try {
       const cached = localStorage.getItem(`daybyday_avatar_${m.username || m.id}`);
-      if (cached) return cached;
+      if (isValidPic(cached)) return cached;
     } catch {}
 
     return null;
@@ -1024,8 +1025,26 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
 
             <div className="together-members-grid">
               {(groupPod.members || []).map((m, idx) => {
-                const isMe = user?.id && String(user.id) === String(m.id);
+                const isMe = Boolean(
+                  (user?.id && String(user.id) === String(m.id)) ||
+                  (user?.username && m.username && String(user.username).toLowerCase() === String(m.username).toLowerCase()) ||
+                  (user?.secretCode && m.secretCode && String(user.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+                  (user?.secret_code && m.secretCode && String(user.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+                );
                 const isCheered = (cheeredMemberId === (m.id || m.username));
+
+                // Authoritative live stats for current logged-in user
+                let displayPercent = m.todayPercent || 0;
+                let displayStreak = m.streak || 0;
+                if (isMe && Array.isArray(habits)) {
+                  const total = habits.length;
+                  const completed = habits.filter((h) => {
+                    const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                    return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+                  }).length;
+                  displayPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  displayStreak = habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                }
 
                 return (
                   <div key={m.id || idx} className={`group-member-card ${isMe ? 'is-me' : ''}`}>
@@ -1052,10 +1071,10 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
                       <span className="member-handle">@{m.username}</span>
                     </div>
                     <div className="member-stats">
-                      <span className="member-pct font-extrabold">{m.todayPercent || 0}%</span>
+                      <span className="member-pct font-extrabold">{displayPercent}%</span>
                       <div className="member-streak">
                         <Flame size={12} className="text-amber-500" />
-                        <span>{m.streak || 0}d</span>
+                        <span>{displayStreak}d</span>
                       </div>
                     </div>
                     {!isMe && (

@@ -105,6 +105,16 @@ function clearPasswordRateLimit(identifier) {
   passwordRateLimiter.delete(String(identifier || '').toLowerCase());
 }
 
+export function isValidProfilePicture(pic) {
+  if (typeof pic !== 'string') return false;
+  const trimmed = pic.trim();
+  if (trimmed.length < 250 || trimmed.length > 3500000) return false;
+  // Exclude 1x1 dummy or transparent test pixels
+  if (trimmed.includes('AAAAEAAAAB') || trimmed.includes('iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB')) return false;
+  if (!trimmed.startsWith('data:image/') && !trimmed.startsWith('http')) return false;
+  return true;
+}
+
 export function cleanPreferences(raw) {
   if (!raw) return {};
   let cur = raw;
@@ -178,8 +188,8 @@ export function cleanPreferences(raw) {
   if (typeof cur.themeColor === 'string') safe.themeColor = cur.themeColor.slice(0, 50);
   if (typeof cur.themeMode === 'string') safe.themeMode = cur.themeMode.slice(0, 20);
   if (typeof cur.useMaterial3Theme === 'boolean') safe.useMaterial3Theme = cur.useMaterial3Theme;
-  if (typeof cur.profilePicture === 'string' && cur.profilePicture.length < 2500000) {
-    safe.profilePicture = cur.profilePicture;
+  if (isValidProfilePicture(cur.profilePicture)) {
+    safe.profilePicture = cur.profilePicture.trim();
   }
   if (Array.isArray(cur.trackedPartnerCodes)) {
     safe.trackedPartnerCodes = cur.trackedPartnerCodes
@@ -214,12 +224,12 @@ function sanitizeUser(u) {
   if (!u) return null;
   const { password_hash, salt, security_answer_hash, security_salt, ...safe } = u;
   safe.preferences = cleanPreferences(safe.preferences);
-  if (u.profile_picture) {
-    safe.profilePicture = u.profile_picture;
-    safe.preferences.profilePicture = u.profile_picture;
-  } else if (safe.preferences.profilePicture) {
-    safe.profilePicture = safe.preferences.profilePicture;
-  }
+  const uPic = isValidProfilePicture(u.profile_picture) ? u.profile_picture.trim() : null;
+  const prefPic = isValidProfilePicture(safe.preferences?.profilePicture) ? safe.preferences.profilePicture.trim() : null;
+  const finalPic = uPic || prefPic || null;
+  safe.profilePicture = finalPic;
+  safe.profile_picture = finalPic;
+  if (safe.preferences) safe.preferences.profilePicture = finalPic;
   const code = safe.secretCode || safe.secret_code;
   safe.secretCode = code;
   safe.secret_code = code;
@@ -584,11 +594,42 @@ async function formatGroupPodFromRow(row, sql = null) {
     };
   });
 
-  // Asynchronously persist healed goals back to SQL so subsequent requests are pre-warmed
-  if (goalsChanged && sql && row.id) {
+  // Recalculate each member's todayPercent & streak dynamically for today's date in IST
+  const updatedMembers = members.map((m) => {
+    const mId = m.id ? String(m.id) : null;
+    const mName = m.username ? String(m.username).toLowerCase() : null;
+    const mHabits = (mId && memberHabitsMap.get(mId)) ||
+                    (mName && memberHabitsMap.get(mName)) ||
+                    [];
+    let pct = m.todayPercent || 0;
+    let streak = m.streak || 0;
+    if (mHabits.length > 0) {
+      const total = mHabits.length;
+      const completed = mHabits.filter((h) => {
+        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+        return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+      }).length;
+      pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      streak = mHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+    }
+    const cleanPic = isValidProfilePicture(m.profilePicture) ? m.profilePicture : null;
+    return {
+      ...m,
+      todayPercent: pct,
+      streak,
+      profilePicture: cleanPic,
+    };
+  });
+
+  const membersChanged = JSON.stringify(updatedMembers) !== JSON.stringify(members);
+
+  // Asynchronously persist healed goals & reconciled member stats back to SQL so subsequent requests are pre-warmed
+  if ((goalsChanged || membersChanged) && sql && row.id) {
     sql`
       UPDATE daybyday_group_pods 
-      SET shared_goals = ${JSON.stringify(cleanGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP 
+      SET shared_goals = ${JSON.stringify(cleanGoals)}::jsonb,
+          members = ${JSON.stringify(updatedMembers)}::jsonb,
+          updated_at = CURRENT_TIMESTAMP 
       WHERE id = ${row.id}
     `.catch((saveErr) => console.warn('[Pod Reconcile] Auto-save healed goals error:', saveErr.message));
   }
@@ -597,7 +638,7 @@ async function formatGroupPodFromRow(row, sql = null) {
     id: row.id,
     name: row.name,
     code: (row.code || '').toUpperCase(),
-    members,
+    members: updatedMembers,
     sharedGoals: cleanGoals,
     maxMembers: row.max_members || 10,
     createdAt: row.created_at,
@@ -1124,13 +1165,18 @@ export default async function handler(req, res) {
                   p.members = (p.members || []).map((m) => {
                     const u = uMap.get(m.id);
                     if (u) {
+                      const validPic = isValidProfilePicture(u.profile_picture)
+                        ? u.profile_picture
+                        : (isValidProfilePicture(parseSafeJson(u.preferences, {}).profilePicture)
+                            ? parseSafeJson(u.preferences, {}).profilePicture
+                            : (isValidProfilePicture(m.profilePicture) ? m.profilePicture : null));
                       return {
                         ...m,
                         username: u.username || m.username,
                         displayName: u.display_name || u.username || m.displayName,
                         avatar: u.avatar || m.avatar || 'star',
                         secretCode: u.secret_code || m.secretCode,
-                        profilePicture: u.profile_picture || parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
+                        profilePicture: validPic,
                       };
                     }
                     return m;
@@ -2189,11 +2235,20 @@ export default async function handler(req, res) {
           const userRecord = userRows[0];
           const currentPrefs = cleanPreferences(userRecord.preferences);
           const incomingPrefs = cleanPreferences(preferences);
+
+          // SAFEGUARD: Never wipe trackedPartnerCodes or groupPodCodes with empty arrays via sync_preferences
+          if (Array.isArray(incomingPrefs.trackedPartnerCodes) && incomingPrefs.trackedPartnerCodes.length === 0) {
+            delete incomingPrefs.trackedPartnerCodes;
+          }
+          if (Array.isArray(incomingPrefs.groupPodCodes) && incomingPrefs.groupPodCodes.length === 0) {
+            delete incomingPrefs.groupPodCodes;
+          }
+
           const merged = { ...currentPrefs, ...incomingPrefs };
           const safePrefs = cleanPreferences(merged);
-          const newPic = incomingPrefs.profilePicture !== undefined
-            ? incomingPrefs.profilePicture
-            : (safePrefs.profilePicture || userRecord.profile_picture || null);
+          const validIncomingPic = isValidProfilePicture(incomingPrefs.profilePicture) ? incomingPrefs.profilePicture.trim() : null;
+          const newPic = validIncomingPic || (isValidProfilePicture(safePrefs.profilePicture) ? safePrefs.profilePicture : (isValidProfilePicture(userRecord.profile_picture) ? userRecord.profile_picture : null));
+          safePrefs.profilePicture = newPic;
 
           await sql`
             UPDATE daybyday_users 
@@ -2803,13 +2858,18 @@ export default async function handler(req, res) {
                   p.members = (p.members || []).map((m) => {
                     const u = uMap.get(m.id);
                     if (u) {
+                      const validPic = isValidProfilePicture(u.profile_picture)
+                        ? u.profile_picture
+                        : (isValidProfilePicture(parseSafeJson(u.preferences, {}).profilePicture)
+                            ? parseSafeJson(u.preferences, {}).profilePicture
+                            : (isValidProfilePicture(m.profilePicture) ? m.profilePicture : null));
                       return {
                         ...m,
                         username: u.username || m.username,
                         displayName: u.display_name || u.username || m.displayName,
                         avatar: u.avatar || m.avatar || 'star',
                         secretCode: u.secret_code || m.secretCode,
-                        profilePicture: parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
+                        profilePicture: validPic,
                       };
                     }
                     return m;

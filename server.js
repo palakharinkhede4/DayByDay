@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 // Explicitly load .env from project root directory
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-import userHandler, { cleanPreferences } from './api/user.js';
+import userHandler, { cleanPreferences, isValidProfilePicture } from './api/user.js';
 import activityHandler from './api/activity.js';
 import podHandler from './api/pod.js';
 import { getDb, ensureTables } from './api/db.js';
@@ -134,18 +134,95 @@ app.listen(PORT, '0.0.0.0', async () => {
       await ensureTables();
       console.log('PostgreSQL tables ensured and ready.');
 
-      // Auto-heal any bloated/corrupted user preferences in PostgreSQL once on boot
+      // Universal Auto-Heal: Profile picture restoration, tracked partners recovery, and preference cleanup
       try {
-        // 1. Backfill profile_picture column from preferences for all users if not already set
-        await sql`
-          UPDATE daybyday_users
-          SET profile_picture = preferences->>'profilePicture'
-          WHERE (profile_picture IS NULL OR profile_picture = '')
-            AND preferences->>'profilePicture' IS NOT NULL
-            AND preferences->>'profilePicture' != ''
-        `.catch(() => {});
+        // 1. Restore authentic profile pictures from activity history or group pods if user has corrupt/1x1 dummy pixel
+        const usersNeedingPic = await sql`
+          SELECT id, username, profile_picture, preferences FROM daybyday_users
+          WHERE profile_picture IS NULL 
+             OR length(profile_picture) < 250 
+             OR profile_picture LIKE '%AAAAEAAAAB%'
+             OR profile_picture LIKE '%iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB%'
+        `;
+        for (const u of usersNeedingPic) {
+          const actRows = await sql`
+            SELECT profile_picture FROM daybyday_activity
+            WHERE user_id = ${u.id}
+              AND profile_picture IS NOT NULL
+              AND length(profile_picture) > 250
+              AND profile_picture NOT LIKE '%AAAAEAAAAB%'
+            ORDER BY created_at DESC LIMIT 1
+          `;
+          let realPic = actRows.length > 0 ? actRows[0].profile_picture : null;
+          if (!realPic) {
+            const podRows = await sql`
+              SELECT members FROM daybyday_group_pods
+              WHERE members::text LIKE ${'%"' + u.id + '"%'}
+            `;
+            for (const pr of podRows) {
+              const mems = Array.isArray(pr.members) ? pr.members : [];
+              const m = mems.find((item) => item && (item.id === u.id || item.username === u.username));
+              if (m && isValidProfilePicture(m.profilePicture)) {
+                realPic = m.profilePicture;
+                break;
+              }
+            }
+          }
+          if (realPic && isValidProfilePicture(realPic)) {
+            const curP = cleanPreferences(u.preferences);
+            curP.profilePicture = realPic;
+            await sql`
+              UPDATE daybyday_users
+              SET profile_picture = ${realPic},
+                  preferences = ${JSON.stringify(curP)}::jsonb
+              WHERE id = ${u.id}
+            `;
+            console.log(`[AutoHeal] Restored authentic profile picture (${realPic.length} bytes) for ${u.username}`);
+          }
+        }
 
-        // 2. Clean bloated/corrupted preferences
+        // 2. Restore Palak's tracked partner codes if missing or empty
+        const palakRows = await sql`
+          SELECT id, preferences FROM daybyday_users WHERE LOWER(username) = 'palakharinkhede' LIMIT 1
+        `;
+        if (palakRows.length > 0) {
+          const pPrefs = cleanPreferences(palakRows[0].preferences);
+          const pCodes = Array.isArray(pPrefs.trackedPartnerCodes) ? pPrefs.trackedPartnerCodes : [];
+          if (!pCodes.includes('GAYA-4241C') || !pCodes.includes('JANK-1777K')) {
+            const updated = Array.from(new Set([...pCodes, 'GAYA-4241C', 'JANK-1777K']));
+            pPrefs.trackedPartnerCodes = updated;
+            await sql`
+              UPDATE daybyday_users
+              SET preferences = ${JSON.stringify(pPrefs)}::jsonb
+              WHERE id = ${palakRows[0].id}
+            `;
+            console.log('[AutoHeal] Restored trackedPartnerCodes for palakharinkhede:', updated);
+          }
+        }
+
+        // 3. Ensure group pods members also have valid profile pictures (replace 118-byte dummy pixel)
+        const allPods = await sql`SELECT id, code, members FROM daybyday_group_pods`;
+        for (const p of allPods) {
+          const membersList = Array.isArray(p.members) ? p.members : [];
+          let podChanged = false;
+          const updatedMems = membersList.map((m) => {
+            if (m.profilePicture && !isValidProfilePicture(m.profilePicture)) {
+              podChanged = true;
+              return { ...m, profilePicture: null };
+            }
+            return m;
+          });
+          if (podChanged) {
+            await sql`
+              UPDATE daybyday_group_pods
+              SET members = ${JSON.stringify(updatedMems)}::jsonb
+              WHERE id = ${p.id}
+            `;
+            console.log(`[AutoHeal] Cleaned dummy member pictures in pod ${p.code}`);
+          }
+        }
+
+        // 4. Clean bloated/corrupted preferences
         const dirtyUsers = await sql`
           SELECT id, preferences, profile_picture FROM daybyday_users 
           WHERE jsonb_typeof(preferences) != 'object' 
@@ -154,7 +231,8 @@ app.listen(PORT, '0.0.0.0', async () => {
         if (dirtyUsers && dirtyUsers.length > 0) {
           for (const u of dirtyUsers) {
             const cleaned = cleanPreferences(u.preferences);
-            const pic = cleaned.profilePicture || u.profile_picture || null;
+            const pic = (isValidProfilePicture(cleaned.profilePicture) ? cleaned.profilePicture : null) ||
+                        (isValidProfilePicture(u.profile_picture) ? u.profile_picture : null);
             await sql`
               UPDATE daybyday_users 
               SET preferences = ${JSON.stringify(cleaned)}::jsonb,

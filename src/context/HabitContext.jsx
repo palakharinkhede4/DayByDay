@@ -748,24 +748,29 @@ export const HabitProvider = ({ children }) => {
   // Profile Picture (base64 data URL or null)
   const [profilePicture, setProfilePictureState] = useState(() => {
     try {
-      return localStorage.getItem('daybyday_profile_pic') || null;
+      const saved = localStorage.getItem('daybyday_profile_pic');
+      if (saved && typeof saved === 'string' && saved.length > 250 && !saved.includes('AAAAEAAAAB')) {
+        return saved;
+      }
+      return null;
     } catch {
       return null;
     }
   });
 
   const setProfilePicture = (picUrl) => {
-    setProfilePictureState(picUrl);
+    const valid = typeof picUrl === 'string' && picUrl.length > 250 && !picUrl.includes('AAAAEAAAAB') ? picUrl : null;
+    setProfilePictureState(valid);
     try {
-      if (picUrl) {
-        localStorage.setItem('daybyday_profile_pic', picUrl);
+      if (valid) {
+        localStorage.setItem('daybyday_profile_pic', valid);
       } else {
         localStorage.removeItem('daybyday_profile_pic');
       }
     } catch {}
     const activeUid = user?.id || user?.username;
     if (activeUid) {
-      syncPreferencesRemote(activeUid, { ...(user?.preferences || {}), profilePicture: picUrl || null }).catch(() => {});
+      syncPreferencesRemote(activeUid, { ...(user?.preferences || {}), profilePicture: valid }).catch(() => {});
     }
   };
 
@@ -1320,15 +1325,19 @@ export const HabitProvider = ({ children }) => {
               if (remoteData.preferences) {
                 applyPreferences(remoteData.preferences);
               }
-              if (remoteData.user?.profilePicture) {
-                setProfilePictureState(remoteData.user.profilePicture);
-                try { localStorage.setItem('daybyday_profile_pic', remoteData.user.profilePicture); } catch {}
+              const remotePic = remoteData.user?.profilePicture || remoteData.preferences?.profilePicture;
+              const isValidPic = (p) => typeof p === 'string' && p.length > 250 && !p.includes('AAAAEAAAAB');
+              if (isValidPic(remotePic)) {
+                setProfilePictureState(remotePic);
+                try { localStorage.setItem('daybyday_profile_pic', remotePic); } catch {}
               } else {
                 try {
                   const localPic = localStorage.getItem('daybyday_profile_pic');
-                  if (localPic && activeUser?.id) {
+                  if (isValidPic(localPic) && activeUser?.id) {
                     setProfilePictureState(localPic);
                     syncPreferencesRemote(activeUser.id, { profilePicture: localPic }).catch(() => {});
+                  } else {
+                    localStorage.removeItem('daybyday_profile_pic');
                   }
                 } catch {}
               }
@@ -1738,15 +1747,16 @@ export const HabitProvider = ({ children }) => {
     if (!user?.id) return;
 
     const trackedCodes = trackedPartners.map((p) => p.secretCode || p.secret_code).filter(Boolean);
+    const validPic = typeof profilePicture === 'string' && profilePicture.length > 250 && !profilePicture.includes('AAAAEAAAAB') ? profilePicture : null;
     const currentPreferences = {
       themeColor,
       themeMode,
       useMaterial3Theme,
       customCategories,
-      profilePicture,
+      profilePicture: validPic,
       activeFocusHabitId,
       beyondGoals,
-      trackedPartnerCodes: trackedCodes,
+      ...(trackedCodes.length > 0 ? { trackedPartnerCodes: trackedCodes } : {}),
       groupPodCode: groupPod?.code || null,
       healthSyncEnabled: Boolean(healthSyncEnabled),
     };
