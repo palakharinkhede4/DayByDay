@@ -480,6 +480,26 @@ export const syncPreferencesRemote = async (userId, preferences) => {
   }
 };
 
+export const removeTrackedPartnerRemote = async (userId, partnerCode) => {
+  if (!hasRemoteBackend() || !userId || !partnerCode) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'remove_tracked_partner',
+        userId,
+        partnerCode,
+      }),
+    });
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch {
+    return null;
+  }
+};
+
 export const syncHealthDataRemote = async (userIdOrCode, healthData) => {
   if (!hasRemoteBackend() || !userIdOrCode || !healthData) return null;
   const baseUrl = getApiBaseUrl();

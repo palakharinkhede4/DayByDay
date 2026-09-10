@@ -15,6 +15,7 @@ import {
   syncUserHabitsRemote,
   syncHealthDataRemote,
   syncPreferencesRemote,
+  removeTrackedPartnerRemote,
   pairPartnerRemote,
   unpairPartnerRemote,
   deleteHabitRemote,
@@ -1290,11 +1291,14 @@ export const HabitProvider = ({ children }) => {
                 localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
                 localStorage.setItem('daybyday_last_active_date', todayKey);
 
-                // Auto-calibrate native Android sensor to today's authoritative steps count
+                // Calibrate native Android sensor ONLY if today's steps are confirmed active today (not carried over from yesterday)
                 if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {
                   const stepHabit = cleanRemote.find((h) => (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps');
-                  if (stepHabit && Number(stepHabit.user1) > 0) {
-                    window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: Number(stepHabit.user1) }).catch(() => {});
+                  const todayEntry = stepHabit?.history ? Number(stepHabit.history[todayKey]) || 0 : 0;
+                  const yesterdayKey = getIstYesterdayKey();
+                  const yesterdayEntry = stepHabit?.history ? Number(stepHabit.history[yesterdayKey]) || 0 : 0;
+                  if (todayEntry > 0 && todayEntry !== yesterdayEntry) {
+                    window.Capacitor.Plugins.FitnessSync.calibrateSteps({ targetSteps: todayEntry }).catch(() => {});
                   }
                 }
 
@@ -1679,6 +1683,7 @@ export const HabitProvider = ({ children }) => {
       beyondGoals,
       trackedPartnerCodes: trackedCodes,
       groupPodCode: groupPod?.code || null,
+      healthSyncEnabled: Boolean(healthSyncEnabled),
     };
 
     const timer = setTimeout(() => {
@@ -1686,7 +1691,7 @@ export const HabitProvider = ({ children }) => {
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [themeColor, themeMode, useMaterial3Theme, customCategories, profilePicture, activeFocusHabitId, beyondGoals, trackedPartners, groupPod?.code, user?.id]);
+  }, [themeColor, themeMode, useMaterial3Theme, customCategories, profilePicture, activeFocusHabitId, beyondGoals, trackedPartners, groupPod?.code, user?.id, healthSyncEnabled]);
 
   // 100% Clean Slate: Purges ALL user data, credentials, cached pods, partner data, habits, health stats & preferences
   const wipeAllLocalUserData = async () => {
@@ -2527,7 +2532,12 @@ export const HabitProvider = ({ children }) => {
             },
           };
         });
-        syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: remainingCodes }).catch(() => {});
+        removeTrackedPartnerRemote(user.id, targetCode).catch(() => {});
+        syncPreferencesRemote(user.id, {
+          ...(user.preferences || {}),
+          trackedPartnerCodes: remainingCodes,
+          healthSyncEnabled: Boolean(healthSyncEnabled),
+        }).catch(() => {});
       }
 
       return remaining;
@@ -3828,12 +3838,19 @@ export const HabitProvider = ({ children }) => {
           const steps = Math.max(0, Math.round(Number(computedNextValue) || 0));
           const calories = Math.round(steps * 0.04);
           const isUserEdit = origin === 'user';
+          const todayKey = getLocalDateKey();
+          if (isUserEdit) {
+            try {
+              localStorage.setItem('daybyday_manual_steps_date', todayKey);
+            } catch {}
+          }
           const healthPayload = {
             steps,
             calories,
             distanceKm,
             source: isUserEdit ? 'manual_entry' : 'habit_entry',
             isManualOverride: isUserEdit,
+            manualOverrideDate: isUserEdit ? todayKey : null,
             syncedAt: new Date().toISOString(),
           };
           if (isUserEdit && window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.calibrateSteps) {

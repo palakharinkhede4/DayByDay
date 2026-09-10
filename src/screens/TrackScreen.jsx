@@ -43,7 +43,7 @@ export const TrackScreen = () => {
   const getPartnerDisplayHabits = (p) => {
     if (!p) return [];
     const todayKey = getLocalDateKey();
-    const cleanHabits = getCleanDailyHabits(p.habits || [], todayKey);
+    const cleanHabits = getCleanDailyHabits(p.habits || [], todayKey, null, false);
     return enrichPartnerHabitsWithHealthAndGroup(
       cleanHabits,
       p,

@@ -91,13 +91,17 @@ function sanitizeUser(u) {
   return safe;
 }
 
-// Partner view: strip the secret code so other users cannot see it
+// Partner view: strip the secret code and private health data so other users cannot see it
 function sanitizePartner(u) {
   if (!u) return null;
   const sanitized = sanitizeUser(u);
   if (sanitized) {
     delete sanitized.secretCode;
     delete sanitized.secret_code;
+    if (sanitized.preferences) {
+      const { healthData, manualOverrideDate, ...safePrefs } = sanitized.preferences;
+      sanitized.preferences = safePrefs;
+    }
   }
   return sanitized;
 }
@@ -1113,10 +1117,18 @@ export default async function handler(req, res) {
         const streak = formattedHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
 
 
+        const isCodeLookup = Boolean(cleanCode);
+        const safeUser = isCodeLookup ? sanitizePartner(user) : sanitizeUser(user);
+        const safePrefs = parseSafeJson(user.preferences, {});
+        if (isCodeLookup) {
+          delete safePrefs.healthData;
+          delete safePrefs.manualOverrideDate;
+        }
+
         return res.status(200).json({
-          user: sanitizeUser(user),
+          user: safeUser,
           habits: formattedHabits,
-          preferences: parseSafeJson(user.preferences, {}),
+          preferences: safePrefs,
           partner,
           podCode,
           groupPod,
@@ -1724,7 +1736,7 @@ export default async function handler(req, res) {
       try {
         if (sql) {
           if (preferences) {
-            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
+            await sql`UPDATE daybyday_users SET preferences = COALESCE(preferences, '{}'::jsonb) || ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
           }
           const todayStr = getIstDateKey();
           const yesterdayStr = getIstYesterdayKey();
@@ -1924,7 +1936,7 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_users 
-            SET preferences = ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP 
+            SET preferences = COALESCE(preferences, '{}'::jsonb) || ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP 
             WHERE id = ${userId}
           `;
           const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
@@ -1932,8 +1944,52 @@ export default async function handler(req, res) {
         }
 
         const u = memoryDb.getUser(userId);
-        if (u) u.preferences = parseSafeJson(preferences, {});
+        if (u) u.preferences = { ...(u.preferences || {}), ...parseSafeJson(preferences, {}) };
         return res.status(200).json({ success: true, preferences: parseSafeJson(preferences, {}) });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: REMOVE TRACKED PARTNER (Atomic untrack)
+    if (action === 'remove_tracked_partner') {
+      const { userId, partnerCode } = req.body;
+      const cleanCode = (partnerCode || '').trim().toUpperCase();
+      if (!userId || !cleanCode) {
+        return res.status(400).json({ error: 'User ID and partner code required' });
+      }
+
+      try {
+        if (sql) {
+          const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
+          if (rows.length > 0) {
+            const currentPrefs = parseSafeJson(rows[0].preferences, {});
+            let codes = Array.isArray(currentPrefs.trackedPartnerCodes)
+              ? currentPrefs.trackedPartnerCodes
+              : (typeof currentPrefs.trackedPartnerCodes === 'string' ? JSON.parse(currentPrefs.trackedPartnerCodes || '[]') : []);
+            codes = codes.filter(c => (c || '').trim().toUpperCase() !== cleanCode);
+            currentPrefs.trackedPartnerCodes = codes;
+
+            await sql`
+              UPDATE daybyday_users
+              SET preferences = ${JSON.stringify(currentPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
+              WHERE id = ${userId}
+            `;
+            return res.status(200).json({ success: true, trackedPartnerCodes: codes });
+          }
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        const u = memoryDb.getUser(userId);
+        if (u) {
+          const currentPrefs = parseSafeJson(u.preferences, {});
+          let codes = Array.isArray(currentPrefs.trackedPartnerCodes) ? currentPrefs.trackedPartnerCodes : [];
+          codes = codes.filter(c => (c || '').trim().toUpperCase() !== cleanCode);
+          currentPrefs.trackedPartnerCodes = codes;
+          u.preferences = currentPrefs;
+          return res.status(200).json({ success: true, trackedPartnerCodes: codes });
+        }
+        return res.status(404).json({ error: 'User not found' });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }

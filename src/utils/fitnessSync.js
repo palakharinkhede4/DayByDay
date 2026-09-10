@@ -593,6 +593,14 @@ export const syncHealthDataToHabitsAndPod = async ({
 
     const isManual = Boolean(healthData.isManualOverride || healthData.source === 'manual_entry');
 
+    // USER SUPREMACY GUARD: If the user manually edited steps today,
+    // background sensor sync MUST NEVER overwrite their explicit input!
+    const manualStepsDate = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_date') : null;
+    const isUserManualLocked = (manualStepsDate === todayKey);
+    if (!isManual && isUserManualLocked && (metric === 'steps' || h.id === 'steps')) {
+      continue;
+    }
+
     // CRITICAL: NEVER overwrite existing logged steps/calories with 0 or lower from an automated background device sync!
     // BUT if the user manually entered a value, or if healthData is a daily reset, allow it!
     if (!isManual && targetVal <= 0 && curVal > 0 && hasTodayActiveLog && healthData.source !== 'reset') continue;

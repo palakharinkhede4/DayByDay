@@ -42,13 +42,20 @@ const getMemberProgressVal = (memberProgressMap, m, currentGoal = null, currentU
   if (!m) return 0;
   let storedVal = 0;
 
+  const isMe = Boolean(
+    (currentUser?.id && String(currentUser.id) === String(m.id)) ||
+    (currentUser?.username && m.username && String(currentUser.username).toLowerCase() === String(m.username).toLowerCase()) ||
+    (currentUser?.secretCode && m.secretCode && String(currentUser.secretCode).toUpperCase() === String(m.secretCode).toUpperCase()) ||
+    (currentUser?.secret_code && m.secretCode && String(currentUser.secret_code).toUpperCase() === String(m.secretCode).toUpperCase())
+  );
+
   if (memberProgressMap) {
     const raw = memberProgressMap[m.id] ??
                 (m.username ? memberProgressMap[m.username] : undefined) ??
                 (m.username ? memberProgressMap[m.username.toLowerCase()] : undefined) ??
                 (m.secretCode ? memberProgressMap[m.secretCode] : undefined) ??
                 (m.secret_code ? memberProgressMap[m.secret_code] : undefined) ??
-                memberProgressMap['user1'];
+                (isMe ? memberProgressMap['user1'] : undefined);
     if (raw !== undefined && raw !== null) {
       if (typeof raw === 'object') {
         if (raw.updatedAt) {
@@ -69,10 +76,6 @@ const getMemberProgressVal = (memberProgressMap, m, currentGoal = null, currentU
   if (!currentGoal) return storedVal;
 
   // 1. If this member is ME, cross-reference my active habits for instantaneous projection
-  const isMe = (currentUser?.id && String(currentUser.id) === String(m.id)) ||
-               (currentUser?.username && m.username && String(currentUser.username).toLowerCase() === String(m.username).toLowerCase()) ||
-               (currentUser?.secretCode && m.secretCode && String(currentUser.secretCode).toUpperCase() === String(m.secretCode).toUpperCase());
-
   if (isMe && Array.isArray(userHabits) && userHabits.length > 0) {
     const matchedH = userHabits.find((h) => isHabitMatchingSharedGoal(h, currentGoal));
     if (matchedH) {
