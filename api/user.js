@@ -1085,19 +1085,27 @@ export default async function handler(req, res) {
           }
         }
 
-        // Check if user belongs to active Together Group Pods (up to 5 pods)
+        // Check if user belongs to active Together Group Pods (up to 10 pods)
         let groupPods = [];
         let groupPod = null;
         try {
-          const userPodCodes = Array.isArray(user.preferences?.groupPodCodes) ? user.preferences.groupPodCodes.filter(Boolean) : [];
+          const userPrefs = cleanPreferences(user.preferences);
+          user.preferences = userPrefs;
+          const userPodCodes = Array.isArray(userPrefs.groupPodCodes) ? userPrefs.groupPodCodes.filter(Boolean) : [];
+
+          // Query matching pod codes or member mentions
+          const podCodeConditions = userPodCodes.length > 0
+            ? sql`OR UPPER(code) IN ${sql(userPodCodes.map((c) => c.toUpperCase()))}`
+            : sql``;
+
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE (members::text LIKE ${'%"' + user.id + '"%'})
-               OR (members::text LIKE ${'%"' + user.username + '"%'})
-               OR ( ${user.secret_code ? sql`members::text LIKE ${'%"' + user.secret_code + '"%'}` : sql`FALSE`} )
-               ${userPodCodes.length > 0 ? sql`OR code = ANY(${userPodCodes})` : sql``}
+            WHERE (members::text ILIKE ${'%' + user.id + '%'})
+               OR (members::text ILIKE ${'%' + user.username + '%'})
+               OR ( ${user.secret_code ? sql`members::text ILIKE ${'%' + user.secret_code + '%'}` : sql`FALSE`} )
+               ${podCodeConditions}
             ORDER BY updated_at DESC
-            LIMIT 5
+            LIMIT 10
           `;
           if (groupRows.length > 0) {
             groupPods = await Promise.all(groupRows.map((r) => formatGroupPodFromRow(r, sql)));
@@ -1677,6 +1685,10 @@ export default async function handler(req, res) {
             : [];
 
           // Execute habits, pairings, group pods, and tracked partners in PARALLEL
+          const podCodeConds = userPodCodes.length > 0
+            ? sql`OR UPPER(code) IN ${sql(userPodCodes.map((c) => c.toUpperCase()))}`
+            : sql``;
+
           const [habits, pairings, groupRows, partnerRows] = await Promise.all([
             sql`SELECT * FROM daybyday_habits WHERE user_id = ${user.id} ORDER BY id ASC`,
             sql`
@@ -1691,20 +1703,22 @@ export default async function handler(req, res) {
             `,
             sql`
               SELECT * FROM daybyday_group_pods 
-              WHERE (members::text LIKE ${'%"' + user.id + '"%'})
-                 OR (members::text LIKE ${'%"' + user.username + '"%'})
-                 ${userPodCodes.length > 0 ? sql`OR code = ANY(${userPodCodes})` : sql``}
+              WHERE (members::text ILIKE ${'%' + user.id + '%'})
+                 OR (members::text ILIKE ${'%' + user.username + '%'})
+                 OR ( ${user.secret_code ? sql`members::text ILIKE ${'%' + user.secret_code + '%'}` : sql`FALSE`} )
+                 ${podCodeConds}
               ORDER BY updated_at DESC
-              LIMIT 5
+              LIMIT 10
             `,
             trackedCodes.length > 0
               ? sql`
                   SELECT id, username, display_name, avatar, profile_picture, secret_code, preferences, last_active
                   FROM daybyday_users
-                  WHERE UPPER(secret_code) = ANY(${trackedCodes})
+                  WHERE UPPER(secret_code) IN ${sql(trackedCodes)}
                 `
               : Promise.resolve([]),
           ]);
+
 
           // Process 1-on-1 partner if paired
           let partner = null;
@@ -2750,19 +2764,26 @@ export default async function handler(req, res) {
                  OR ( ${cleanCode ? sql`UPPER(secret_code) = UPPER(${cleanCode})` : sql`FALSE`} )
               LIMIT 1
             `;
-            if (uRows.length > 0 && Array.isArray(uRows[0].preferences?.groupPodCodes)) {
-              prefCodes = uRows[0].preferences.groupPodCodes.filter(Boolean);
+            if (uRows.length > 0) {
+              const uPrefs = cleanPreferences(uRows[0].preferences);
+              if (Array.isArray(uPrefs.groupPodCodes)) {
+                prefCodes = uPrefs.groupPodCodes.filter(Boolean);
+              }
             }
           } catch {}
 
+          const podCodeConds = prefCodes.length > 0
+            ? sql`OR UPPER(code) IN ${sql(prefCodes.map((c) => c.toUpperCase()))}`
+            : sql``;
+
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE ( ${userId ? sql`members::text LIKE ${'%"' + userId + '"%'}` : sql`FALSE`} )
-               OR ( ${cleanU ? sql`members::text LIKE ${'%"' + cleanU + '"%'}` : sql`FALSE`} )
-               OR ( ${cleanCode ? sql`members::text LIKE ${'%"' + cleanCode + '"%'}` : sql`FALSE`} )
-               ${prefCodes.length > 0 ? sql`OR code = ANY(${prefCodes})` : sql``}
+            WHERE ( ${userId ? sql`members::text ILIKE ${'%' + userId + '%'}` : sql`FALSE`} )
+               OR ( ${cleanU ? sql`members::text ILIKE ${'%' + cleanU + '%'}` : sql`FALSE`} )
+               OR ( ${cleanCode ? sql`members::text ILIKE ${'%' + cleanCode + '%'}` : sql`FALSE`} )
+               ${podCodeConds}
             ORDER BY updated_at DESC
-            LIMIT 5
+            LIMIT 10
           `;
           pods = await Promise.all(groupRows.map((r) => formatGroupPodFromRow(r, sql)));
 
@@ -3435,6 +3456,20 @@ export default async function handler(req, res) {
               await sql`DELETE FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode}`;
             } else {
               await sql`UPDATE daybyday_group_pods SET members = ${JSON.stringify(remaining)}::jsonb WHERE UPPER(code) = ${cleanCode}`;
+            }
+
+            // Remove pod code from leaving user's preferences
+            try {
+              const uRows = await sql`SELECT id, preferences FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+              if (uRows.length > 0) {
+                const existingPrefs = parseSafeJson(uRows[0].preferences, {});
+                const existingCodes = Array.isArray(existingPrefs.groupPodCodes) ? existingPrefs.groupPodCodes : [];
+                const updatedCodes = existingCodes.filter((c) => c && c.toUpperCase() !== cleanCode);
+                const updatedPrefs = { ...existingPrefs, groupPodCodes: updatedCodes };
+                await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${userId}`;
+              }
+            } catch (prefErr) {
+              console.warn('Notice removing groupPodCodes from prefs after leave:', prefErr.message);
             }
           }
         }
