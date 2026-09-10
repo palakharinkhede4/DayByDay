@@ -24,7 +24,7 @@ test.describe('DayByDay Production Reliability Suite', () => {
     await expect(versionPill).toBeVisible({ timeout: 10000 });
     const versionText = await versionPill.textContent();
     console.log(`Live Version: "${versionText.trim()}"`);
-    expect(versionText).toMatch(/4\.7\.[23]/);
+    expect(versionText).toMatch(/4\.7\.[234]/);
 
     console.log('--- Step 2: Sign In with palakharinkhede / Habit@123 ---');
     const usernameInput = page.locator('input[placeholder*="username"], input[type="text"]').first();
@@ -104,6 +104,40 @@ test.describe('DayByDay Production Reliability Suite', () => {
     const isAuthVisible2 = await page.locator('.auth-card-surface').isVisible().catch(() => false);
     expect(isAuthVisible2).toBe(false);
     console.log('Session survived Reload 2: User is STILL logged in!');
+
+    console.log('--- Step 7: Test Settings & Change Password Modal ---');
+    const settingsTabBtn = page.locator('button.nav-tab-btn:has-text("Settings"), button:has-text("Settings"), [data-tab="settings"]').first();
+    await expect(settingsTabBtn).toBeVisible({ timeout: 5000 });
+    await settingsTabBtn.click();
+    await page.waitForTimeout(500);
+
+    const changePwRow = page.locator('.settings-row-item:has-text("Change Password")');
+    await expect(changePwRow).toBeVisible({ timeout: 5000 });
+    console.log('Settings Change Password row is visible and accessible!');
+
+    await changePwRow.click();
+    await page.waitForTimeout(300);
+
+    // Verify Change Password modal is open
+    const changePwModal = page.locator('.avatar-options-modal:has-text("Change Password")');
+    await expect(changePwModal).toBeVisible({ timeout: 5000 });
+    console.log('Change Password modal opened successfully!');
+
+    // Verify form inputs
+    const currentPwInput = changePwModal.locator('input[placeholder*="current password"]');
+    const newPwInput = changePwModal.locator('input[placeholder*="6 characters"]');
+    const confirmPwInput = changePwModal.locator('input[placeholder*="new password"]');
+    await expect(currentPwInput).toBeVisible();
+    await expect(newPwInput).toBeVisible();
+    await expect(confirmPwInput).toBeVisible();
+    console.log('All 3 password input fields verified!');
+
+    // Close modal
+    const cancelBtn = changePwModal.locator('button:has-text("Cancel")');
+    await cancelBtn.click();
+    await page.waitForTimeout(300);
+    await expect(changePwModal).not.toBeVisible();
+    console.log('Change Password modal cancelled and closed cleanly!');
 
     console.log('--- All reliability assertions passed successfully! ---');
   });

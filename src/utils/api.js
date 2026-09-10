@@ -434,7 +434,7 @@ export const fetchUserRemote = async (usernameOrCode) => {
   const baseUrl = getApiBaseUrl();
   const clean = String(usernameOrCode).trim().replace(/^@/, '');
   try {
-    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(clean)}&code=${encodeURIComponent(clean.toUpperCase())}`);
+    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(clean)}`);
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch {
@@ -447,7 +447,7 @@ export const fetchUserByCodeRemote = async (code) => {
   const baseUrl = getApiBaseUrl();
   const clean = String(code).trim().toUpperCase();
   try {
-    const res = await apiFetch(`${baseUrl}/api/user?code=${encodeURIComponent(clean)}&username=${encodeURIComponent(clean)}`);
+    const res = await apiFetch(`${baseUrl}/api/user?code=${encodeURIComponent(clean)}&partner=1`);
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch {
@@ -475,6 +475,26 @@ export const syncPreferencesRemote = async (userId, preferences) => {
   }
 };
 
+export const trackPartnerRemote = async (userId, partnerCode) => {
+  if (!hasRemoteBackend() || !userId || !partnerCode) return null;
+  const baseUrl = getApiBaseUrl();
+  try {
+    const res = await apiFetch(`${baseUrl}/api/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'track_partner',
+        userId,
+        partnerCode,
+      }),
+    });
+    if (!res.ok) return null;
+    return await parseJsonSafe(res);
+  } catch {
+    return null;
+  }
+};
+
 export const removeTrackedPartnerRemote = async (userId, partnerCode) => {
   if (!hasRemoteBackend() || !userId || !partnerCode) return null;
   const baseUrl = getApiBaseUrl();
@@ -493,6 +513,28 @@ export const removeTrackedPartnerRemote = async (userId, partnerCode) => {
   } catch {
     return null;
   }
+};
+
+export const changePasswordRemote = async (userId, currentPassword, newPassword) => {
+  if (!hasRemoteBackend() || !userId) {
+    throw new Error('You must be signed in to change your password');
+  }
+  const baseUrl = getApiBaseUrl();
+  const res = await apiFetch(`${baseUrl}/api/user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'change_password',
+      userId,
+      currentPassword,
+      newPassword,
+    }),
+  });
+  const data = await parseJsonSafe(res);
+  if (!res.ok) {
+    throw new Error(data?.error || 'Failed to change password. Please check your current password.');
+  }
+  return data;
 };
 
 export const syncHealthDataRemote = async (userIdOrCode, healthData) => {

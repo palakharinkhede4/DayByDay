@@ -78,6 +78,33 @@ export function cleanHistory(raw, todayKey = null) {
   return result;
 }
 
+// In-memory rate limiter for password operations (max 5 failed attempts per 15 minutes)
+const passwordRateLimiter = new Map();
+function checkPasswordRateLimit(identifier) {
+  const key = String(identifier || '').toLowerCase();
+  const now = Date.now();
+  const entry = passwordRateLimiter.get(key);
+  if (entry && entry.count >= 5) {
+    if (now - entry.lastAttempt < 15 * 60 * 1000) {
+      const remainingMinutes = Math.ceil((15 * 60 * 1000 - (now - entry.lastAttempt)) / 60000);
+      return `Too many failed password attempts. Please try again in ${remainingMinutes} minutes.`;
+    }
+    passwordRateLimiter.delete(key);
+  }
+  return null;
+}
+function recordPasswordFailure(identifier) {
+  const key = String(identifier || '').toLowerCase();
+  const now = Date.now();
+  const entry = passwordRateLimiter.get(key) || { count: 0, lastAttempt: now };
+  entry.count += 1;
+  entry.lastAttempt = now;
+  passwordRateLimiter.set(key, entry);
+}
+function clearPasswordRateLimit(identifier) {
+  passwordRateLimiter.delete(String(identifier || '').toLowerCase());
+}
+
 export function cleanPreferences(raw) {
   if (!raw) return {};
   let cur = raw;
@@ -95,23 +122,26 @@ export function cleanPreferences(raw) {
     }
   }
 
-  // If cur is an array, try to find the first valid object inside it or unpack recursive arrays
+  // If cur is an array, parse string items and merge valid objects
   depth = 0;
   while (Array.isArray(cur) && depth < 10) {
     depth++;
-    const objCandidate = cur.find((item) => item && typeof item === 'object' && !Array.isArray(item));
-    if (objCandidate) {
-      cur = objCandidate;
-      break;
-    }
-    const strCandidate = cur.find((item) => typeof item === 'string' && (item.trim().startsWith('{') || item.trim().startsWith('[')));
-    if (strCandidate) {
-      try {
-        cur = JSON.parse(strCandidate);
-      } catch {
-        cur = {};
-        break;
+    const candidates = [];
+    for (const item of cur) {
+      let parsed = item;
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+          if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        } catch {}
       }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        candidates.push(parsed);
+      }
+    }
+    if (candidates.length > 0) {
+      cur = Object.assign({}, ...candidates);
+      break;
     } else {
       cur = {};
       break;
@@ -123,7 +153,14 @@ export function cleanPreferences(raw) {
     try {
       const keys = Object.keys(cur).sort((a, b) => Number(a) - Number(b));
       const reconstructedStr = keys.map((k) => cur[k]).join('');
-      cur = JSON.parse(reconstructedStr);
+      let parsedReconstructed = JSON.parse(reconstructedStr);
+      if (typeof parsedReconstructed === 'string') parsedReconstructed = JSON.parse(parsedReconstructed);
+      if (Array.isArray(parsedReconstructed)) {
+        const found = parsedReconstructed.find((p) => p && typeof p === 'object' && !Array.isArray(p));
+        cur = found || {};
+      } else {
+        cur = parsedReconstructed || {};
+      }
     } catch {
       cur = {};
     }
@@ -175,9 +212,12 @@ export function cleanPreferences(raw) {
 
 function sanitizeUser(u) {
   if (!u) return null;
-  const { password_hash, salt, security_answer_hash, ...safe } = u;
+  const { password_hash, salt, security_answer_hash, security_salt, ...safe } = u;
   safe.preferences = cleanPreferences(safe.preferences);
-  if (safe.preferences.profilePicture) {
+  if (u.profile_picture) {
+    safe.profilePicture = u.profile_picture;
+    safe.preferences.profilePicture = u.profile_picture;
+  } else if (safe.preferences.profilePicture) {
     safe.profilePicture = safe.preferences.profilePicture;
   }
   const code = safe.secretCode || safe.secret_code;
@@ -186,17 +226,13 @@ function sanitizeUser(u) {
   return safe;
 }
 
-// Partner view: strip the secret code and private health data so other users cannot see it
+// Partner view: strip private security data and health metrics, but PRESERVE secretCode & profilePicture
 function sanitizePartner(u) {
   if (!u) return null;
   const sanitized = sanitizeUser(u);
-  if (sanitized) {
-    delete sanitized.secretCode;
-    delete sanitized.secret_code;
-    if (sanitized.preferences) {
-      const { healthData, manualOverrideDate, ...safePrefs } = sanitized.preferences;
-      sanitized.preferences = safePrefs;
-    }
+  if (sanitized && sanitized.preferences) {
+    const { healthData, manualOverrideDate, ...safePrefs } = sanitized.preferences;
+    sanitized.preferences = safePrefs;
   }
   return sanitized;
 }
@@ -981,6 +1017,7 @@ export default async function handler(req, res) {
         let user = null;
         const cleanCode = (code || '').trim().toUpperCase();
         const cleanUsername = (username || '').trim().replace(/^@/, '');
+        const isPartnerLookup = req.query.partner === '1' || req.query.isPartner === 'true' || (Boolean(cleanCode) && !cleanUsername);
 
         // 1. Check by explicit code if provided
         if (cleanCode) {
@@ -1036,10 +1073,15 @@ export default async function handler(req, res) {
           const pair = pairings[0];
           podCode = pair.pod_code;
           const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
-          const partnerRows = await sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`;
+          const partnerRows = await sql`SELECT id, username, display_name, avatar, profile_picture, preferences, secret_code FROM daybyday_users WHERE id = ${partnerId}`;
           const partnerHabits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`;
           if (partnerRows.length > 0) {
-            partner = { ...sanitizePartner(partnerRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)) };
+            const pSanitized = sanitizePartner(partnerRows[0]);
+            partner = {
+              ...pSanitized,
+              profilePicture: partnerRows[0].profile_picture || pSanitized?.preferences?.profilePicture || null,
+              habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)),
+            };
           }
         }
 
@@ -1065,7 +1107,7 @@ export default async function handler(req, res) {
             if (allMemberIds.length > 0) {
               try {
                 const memberRows = await sql`
-                  SELECT id, username, display_name, avatar, secret_code, preferences
+                  SELECT id, username, display_name, avatar, profile_picture, secret_code, preferences
                   FROM daybyday_users
                   WHERE id = ANY(${allMemberIds})
                 `;
@@ -1080,7 +1122,7 @@ export default async function handler(req, res) {
                         displayName: u.display_name || u.username || m.displayName,
                         avatar: u.avatar || m.avatar || 'star',
                         secretCode: u.secret_code || m.secretCode,
-                        profilePicture: parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
+                        profilePicture: u.profile_picture || parseSafeJson(u.preferences, {}).profilePicture || m.profilePicture || null,
                       };
                     }
                     return m;
@@ -1212,10 +1254,60 @@ export default async function handler(req, res) {
         const streak = formattedHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
 
 
-        const isCodeLookup = Boolean(cleanCode);
-        const safeUser = isCodeLookup ? sanitizePartner(user) : sanitizeUser(user);
-        const safePrefs = parseSafeJson(user.preferences, {});
-        if (isCodeLookup) {
+        let trackedPartners = [];
+        const cleanUserPrefs = cleanPreferences(user.preferences);
+        const trackedCodes = Array.isArray(cleanUserPrefs.trackedPartnerCodes)
+          ? cleanUserPrefs.trackedPartnerCodes.filter(Boolean).map((c) => String(c).trim().toUpperCase())
+          : [];
+        if (!isPartnerLookup && trackedCodes.length > 0) {
+          try {
+            const partnerRows = await sql`
+              SELECT id, username, display_name, avatar, profile_picture, secret_code, preferences, last_active
+              FROM daybyday_users
+              WHERE UPPER(secret_code) = ANY(${trackedCodes})
+            `;
+            if (partnerRows.length > 0) {
+              const partnerUserIds = partnerRows.map((u) => u.id);
+              const allPartnerHabits = await sql`
+                SELECT * FROM daybyday_habits
+                WHERE user_id = ANY(${partnerUserIds})
+                ORDER BY id ASC
+              `;
+              const habitMap = new Map();
+              allPartnerHabits.forEach((h) => {
+                if (!habitMap.has(h.user_id)) habitMap.set(h.user_id, []);
+                habitMap.get(h.user_id).push(formatHabitFromRow(h, sql));
+              });
+
+              trackedPartners = partnerRows.map((u) => {
+                const uHabits = habitMap.get(u.id) || [];
+                const uStreak = uHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                const total = uHabits.length;
+                const completed = uHabits.filter(h => {
+                  const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                  return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+                }).length;
+                const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                const sanitized = sanitizePartner(u);
+                return {
+                  ...sanitized,
+                  habits: uHabits,
+                  streak: uStreak,
+                  todayPercent: pct,
+                  secretCode: u.secret_code,
+                  secret_code: u.secret_code,
+                  profilePicture: u.profile_picture || sanitized?.preferences?.profilePicture || null,
+                };
+              });
+            }
+          } catch (tpErr) {
+            console.warn('Notice querying tracked partners in GET:', tpErr.message);
+          }
+        }
+
+        const safeUser = isPartnerLookup ? sanitizePartner(user) : sanitizeUser(user);
+        const safePrefs = cleanUserPrefs;
+        if (isPartnerLookup) {
           delete safePrefs.healthData;
           delete safePrefs.manualOverrideDate;
         }
@@ -1228,6 +1320,7 @@ export default async function handler(req, res) {
           podCode,
           groupPod,
           groupPods,
+          trackedPartners,
           isSolo: !partner,
           todayPercent,
           streak,
@@ -1279,6 +1372,7 @@ export default async function handler(req, res) {
         podCode: user.secretCode || user.secret_code || 'DAY-1000',
         groupPod: null,
         groupPods: [],
+        trackedPartners: [],
         isSolo: true,
         todayPercent,
         streak,
@@ -1336,11 +1430,11 @@ export default async function handler(req, res) {
           const created = await sql`
             INSERT INTO daybyday_users (
               id, username, secret_code, display_name, avatar,
-              password_hash, salt, security_question, security_answer_hash, preferences
+              password_hash, salt, security_question, security_answer_hash, security_salt, preferences
             )
             VALUES (
               ${userId}, ${cleanUsername}, ${secretCode}, ${displayName}, ${avatar},
-              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}, ${JSON.stringify(initialPreferences)}::jsonb
+              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}, ${salt}, ${JSON.stringify(initialPreferences)}::jsonb
             )
             RETURNING *
           `;
@@ -1605,7 +1699,7 @@ export default async function handler(req, res) {
             `,
             trackedCodes.length > 0
               ? sql`
-                  SELECT id, username, display_name, avatar, secret_code, preferences, last_active
+                  SELECT id, username, display_name, avatar, profile_picture, secret_code, preferences, last_active
                   FROM daybyday_users
                   WHERE UPPER(secret_code) = ANY(${trackedCodes})
                 `
@@ -1620,11 +1714,16 @@ export default async function handler(req, res) {
             podCode = pair.pod_code;
             const partnerId = pair.user1_id === user.id ? pair.user2_id : pair.user1_id;
             const [partnerUserRows, partnerHabits] = await Promise.all([
-              sql`SELECT id, username, display_name, avatar, preferences FROM daybyday_users WHERE id = ${partnerId}`,
+              sql`SELECT id, username, display_name, avatar, profile_picture, preferences, secret_code FROM daybyday_users WHERE id = ${partnerId}`,
               sql`SELECT * FROM daybyday_habits WHERE user_id = ${partnerId}`,
             ]);
             if (partnerUserRows.length > 0) {
-              partner = { ...sanitizePartner(partnerUserRows[0]), habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)) };
+              const pSanitized = sanitizePartner(partnerUserRows[0]);
+              partner = {
+                ...pSanitized,
+                profilePicture: partnerUserRows[0].profile_picture || pSanitized?.preferences?.profilePicture || null,
+                habits: partnerHabits.map((h) => formatHabitFromRow(h, sql)),
+              };
             }
           }
 
@@ -1659,13 +1758,21 @@ export default async function handler(req, res) {
               trackedPartners = partnerRows.map((u) => {
                 const uHabits = habitMap.get(u.id) || [];
                 const uStreak = uHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                const total = uHabits.length;
+                const completed = uHabits.filter(h => {
+                  const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                  return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
+                }).length;
+                const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                const sanitized = sanitizePartner(u);
                 return {
-                  ...sanitizePartner(u),
+                  ...sanitized,
                   habits: uHabits,
                   streak: uStreak,
-                  todayPercent: 0,
+                  todayPercent: pct,
                   secretCode: u.secret_code,
                   secret_code: u.secret_code,
+                  profilePicture: u.profile_picture || sanitized?.preferences?.profilePicture || null,
                 };
               });
             } catch (tpErr) {
@@ -1773,7 +1880,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'No security question configured for this account' });
           }
 
-          const expectedAnswerHash = hashSecurityAnswer(securityAnswer, user.salt || '');
+          const expectedAnswerHash = hashSecurityAnswer(securityAnswer, user.security_salt || user.salt || '');
           if (expectedAnswerHash !== user.security_answer_hash) {
             return res.status(401).json({ error: 'Incorrect answer to security question' });
           }
@@ -1785,7 +1892,10 @@ export default async function handler(req, res) {
 
           await sql`
             UPDATE daybyday_users
-            SET password_hash = ${newPasswordHash}, salt = ${newSalt}, security_answer_hash = ${newAnswerHash}
+            SET password_hash = ${newPasswordHash}, 
+                salt = ${newSalt}, 
+                security_answer_hash = ${newAnswerHash},
+                security_salt = ${newSalt}
             WHERE id = ${user.id}
           `;
 
@@ -1794,13 +1904,14 @@ export default async function handler(req, res) {
 
         const user = memoryDb.getUser(cleanUsername);
         if (!user) return res.status(404).json({ error: 'User not found' });
-        const expectedAnswerHash = hashSecurityAnswer(securityAnswer, user.salt || '');
+        const expectedAnswerHash = hashSecurityAnswer(securityAnswer, user.security_salt || user.salt || '');
         if (expectedAnswerHash !== user.security_answer_hash) {
           return res.status(401).json({ error: 'Incorrect answer to security question' });
         }
 
         const newSalt = crypto.randomBytes(16).toString('hex');
         user.salt = newSalt;
+        user.security_salt = newSalt;
         user.password_hash = hashPassword(newPassword, newSalt);
         user.security_answer_hash = hashSecurityAnswer(securityAnswer, newSalt);
         memoryDb.saveUser(user);
@@ -2043,7 +2154,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // ACTION: SYNC PREFERENCES (Accent color, theme, profile picture, custom categories, goals)
+    // ACTION: SYNC PREFERENCES (Universal: Accent color, theme, profile picture, custom categories, goals)
     if (action === 'sync_preferences') {
       const { userId, preferences } = req.body;
       if (!userId || !preferences || typeof preferences !== 'object') {
@@ -2052,24 +2163,99 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
+          const userRows = await sql`
+            SELECT id, preferences, profile_picture 
+            FROM daybyday_users 
+            WHERE id = ${userId} OR LOWER(username) = LOWER(${String(userId).replace(/^@/, '')})
+            LIMIT 1
+          `;
+          if (userRows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+          }
+          const userRecord = userRows[0];
+          const currentPrefs = cleanPreferences(userRecord.preferences);
+          const incomingPrefs = cleanPreferences(preferences);
+          const merged = { ...currentPrefs, ...incomingPrefs };
+          const safePrefs = cleanPreferences(merged);
+          const newPic = incomingPrefs.profilePicture !== undefined
+            ? incomingPrefs.profilePicture
+            : (safePrefs.profilePicture || userRecord.profile_picture || null);
+
           await sql`
             UPDATE daybyday_users 
-            SET preferences = COALESCE(preferences, '{}'::jsonb) || ${JSON.stringify(parseSafeJson(preferences, {}))}::jsonb, last_active = CURRENT_TIMESTAMP 
-            WHERE id = ${userId}
+            SET preferences = ${JSON.stringify(safePrefs)}::jsonb,
+                profile_picture = ${newPic},
+                last_active = CURRENT_TIMESTAMP 
+            WHERE id = ${userRecord.id}
           `;
-          const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
-          return res.status(200).json({ success: true, preferences: parseSafeJson(rows[0]?.preferences, {}) });
+          return res.status(200).json({ success: true, preferences: safePrefs, profilePicture: newPic });
         }
 
         const u = memoryDb.getUser(userId);
-        if (u) u.preferences = { ...(u.preferences || {}), ...parseSafeJson(preferences, {}) };
-        return res.status(200).json({ success: true, preferences: parseSafeJson(preferences, {}) });
+        if (u) {
+          const currentPrefs = cleanPreferences(u.preferences);
+          const incomingPrefs = cleanPreferences(preferences);
+          u.preferences = { ...currentPrefs, ...incomingPrefs };
+          if (u.preferences.profilePicture !== undefined) {
+            u.profile_picture = u.preferences.profilePicture;
+          }
+        }
+        return res.status(200).json({ success: true, preferences: u?.preferences || {} });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
     }
 
-    // ACTION: REMOVE TRACKED PARTNER (Atomic untrack)
+    // ACTION: TRACK PARTNER (Universal: Atomically track partner by secret code for any user)
+    if (action === 'track_partner') {
+      const { userId, partnerCode } = req.body;
+      const cleanCode = (partnerCode || '').trim().toUpperCase();
+      if (!userId || !cleanCode) {
+        return res.status(400).json({ error: 'User ID and partner code required' });
+      }
+
+      try {
+        if (sql) {
+          const rows = await sql`
+            SELECT id, preferences 
+            FROM daybyday_users 
+            WHERE id = ${userId} OR LOWER(username) = LOWER(${String(userId).replace(/^@/, '')})
+            LIMIT 1
+          `;
+          if (rows.length > 0) {
+            const currentPrefs = cleanPreferences(rows[0].preferences);
+            let codes = Array.isArray(currentPrefs.trackedPartnerCodes) ? currentPrefs.trackedPartnerCodes : [];
+            if (!codes.includes(cleanCode)) {
+              codes = [...codes, cleanCode].slice(0, 5);
+            }
+            currentPrefs.trackedPartnerCodes = codes;
+
+            await sql`
+              UPDATE daybyday_users
+              SET preferences = ${JSON.stringify(currentPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
+              WHERE id = ${rows[0].id}
+            `;
+            return res.status(200).json({ success: true, trackedPartnerCodes: codes });
+          }
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        const u = memoryDb.getUser(userId);
+        if (u) {
+          const currentPrefs = cleanPreferences(u.preferences);
+          let codes = Array.isArray(currentPrefs.trackedPartnerCodes) ? currentPrefs.trackedPartnerCodes : [];
+          if (!codes.includes(cleanCode)) codes = [...codes, cleanCode].slice(0, 5);
+          currentPrefs.trackedPartnerCodes = codes;
+          u.preferences = currentPrefs;
+          return res.status(200).json({ success: true, trackedPartnerCodes: codes });
+        }
+        return res.status(404).json({ error: 'User not found' });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: REMOVE TRACKED PARTNER (Universal: Atomic untrack for any user)
     if (action === 'remove_tracked_partner') {
       const { userId, partnerCode } = req.body;
       const cleanCode = (partnerCode || '').trim().toUpperCase();
@@ -2079,19 +2265,22 @@ export default async function handler(req, res) {
 
       try {
         if (sql) {
-          const rows = await sql`SELECT preferences FROM daybyday_users WHERE id = ${userId}`;
+          const rows = await sql`
+            SELECT id, preferences 
+            FROM daybyday_users 
+            WHERE id = ${userId} OR LOWER(username) = LOWER(${String(userId).replace(/^@/, '')})
+            LIMIT 1
+          `;
           if (rows.length > 0) {
-            const currentPrefs = parseSafeJson(rows[0].preferences, {});
-            let codes = Array.isArray(currentPrefs.trackedPartnerCodes)
-              ? currentPrefs.trackedPartnerCodes
-              : (typeof currentPrefs.trackedPartnerCodes === 'string' ? JSON.parse(currentPrefs.trackedPartnerCodes || '[]') : []);
+            const currentPrefs = cleanPreferences(rows[0].preferences);
+            let codes = Array.isArray(currentPrefs.trackedPartnerCodes) ? currentPrefs.trackedPartnerCodes : [];
             codes = codes.filter(c => (c || '').trim().toUpperCase() !== cleanCode);
             currentPrefs.trackedPartnerCodes = codes;
 
             await sql`
               UPDATE daybyday_users
               SET preferences = ${JSON.stringify(currentPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
-              WHERE id = ${userId}
+              WHERE id = ${rows[0].id}
             `;
             return res.status(200).json({ success: true, trackedPartnerCodes: codes });
           }
@@ -2100,7 +2289,7 @@ export default async function handler(req, res) {
 
         const u = memoryDb.getUser(userId);
         if (u) {
-          const currentPrefs = parseSafeJson(u.preferences, {});
+          const currentPrefs = cleanPreferences(u.preferences);
           let codes = Array.isArray(currentPrefs.trackedPartnerCodes) ? currentPrefs.trackedPartnerCodes : [];
           codes = codes.filter(c => (c || '').trim().toUpperCase() !== cleanCode);
           currentPrefs.trackedPartnerCodes = codes;
@@ -2110,6 +2299,95 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'User not found' });
       } catch (err) {
         return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // ACTION: CHANGE PASSWORD (Universal: Secure, instant database update with timing-safe verification)
+    if (action === 'change_password') {
+      const { userId, currentPassword, newPassword } = req.body || {};
+      if (!userId || !currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'User ID, current password, and new password are required' });
+      }
+
+      if (String(newPassword).length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters' });
+      }
+
+      if (currentPassword === newPassword) {
+        return res.status(400).json({ error: 'New password must be different from current password' });
+      }
+
+      const rateLimitErr = checkPasswordRateLimit(userId);
+      if (rateLimitErr) {
+        return res.status(429).json({ error: rateLimitErr });
+      }
+
+      try {
+        if (sql) {
+          const rows = await sql`
+            SELECT id, username, password_hash, salt, security_answer_hash, security_salt 
+            FROM daybyday_users 
+            WHERE id = ${userId} OR LOWER(username) = LOWER(${String(userId).replace(/^@/, '')})
+            LIMIT 1
+          `;
+          if (rows.length === 0) {
+            return res.status(404).json({ error: 'User account not found' });
+          }
+          const user = rows[0];
+
+          // Timing-safe verification of current password
+          if (user.password_hash) {
+            const currentHash = hashPassword(currentPassword, user.salt || '');
+            const currentBuf = Buffer.from(currentHash, 'utf8');
+            const expectedBuf = Buffer.from(user.password_hash, 'utf8');
+            const isMatch = currentBuf.length === expectedBuf.length && crypto.timingSafeEqual(currentBuf, expectedBuf);
+            if (!isMatch) {
+              recordPasswordFailure(userId);
+              return res.status(401).json({ error: 'Incorrect current password' });
+            }
+          }
+
+          // Generate fresh 16-byte cryptographic salt and compute new password hash
+          const newSalt = crypto.randomBytes(16).toString('hex');
+          const newPasswordHash = hashPassword(newPassword, newSalt);
+
+          // Preserve security question salt so password recovery remains intact
+          await sql`
+            UPDATE daybyday_users
+            SET password_hash = ${newPasswordHash},
+                salt = ${newSalt},
+                security_salt = COALESCE(security_salt, salt),
+                last_active = CURRENT_TIMESTAMP
+            WHERE id = ${user.id}
+          `;
+
+          clearPasswordRateLimit(userId);
+          console.log(`[Auth] Password changed successfully for user ${user.username} (${user.id})`);
+          return res.status(200).json({ success: true, message: 'Password updated successfully' });
+        }
+
+        const user = memoryDb.getUser(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (user.password_hash) {
+          const currentHash = hashPassword(currentPassword, user.salt || '');
+          const currentBuf = Buffer.from(currentHash, 'utf8');
+          const expectedBuf = Buffer.from(user.password_hash, 'utf8');
+          const isMatch = currentBuf.length === expectedBuf.length && crypto.timingSafeEqual(currentBuf, expectedBuf);
+          if (!isMatch) {
+            recordPasswordFailure(userId);
+            return res.status(401).json({ error: 'Incorrect current password' });
+          }
+        }
+        const newSalt = crypto.randomBytes(16).toString('hex');
+        user.security_salt = user.security_salt || user.salt;
+        user.salt = newSalt;
+        user.password_hash = hashPassword(newPassword, newSalt);
+        memoryDb.saveUser(user);
+        clearPasswordRateLimit(userId);
+        return res.status(200).json({ success: true, message: 'Password updated successfully' });
+      } catch (err) {
+        console.error('Change password error:', err);
+        return res.status(500).json({ error: err.message || 'Failed to change password' });
       }
     }
 

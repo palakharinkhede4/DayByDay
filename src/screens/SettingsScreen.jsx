@@ -28,6 +28,9 @@ import {
   Zap,
   Smartphone,
   BellRing,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import {
@@ -63,6 +66,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
     resetAllData,
     deleteAccountPermanently,
     logoutUser,
+    changePassword,
     profilePicture,
     setProfilePicture,
     healthSyncEnabled,
@@ -99,6 +103,18 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
   const [loadingChangelog, setLoadingChangelog] = useState(false);
   const [syncingHealth, setSyncingHealth] = useState(false);
   const [showIosHealthGuide, setShowIosHealthGuide] = useState(false);
+
+  // Change Password State Hooks
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
 
   // Detect iOS web (non-native) — strictly iPhone / iPad running Safari or iOS PWA
   const isIosWeb = useMemo(() => {
@@ -204,6 +220,45 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
       });
     } finally {
       setCheckingUpdate(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+
+    setChangingPassword(true);
+    setPasswordError('');
+    setPasswordSuccess('');
+    try {
+      await changePassword(currentPassword, newPassword);
+      setPasswordSuccess('Password successfully updated in database!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => {
+        setPasswordModalOpen(false);
+        setPasswordSuccess('');
+      }, 1500);
+    } catch (err) {
+      setPasswordError(err.message || 'Failed to change password. Please check your current password.');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -330,6 +385,27 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
               </button>
             </div>
           </div>
+
+          {user && (
+            <div
+              className="settings-row-item clickable"
+              onClick={() => {
+                sound.press();
+                setPasswordModalOpen(true);
+                setPasswordError('');
+                setPasswordSuccess('');
+              }}
+            >
+              <div className="row-left">
+                <Lock size={18} className="text-amber-400" />
+                <div>
+                  <span className="row-title">Change Password</span>
+                  <span className="row-hint">Update your account password securely in cloud database</span>
+                </div>
+              </div>
+              <ChevronRight size={18} style={{ color: 'var(--text-secondary)' }} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -929,6 +1005,145 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHANGE PASSWORD MODAL */}
+      {passwordModalOpen && (
+        <div className="avatar-modal-backdrop" onClick={() => !changingPassword && setPasswordModalOpen(false)}>
+          <div className="avatar-options-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ padding: '0.5rem', borderRadius: '12px', background: 'rgba(249, 115, 22, 0.15)', color: 'var(--primary, #F97316)' }}>
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base" style={{ margin: 0 }}>Change Password</h3>
+                  <p className="text-xs" style={{ margin: 0, color: 'var(--text-secondary)' }}>Instant & securely encrypted in database</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !changingPassword && setPasswordModalOpen(false)}
+                disabled={changingPassword}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.1rem', padding: '0.25rem' }}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              {passwordError && (
+                <div style={{ padding: '0.65rem 0.85rem', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#EF4444', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <AlertCircle size={16} />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div style={{ padding: '0.65rem 0.85rem', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10B981', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <CheckCircle2 size={16} />
+                  <span>{passwordSuccess}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Current Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showCurrentPw ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    className="w-full px-3 py-2 rounded-xl border bg-transparent text-sm"
+                    style={{ paddingRight: '2.5rem', borderColor: 'var(--border, rgba(255,255,255,0.15))', color: 'inherit' }}
+                    required
+                    disabled={changingPassword}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPw(!showCurrentPw)}
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {showCurrentPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>New Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showNewPw ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className="w-full px-3 py-2 rounded-xl border bg-transparent text-sm"
+                    style={{ paddingRight: '2.5rem', borderColor: 'var(--border, rgba(255,255,255,0.15))', color: 'inherit' }}
+                    required
+                    disabled={changingPassword}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw(!showNewPw)}
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {newPassword.length > 0 && newPassword.length < 6 && (
+                  <span style={{ fontSize: '0.75rem', color: '#F59E0B', marginTop: '0.2rem', display: 'block' }}>Password must be at least 6 characters</span>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold" style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Confirm New Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showConfirmPw ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full px-3 py-2 rounded-xl border bg-transparent text-sm"
+                    style={{ paddingRight: '2.5rem', borderColor: 'var(--border, rgba(255,255,255,0.15))', color: 'inherit' }}
+                    required
+                    disabled={changingPassword}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw(!showConfirmPw)}
+                    style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {confirmPassword && confirmPassword !== newPassword && (
+                  <span style={{ fontSize: '0.75rem', color: '#EF4444', marginTop: '0.2rem', display: 'block' }}>Passwords do not match</span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setPasswordModalOpen(false)}
+                  disabled={changingPassword}
+                  className="px-4 py-2 rounded-xl border text-sm font-semibold"
+                  style={{ flex: 1, borderColor: 'var(--border, rgba(255,255,255,0.15))', background: 'transparent', color: 'var(--text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changingPassword || !currentPassword || newPassword.length < 6 || newPassword !== confirmPassword}
+                  className="px-4 py-2 rounded-xl text-sm font-bold text-white transition-opacity"
+                  style={{ flex: 1, background: 'var(--primary, #F97316)', opacity: (changingPassword || !currentPassword || newPassword.length < 6 || newPassword !== confirmPassword) ? 0.5 : 1 }}
+                >
+                  {changingPassword ? 'Updating...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

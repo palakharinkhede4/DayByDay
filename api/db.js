@@ -70,6 +70,8 @@ export async function ensureTables(force = false) {
         ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);
         ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);
         ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_salt VARCHAR(32);
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS profile_picture TEXT;
         ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb;
 
         CREATE TABLE IF NOT EXISTS daybyday_habits (

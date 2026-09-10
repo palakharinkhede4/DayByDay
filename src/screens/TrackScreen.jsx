@@ -191,8 +191,8 @@ export const TrackScreen = () => {
 
         {trackedPartners.length > 0 && (
           <div className="partners-chips-scroll">
-            {trackedPartners.map((partner) => {
-              const code = partner.secretCode || partner.secret_code;
+            {trackedPartners.map((partner, pIdx) => {
+              const code = partner.secretCode || partner.secret_code || partner.username || String(pIdx);
               const isActive = (activeTrackedCode && activeTrackedCode === code) ||
                 (trackedPartner && (trackedPartner.secretCode === code || trackedPartner.secret_code === code));
               const displayName = partner.displayName || partner.username || 'Friend';
@@ -321,7 +321,7 @@ export const TrackScreen = () => {
 
             <button
               className="partner-untrack-btn"
-              onClick={() => untrackPartner(trackedPartner.secretCode || trackedPartner.secret_code)}
+              onClick={() => untrackPartner(trackedPartner.secretCode || trackedPartner.secret_code || trackedPartner.username)}
               title="Stop tracking this user"
             >
               <X size={16} />

@@ -15,7 +15,9 @@ import {
   syncUserHabitsRemote,
   syncHealthDataRemote,
   syncPreferencesRemote,
+  trackPartnerRemote,
   removeTrackedPartnerRemote,
+  changePasswordRemote,
   pairPartnerRemote,
   unpairPartnerRemote,
   deleteHabitRemote,
@@ -761,6 +763,10 @@ export const HabitProvider = ({ children }) => {
         localStorage.removeItem('daybyday_profile_pic');
       }
     } catch {}
+    const activeUid = user?.id || user?.username;
+    if (activeUid) {
+      syncPreferencesRemote(activeUid, { ...(user?.preferences || {}), profilePicture: picUrl || null }).catch(() => {});
+    }
   };
 
   // Active User role in current view ('user1' = You, 'user2' = Partner)
@@ -1317,7 +1323,58 @@ export const HabitProvider = ({ children }) => {
               if (remoteData.user?.profilePicture) {
                 setProfilePictureState(remoteData.user.profilePicture);
                 try { localStorage.setItem('daybyday_profile_pic', remoteData.user.profilePicture); } catch {}
+              } else {
+                try {
+                  const localPic = localStorage.getItem('daybyday_profile_pic');
+                  if (localPic && activeUser?.id) {
+                    setProfilePictureState(localPic);
+                    syncPreferencesRemote(activeUser.id, { profilePicture: localPic }).catch(() => {});
+                  }
+                } catch {}
               }
+
+              // Ingest tracked partners from remoteData immediately (Universal for all accounts & OS)
+              if (remoteData.trackedPartners && Array.isArray(remoteData.trackedPartners) && remoteData.trackedPartners.length > 0) {
+                try {
+                  const todayKey = getLocalDateKey();
+                  const formattedTracked = remoteData.trackedPartners.map((tp) => {
+                    const rawHabits = tp.habits || [];
+                    const cleanHabits = getCleanDailyHabits(rawHabits, todayKey, null, false);
+                    let partnerHabits = cleanHabits;
+                    try {
+                      partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
+                        cleanHabits,
+                        tp,
+                        tp.preferences,
+                        remoteData.groupPod,
+                        todayKey
+                      );
+                    } catch {
+                      partnerHabits = cleanHabits;
+                    }
+                    const calcPct = calculatePartnerCompletionPercent(partnerHabits);
+                    const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                    return {
+                      ...tp,
+                      habits: partnerHabits,
+                      streak: tp.streak ?? calcStreak,
+                      todayPercent: partnerHabits.length > 0 ? calcPct : (tp.todayPercent ?? 0),
+                      profilePicture: tp.preferences?.profilePicture || tp.profilePicture || null,
+                      lastActive: 'Active today',
+                      secretCode: tp.secret_code || tp.secretCode,
+                      secret_code: tp.secret_code || tp.secretCode,
+                    };
+                  });
+                  setTrackedPartners(formattedTracked);
+                  localStorage.setItem('daybyday_tracked_partners', JSON.stringify(formattedTracked));
+                  if (formattedTracked[0]?.secretCode) {
+                    setActiveTrackedCode(formattedTracked[0].secretCode);
+                  }
+                } catch (tpErr) {
+                  console.warn('Tracked partners session restore notice:', tpErr.message);
+                }
+              }
+
               if (remoteData.partner) {
                 setPartner(remoteData.partner);
                 localStorage.setItem('daybyday_partner', JSON.stringify(remoteData.partner));
@@ -1587,13 +1644,12 @@ export const HabitProvider = ({ children }) => {
       setCustomCategories(prefs.customCategories);
       localStorage.setItem('daybyday_categories', JSON.stringify(prefs.customCategories));
     }
-    if (prefs.profilePicture !== undefined) {
-      setProfilePictureState(prefs.profilePicture || null);
-      if (prefs.profilePicture) {
-        localStorage.setItem('daybyday_profile_pic', prefs.profilePicture);
-      } else {
-        localStorage.removeItem('daybyday_profile_pic');
-      }
+    if (prefs.profilePicture) {
+      setProfilePictureState(prefs.profilePicture);
+      try { localStorage.setItem('daybyday_profile_pic', prefs.profilePicture); } catch {}
+    } else if (prefs.profilePicture === null && !localStorage.getItem('daybyday_profile_pic')) {
+      setProfilePictureState(null);
+      try { localStorage.removeItem('daybyday_profile_pic'); } catch {}
     }
     if (prefs.activeFocusHabitId !== undefined) {
       setActiveFocusHabitIdState(prefs.activeFocusHabitId || '');
@@ -2134,6 +2190,36 @@ export const HabitProvider = ({ children }) => {
     return { ok: true };
   };
 
+  // Change Password for Signed-in User (Universal: Instant Database Update with timing-safe check)
+  const changePassword = async (currentPassword, newPassword) => {
+    if (!user?.id) {
+      throw new Error('You must be signed in to change your password');
+    }
+    sound.press();
+    try {
+      await changePasswordRemote(user.id, currentPassword, newPassword);
+    } catch (err) {
+      sound.error?.();
+      throw new Error(formatErrorMessage(err, 'Failed to update password'));
+    }
+
+    // Update local account cache if present
+    const cleanUsername = (user.username || '').toLowerCase().trim().replace(/^@/, '');
+    const localAcc = localStorage.getItem(`daybyday_local_acc_${cleanUsername}`);
+    if (localAcc) {
+      try {
+        const parsed = JSON.parse(localAcc);
+        parsed.password = newPassword;
+        localStorage.setItem(`daybyday_local_acc_${cleanUsername}`, JSON.stringify(parsed));
+      } catch {}
+    }
+
+    sound.complete();
+    triggerCelebration();
+    triggerIslandNotification('Password changed successfully!', 'check');
+    return { success: true };
+  };
+
   // Logout / Switch Account: Cleanly flush all user-specific cache and reset preferences to defaults
   const logoutUser = async () => {
     sound.tap();
@@ -2294,6 +2380,7 @@ export const HabitProvider = ({ children }) => {
         };
       });
       const allCodes = [...trackedPartners.map((p) => p.secretCode || p.secret_code), cleanCode].filter(Boolean);
+      trackPartnerRemote(user.id, cleanCode).catch(() => {});
       syncPreferencesRemote(user.id, { ...(user.preferences || {}), trackedPartnerCodes: [...new Set(allCodes)].slice(0, 5) }).catch(() => {});
     }
 
@@ -4272,6 +4359,7 @@ export const HabitProvider = ({ children }) => {
         deleteCustomCategory,
         profilePicture,
         setProfilePicture,
+        changePassword,
         trackedPartners,
         activeTrackedCode,
         selectTrackedPartner,

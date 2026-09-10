@@ -136,16 +136,32 @@ app.listen(PORT, '0.0.0.0', async () => {
 
       // Auto-heal any bloated/corrupted user preferences in PostgreSQL once on boot
       try {
+        // 1. Backfill profile_picture column from preferences for all users if not already set
+        await sql`
+          UPDATE daybyday_users
+          SET profile_picture = preferences->>'profilePicture'
+          WHERE (profile_picture IS NULL OR profile_picture = '')
+            AND preferences->>'profilePicture' IS NOT NULL
+            AND preferences->>'profilePicture' != ''
+        `.catch(() => {});
+
+        // 2. Clean bloated/corrupted preferences
         const dirtyUsers = await sql`
-          SELECT id, preferences FROM daybyday_users 
+          SELECT id, preferences, profile_picture FROM daybyday_users 
           WHERE jsonb_typeof(preferences) != 'object' 
              OR octet_length(preferences::text) > 5000
         `;
         if (dirtyUsers && dirtyUsers.length > 0) {
           for (const u of dirtyUsers) {
             const cleaned = cleanPreferences(u.preferences);
-            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(cleaned)}::jsonb WHERE id = ${u.id}`;
-            console.log(`[AutoHeal] Restored clean preferences for user ${u.id} (was ${JSON.stringify(u.preferences).length} chars)`);
+            const pic = cleaned.profilePicture || u.profile_picture || null;
+            await sql`
+              UPDATE daybyday_users 
+              SET preferences = ${JSON.stringify(cleaned)}::jsonb,
+                  profile_picture = ${pic}
+              WHERE id = ${u.id}
+            `;
+            console.log(`[AutoHeal] Restored clean preferences for user ${u.id}`);
           }
         }
       } catch (hErr) {
