@@ -77,3 +77,10 @@ ios/App/DerivedData/
 # Scratch & Temporary
 scratch/
 .temp/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

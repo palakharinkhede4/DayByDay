@@ -1557,16 +1557,63 @@ export default async function handler(req, res) {
             console.warn('Notice querying user group pods on login:', gpErr.message);
           }
 
+          // Pre-fetch tracked partners so client receives them immediately on login
+          let trackedPartners = [];
+          const userPrefs = parseSafeJson(user.preferences, {});
+          const trackedCodes = Array.isArray(userPrefs.trackedPartnerCodes)
+            ? userPrefs.trackedPartnerCodes.filter(Boolean)
+            : [];
+
+          if (trackedCodes.length > 0) {
+            try {
+              const cleanCodes = trackedCodes.map(c => String(c).trim().toUpperCase());
+              const partnerRows = await sql`
+                SELECT id, username, display_name, avatar, secret_code, preferences, last_active
+                FROM daybyday_users
+                WHERE UPPER(secret_code) = ANY(${cleanCodes})
+              `;
+              if (partnerRows.length > 0) {
+                const partnerUserIds = partnerRows.map(u => u.id);
+                const allPartnerHabits = await sql`
+                  SELECT * FROM daybyday_habits
+                  WHERE user_id = ANY(${partnerUserIds})
+                  ORDER BY id ASC
+                `;
+                const habitMap = new Map();
+                allPartnerHabits.forEach(h => {
+                  if (!habitMap.has(h.user_id)) habitMap.set(h.user_id, []);
+                  habitMap.get(h.user_id).push(formatHabitFromRow(h, sql));
+                });
+
+                trackedPartners = partnerRows.map(u => {
+                  const uHabits = habitMap.get(u.id) || [];
+                  const uStreak = uHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                  return {
+                    ...sanitizePartner(u),
+                    habits: uHabits,
+                    streak: uStreak,
+                    todayPercent: 0,
+                    secretCode: u.secret_code,
+                    secret_code: u.secret_code,
+                  };
+                });
+              }
+            } catch (tpErr) {
+              console.warn('Notice pre-fetching tracked partners on login:', tpErr.message);
+            }
+          }
+
           const userHabitsFormatted = habits.map((h) => formatHabitFromRow(h, sql));
 
           return res.status(200).json({
             user: sanitizeUser(user),
             habits: userHabitsFormatted,
-            preferences: parseSafeJson(user.preferences, {}),
+            preferences: userPrefs,
             partner,
             podCode,
             groupPod,
             groupPods,
+            trackedPartners,
             isSolo: !partner
           });
         }

@@ -15,16 +15,19 @@ const memoryStore = {
 };
 
 export function getDb() {
-  const dbUrl = process.env.DATABASE_URL;
+  let dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) return null;
+
+  // On Oracle Cloud VM or production host, automatically normalize self-referential IPs or domain to 127.0.0.1 loopback
+  dbUrl = dbUrl.replace(/@(137\.23\.55\.91|130\.61\.229\.21|daybypalak\.duckdns\.org|localhost):/g, '@127.0.0.1:');
 
   if (!sqlClient) {
     const isSsl = dbUrl.includes('sslmode=require');
     sqlClient = postgres(dbUrl, {
       ssl: isSsl ? 'require' : false,
       max: 20,
-      idle_timeout: 30,
-      connect_timeout: 10,
+      idle_timeout: 300,
+      connect_timeout: 5,
     });
   }
   return sqlClient;
@@ -47,8 +50,8 @@ export async function ensureTables(force = false) {
 
   tableInitPromise = (async () => {
     try {
-      // 1. Users table
-      await sql`
+      // Execute entire DDL schema in a single batched multi-statement query
+      await sql.unsafe(`
         CREATE TABLE IF NOT EXISTS daybyday_users (
           id VARCHAR(48) PRIMARY KEY,
           username VARCHAR(32) UNIQUE NOT NULL,
@@ -63,17 +66,12 @@ export async function ensureTables(force = false) {
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
-      `;
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(128);
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);
+        ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb;
 
-      // Ensure columns exist on legacy databases
-      await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(128);`;
-      await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS salt VARCHAR(32);`;
-      await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_question VARCHAR(128);`;
-      await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS security_answer_hash VARCHAR(128);`;
-      await sql`ALTER TABLE daybyday_users ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb;`;
-
-      // 2. Habits table
-      await sql`
         CREATE TABLE IF NOT EXISTS daybyday_habits (
           id SERIAL PRIMARY KEY,
           user_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
@@ -93,10 +91,7 @@ export async function ensureTables(force = false) {
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(user_id, habit_id)
         );
-      `;
 
-      // 3. Pairings table
-      await sql`
         CREATE TABLE IF NOT EXISTS daybyday_pairings (
           id SERIAL PRIMARY KEY,
           user1_id VARCHAR(48) REFERENCES daybyday_users(id) ON DELETE CASCADE,
@@ -105,10 +100,7 @@ export async function ensureTables(force = false) {
           status VARCHAR(16) DEFAULT 'active',
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
-      `;
 
-      // 4. Group Pods table
-      await sql`
         CREATE TABLE IF NOT EXISTS daybyday_group_pods (
           id VARCHAR(48) PRIMARY KEY,
           name VARCHAR(64) NOT NULL,
@@ -118,10 +110,7 @@ export async function ensureTables(force = false) {
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
-      `;
 
-      // 5. Cheers / Encouragement table (Real cross-user encouragement)
-      await sql`
         CREATE TABLE IF NOT EXISTS daybyday_cheers (
           id SERIAL PRIMARY KEY,
           to_user_id VARCHAR(48),
@@ -135,11 +124,8 @@ export async function ensureTables(force = false) {
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           is_read BOOLEAN DEFAULT FALSE
         );
-      `;
-      await sql`ALTER TABLE daybyday_cheers ADD COLUMN IF NOT EXISTS goal_name VARCHAR(64);`;
+        ALTER TABLE daybyday_cheers ADD COLUMN IF NOT EXISTS goal_name VARCHAR(64);
 
-      // 6. Live Activity Stream table (Real-time social milestones for Together & Friends)
-      await sql`
         CREATE TABLE IF NOT EXISTS daybyday_activity (
           id VARCHAR(48) PRIMARY KEY,
           user_id VARCHAR(48) NOT NULL,
@@ -154,18 +140,17 @@ export async function ensureTables(force = false) {
           metadata JSONB DEFAULT '{}'::jsonb,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
-      `;
 
-      // Optimized indexes for high-frequency real-time lookups
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_username ON daybyday_users(LOWER(username));`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_users_secret ON daybyday_users(UPPER(secret_code));`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user ON daybyday_habits(user_id);`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user_habit ON daybyday_habits(user_id, habit_id);`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_group_pods_code ON daybyday_group_pods(UPPER(code));`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_to ON daybyday_cheers(to_user_id, is_read);`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_created ON daybyday_cheers(created_at DESC);`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_activity_pod ON daybyday_activity(pod_code, created_at DESC);`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_daybyday_activity_user ON daybyday_activity(user_id, created_at DESC);`;
+        CREATE INDEX IF NOT EXISTS idx_daybyday_users_username ON daybyday_users(LOWER(username));
+        CREATE INDEX IF NOT EXISTS idx_daybyday_users_secret ON daybyday_users(UPPER(secret_code));
+        CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user ON daybyday_habits(user_id);
+        CREATE INDEX IF NOT EXISTS idx_daybyday_habits_user_habit ON daybyday_habits(user_id, habit_id);
+        CREATE INDEX IF NOT EXISTS idx_daybyday_group_pods_code ON daybyday_group_pods(UPPER(code));
+        CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_to ON daybyday_cheers(to_user_id, is_read);
+        CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_created ON daybyday_cheers(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daybyday_activity_pod ON daybyday_activity(pod_code, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daybyday_activity_user ON daybyday_activity(user_id, created_at DESC);
+      `);
 
       tablesInitialized = true;
     } catch (err) {

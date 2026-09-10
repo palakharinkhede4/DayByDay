@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// Global CORS Middleware
+// Global CORS & Request Timing Middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin || '*';
   res.setHeader('Access-Control-Allow-Origin', origin);
@@ -36,6 +36,13 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  if (req.path.startsWith('/api/')) {
+    const t0 = Date.now();
+    res.on('finish', () => {
+      console.log(`[API ${req.method}] ${req.originalUrl || req.url} - ${res.statusCode} in ${Date.now() - t0}ms`);
+    });
+  }
   next();
 });
 
@@ -47,7 +54,6 @@ app.get('/health', async (req, res) => {
   try {
     const sql = getDb();
     if (sql) {
-      await ensureTables();
       const [row] = await sql`SELECT COUNT(*)::int AS count FROM daybyday_users`;
       dbStatus = 'connected';
       userCount = row?.count ?? 0;
@@ -115,8 +121,20 @@ app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`DayByDay standalone production server running on port ${PORT}`);
   console.log(`Serving API at http://localhost:${PORT}/api/user`);
   console.log(`Serving Web App from ${distPath}`);
+
+  // Pre-warm database connection and ensure tables on startup
+  try {
+    const sql = getDb();
+    if (sql) {
+      console.log('Pre-warming PostgreSQL connection & ensuring tables...');
+      await ensureTables();
+      console.log('PostgreSQL tables ensured and ready.');
+    }
+  } catch (e) {
+    console.warn('Startup database notice:', e.message);
+  }
 });

@@ -1895,6 +1895,12 @@ export const HabitProvider = ({ children }) => {
       await wipeAllLocalUserData();
     }
 
+    // Crucial: Clear signed_out flag immediately so in-flight login requests or reloads are not locked out
+    try {
+      localStorage.removeItem('daybyday_signed_out');
+      removeVaultItem('daybyday_signed_out').catch(() => {});
+    } catch {}
+
     let remoteError = null;
 
     // Flush any cached credentials from other accounts
@@ -1936,7 +1942,43 @@ export const HabitProvider = ({ children }) => {
           syncUserHabitsRemote(loggedInUser.id, habits).catch(() => {});
         }
 
-        // 2. Restore all Preferences & Customizations from DB
+        // 2. Ingest pre-fetched tracked partners from server response immediately
+        if (res.trackedPartners && Array.isArray(res.trackedPartners) && res.trackedPartners.length > 0) {
+          const todayKey = getLocalDateKey();
+          const formattedTracked = res.trackedPartners.map((tp) => {
+            const rawHabits = tp.habits || [];
+            const cleanHabits = getCleanDailyHabits(rawHabits, todayKey, null, false);
+            const partnerHabits = enrichPartnerHabitsWithHealthAndGroup(
+              cleanHabits,
+              tp,
+              tp.preferences,
+              res.groupPod,
+              todayKey
+            );
+            const calcPct = calculatePartnerCompletionPercent(partnerHabits);
+            const calcStreak = partnerHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+            return {
+              ...tp,
+              habits: partnerHabits,
+              streak: tp.streak ?? calcStreak,
+              todayPercent: (partnerHabits.length > 0) ? calcPct : (tp.todayPercent ?? 0),
+              profilePicture: tp.preferences?.profilePicture || tp.profilePicture || null,
+              lastActive: 'Active today',
+              secretCode: tp.secret_code || tp.secretCode,
+              secret_code: tp.secret_code || tp.secretCode,
+            };
+          });
+          setTrackedPartners(formattedTracked);
+          try {
+            localStorage.setItem('daybyday_tracked_partners', JSON.stringify(formattedTracked));
+            if (formattedTracked[0]?.secretCode) {
+              setActiveTrackedCode(formattedTracked[0].secretCode);
+              localStorage.setItem('daybyday_active_tracked_code', formattedTracked[0].secretCode);
+            }
+          } catch {}
+        }
+
+        // 3. Restore all Preferences & Customizations from DB
         const prefs = res.preferences || loggedInUser.preferences || {};
         applyPreferences(prefs);
         if (res.user?.profilePicture || loggedInUser.profilePicture) {
