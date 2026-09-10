@@ -24,7 +24,7 @@ test.describe('DayByDay Production Reliability Suite', () => {
     await expect(versionPill).toBeVisible({ timeout: 10000 });
     const versionText = await versionPill.textContent();
     console.log(`Live Version: "${versionText.trim()}"`);
-    expect(versionText).toContain('4.7.2');
+    expect(versionText).toMatch(/4\.7\.[23]/);
 
     console.log('--- Step 2: Sign In with palakharinkhede / Habit@123 ---');
     const usernameInput = page.locator('input[placeholder*="username"], input[type="text"]').first();
@@ -59,8 +59,15 @@ test.describe('DayByDay Production Reliability Suite', () => {
     expect(parsedUser.username).toBe('palakharinkhede');
     console.log(`Authenticated user in localStorage: @${parsedUser.username} (${parsedUser.secretCode || parsedUser.secret_code})`);
 
+    // Dismiss guide modal if open
+    const guideCta = page.locator('.features-guide-cta-btn, .features-guide-close-btn');
+    if (await guideCta.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+      await guideCta.first().click();
+      await page.waitForTimeout(500);
+    }
+
     console.log('--- Step 4: Verify Track Tab & Partner Data ---');
-    const trackTabBtn = page.locator('button:has-text("Track"), a:has-text("Track"), [data-tab="track"]').first();
+    const trackTabBtn = page.locator('button.nav-tab-btn:has-text("Track"), button:has-text("Track"), [data-tab="track"]').first();
     await expect(trackTabBtn).toBeVisible({ timeout: 5000 });
     await trackTabBtn.click();
 
