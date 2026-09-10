@@ -55,6 +55,7 @@ import {
   recoverSessionFromVault,
   clearVaultSession,
   removeVaultItem,
+  setVaultItem,
 } from '../utils/storageVault';
 import {
   checkHealthPermission,
@@ -1380,6 +1381,10 @@ export const HabitProvider = ({ children }) => {
   // Dual-layer session snapshot sync: debounced to prevent IndexedDB lockups during batch updates
   useEffect(() => {
     if (!user) return;
+    try {
+      localStorage.setItem('daybyday_user', JSON.stringify(user));
+      setVaultItem('daybyday_user', user).catch(() => {});
+    } catch {}
     const timer = setTimeout(() => {
       persistSessionSnapshot(user, partner, habits, pod, groupPod, trackedPartners, activeTrackedCode);
     }, 250);
@@ -1849,6 +1854,8 @@ export const HabitProvider = ({ children }) => {
     try {
       localStorage.removeItem('daybyday_signed_out');
       localStorage.setItem('daybyday_last_username', cleanUsername);
+      localStorage.setItem('daybyday_user', JSON.stringify(newUser));
+      setVaultItem('daybyday_user', newUser).catch(() => {});
       removeVaultItem('daybyday_signed_out').catch(() => {});
     } catch {}
 
@@ -1910,6 +1917,8 @@ export const HabitProvider = ({ children }) => {
         try {
           localStorage.removeItem('daybyday_signed_out');
           localStorage.setItem('daybyday_last_username', cleanUsername);
+          localStorage.setItem('daybyday_user', JSON.stringify(loggedInUser));
+          setVaultItem('daybyday_user', loggedInUser).catch(() => {});
           removeVaultItem('daybyday_signed_out').catch(() => {});
         } catch {}
 
@@ -2002,6 +2011,8 @@ export const HabitProvider = ({ children }) => {
           try {
             localStorage.removeItem('daybyday_signed_out');
             localStorage.setItem('daybyday_last_username', cleanUsername);
+            localStorage.setItem('daybyday_user', JSON.stringify(parsed.user));
+            setVaultItem('daybyday_user', parsed.user).catch(() => {});
             removeVaultItem('daybyday_signed_out').catch(() => {});
           } catch {}
           setUser(parsed.user);
