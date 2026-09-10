@@ -321,7 +321,7 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
           onClick={() => setAvatarModalOpen(true)}
           title="Change, modify, or remove profile picture"
         >
-          {profilePicture ? (
+          {typeof profilePicture === 'string' && profilePicture.length > 250 && !profilePicture.includes('AAAAEAAAAB') ? (
             <img src={profilePicture} alt="Avatar" className="profile-avatar-image" />
           ) : (
             <span>{userInitial}</span>

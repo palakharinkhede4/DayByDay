@@ -138,7 +138,7 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
                 title="Open Profile Settings"
               >
                 <div className="profile-pill-avatar font-bold">
-                  {profilePicture ? (
+                  {typeof profilePicture === 'string' && profilePicture.length > 250 && !profilePicture.includes('AAAAEAAAAB') ? (
                     <img src={profilePicture} alt="Avatar" className="profile-pill-img" />
                   ) : (
                     userInitial
@@ -188,7 +188,7 @@ export const AppLayout = ({ activeTab, onTabChange, onOpenAddGoal, children }) =
               }}
               title="Open Settings"
             >
-              {profilePicture ? (
+              {typeof profilePicture === 'string' && profilePicture.length > 250 && !profilePicture.includes('AAAAEAAAAB') ? (
                 <img src={profilePicture} alt="Avatar" className="mobile-avatar-img" />
               ) : (
                 <span className="mobile-avatar-char font-bold">{userInitial}</span>
