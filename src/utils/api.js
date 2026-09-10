@@ -1,7 +1,7 @@
 // DayByDay Remote Sync Client & Offline-First API Gateway
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
-export const DEFAULT_API_URL = 'https://day-by-day-palak-2599.vercel.app';
+export const DEFAULT_API_URL = 'https://daybypalak.duckdns.org';
 
 export function formatErrorMessage(err, fallback = 'An unexpected error occurred') {
   if (!err) return fallback;

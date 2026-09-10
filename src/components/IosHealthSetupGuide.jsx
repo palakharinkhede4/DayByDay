@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
+import { getApiBaseUrl } from '../utils/api';
 
 export const IosHealthSetupGuide = ({
   isOpen,
@@ -30,7 +31,7 @@ export const IosHealthSetupGuide = ({
   if (!isOpen) return null;
 
   const secretCode = userSecretCode || 'DBD-1000';
-  const apiBase = typeof window !== 'undefined' ? window.location.origin : 'https://daybyday.vercel.app';
+  const apiBase = getApiBaseUrl();
   
   // Fast 1-action sync link prefilled with user's private code
   const syncLink = `${apiBase}/api/user?action=health_sync&secretCode=${encodeURIComponent(secretCode)}&steps=`;

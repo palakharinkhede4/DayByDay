@@ -8,6 +8,7 @@
     </base-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">duckdns.org</domain>
         <domain includeSubdomains="true">vercel.app</domain>
     </domain-config>
 </network-security-config>
