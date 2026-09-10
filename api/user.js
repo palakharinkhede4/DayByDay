@@ -2534,6 +2534,23 @@ export default async function handler(req, res) {
             ON CONFLICT (code) DO UPDATE SET
               updated_at = CURRENT_TIMESTAMP
           `;
+
+          // CRITICAL: Update creator's preferences.groupPodCodes so GET /api/user always returns this pod
+          if (userId) {
+            try {
+              const uRows = await sql`SELECT id, preferences FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+              if (uRows.length > 0) {
+                const existingPrefs = parseSafeJson(uRows[0].preferences, {});
+                const existingCodes = Array.isArray(existingPrefs.groupPodCodes) ? existingPrefs.groupPodCodes : [];
+                if (!existingCodes.includes(cleanCode)) {
+                  const updatedPrefs = { ...existingPrefs, groupPodCodes: [...existingCodes, cleanCode] };
+                  await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${userId}`;
+                }
+              }
+            } catch (prefErr) {
+              console.warn('Notice updating groupPodCodes in prefs after create:', prefErr.message);
+            }
+          }
         }
         memoryDb.saveGroupPod(podRecord);
 
@@ -2632,6 +2649,25 @@ export default async function handler(req, res) {
             SET members = ${JSON.stringify(pod.members)}::jsonb, updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(code) = ${cleanCode}
           `;
+
+          // CRITICAL: Also update the joining user's preferences.groupPodCodes
+          // so GET /api/user always retrieves this pod regardless of member ID format
+          if (userId) {
+            try {
+              const uRows = await sql`SELECT id, preferences FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+              if (uRows.length > 0) {
+                const existingPrefs = parseSafeJson(uRows[0].preferences, {});
+                const existingCodes = Array.isArray(existingPrefs.groupPodCodes) ? existingPrefs.groupPodCodes : [];
+                if (!existingCodes.includes(cleanCode)) {
+                  const updatedPrefs = { ...existingPrefs, groupPodCodes: [...existingCodes, cleanCode] };
+                  await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${userId}`;
+                }
+              }
+            } catch (prefErr) {
+              // Non-blocking — pod join succeeded even if prefs update fails
+              console.warn('Notice updating groupPodCodes in prefs after join:', prefErr.message);
+            }
+          }
         }
         memoryDb.saveGroupPod(pod);
 
