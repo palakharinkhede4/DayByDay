@@ -31,7 +31,9 @@ import {
   Lock,
   Eye,
   EyeOff,
+  BatteryCharging,
 } from 'lucide-react';
+import { openBatteryOptimizationSettings } from '../utils/notifications';
 import { sound } from '../utils/sound';
 import {
   checkForAppUpdate,
@@ -613,6 +615,33 @@ export const SettingsScreen = ({ onOpenPairing, onOpenAddGoal }) => {
                 />
                 <span className="toggle-slider"></span>
               </label>
+            </div>
+          )}
+
+          {/* ANDROID LOCK SCREEN REMINDERS & BATTERY OPTIMIZATION */}
+          {(osMode === 'android' || Boolean(window.Capacitor?.isNativePlatform?.()) || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent))) && (
+            <div
+              className="settings-row-item clickable"
+              onClick={async () => {
+                sound.press();
+                await openBatteryOptimizationSettings();
+                triggerIslandNotification?.('Opened Android battery settings. Select Unrestricted for lock screen alarms!', 'check');
+              }}
+            >
+              <div className="row-left">
+                <BatteryCharging size={18} className="text-emerald-400" />
+                <div>
+                  <span className="row-title">Lock Screen Reminders & Battery</span>
+                  <span className="row-hint">Ensure Android battery usage is Unrestricted so reminders arrive on lock screen</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="check-update-trigger-btn font-semibold"
+                style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+              >
+                Configure
+              </button>
             </div>
           )}
 

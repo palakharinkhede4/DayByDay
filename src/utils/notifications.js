@@ -53,7 +53,7 @@ export function getHabitNotificationContent(habit) {
 
 // ─── Ensure Android notification channel ───────────────────────────────────
 let channelInitialized = false;
-async function ensureAndroidChannel() {
+export async function ensureAndroidChannel() {
   if (channelInitialized) return;
   if (!Capacitor.isNativePlatform()) return;
   try {
@@ -61,9 +61,8 @@ async function ensureAndroidChannel() {
       id: 'daybyday_reminders',
       name: 'DayByDay Habit Reminders',
       description: 'Daily habit reminders, streaks, and accountability alerts',
-      importance: 5,
-      visibility: 1,
-      sound: 'beep.wav',
+      importance: 5, // IMPORTANCE_HIGH: heads-up notification banner
+      visibility: 1, // VISIBILITY_PUBLIC: shows on lock screen
       vibration: true,
       lights: true,
       lightColor: '#1A56C4',
@@ -72,6 +71,41 @@ async function ensureAndroidChannel() {
   } catch (err) {
     console.warn('Channel creation notice:', err);
   }
+}
+
+// ─── Native Android Battery Optimization Helpers ──────────────────────────
+export async function isBatteryOptimizationIgnored() {
+  try {
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.BatteryOptimization) {
+      const res = await window.Capacitor.Plugins.BatteryOptimization.isBatteryOptimizationIgnored();
+      return Boolean(res?.isIgnored);
+    }
+  } catch (err) {
+    console.warn('Battery optimization check notice:', err);
+  }
+  return true; // Non-Android platforms are not restricted by Android battery optimization
+}
+
+export async function requestIgnoreBatteryOptimization() {
+  try {
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.BatteryOptimization) {
+      return await window.Capacitor.Plugins.BatteryOptimization.requestIgnoreBatteryOptimization();
+    }
+  } catch (err) {
+    console.warn('Request ignore battery optimization notice:', err);
+  }
+  return null;
+}
+
+export async function openBatteryOptimizationSettings() {
+  try {
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.BatteryOptimization) {
+      return await window.Capacitor.Plugins.BatteryOptimization.openBatteryOptimizationSettings();
+    }
+  } catch (err) {
+    console.warn('Open battery optimization settings notice:', err);
+  }
+  return null;
 }
 
 // ─── Service Worker Registration ───────────────────────────────────────────
@@ -249,6 +283,81 @@ async function showViaServiceWorker(title, body, tag) {
   return false;
 }
 
+export function getHabitNotificationId(habitId) {
+  const str = String(habitId || 'h');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 100000 + 1000;
+}
+
+/**
+ * Pre-schedules reminders natively with Android AlarmManager using Capacitor LocalNotifications.
+ * This guarantees notifications arrive with heads-up banners on the lock screen even if the app
+ * is force closed or the phone is locked.
+ */
+export async function syncHabitScheduledReminders(habits) {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await ensureAndroidChannel();
+    const pending = await LocalNotifications.getPending();
+    const existingIds = (pending?.notifications || []).map((n) => n.id);
+
+    const habitsWithReminders = (habits || []).filter((h) => Boolean(h.reminderTime));
+    const targetIds = new Set(habitsWithReminders.map((h) => getHabitNotificationId(h.id)));
+
+    // Cancel obsolete habit reminder notifications
+    const idsToCancel = existingIds.filter((id) => id >= 1000 && id < 101000 && !targetIds.has(id));
+    if (idsToCancel.length > 0) {
+      await LocalNotifications.cancel({
+        notifications: idsToCancel.map((id) => ({ id })),
+      }).catch(() => {});
+    }
+
+    const toSchedule = [];
+    for (const h of habitsWithReminders) {
+      const parts = (h.reminderTime || '').split(':');
+      if (parts.length < 2) continue;
+      const hour = parseInt(parts[0], 10);
+      const minute = parseInt(parts[1], 10);
+      if (isNaN(hour) || isNaN(minute)) continue;
+
+      const content = getHabitNotificationContent(h);
+      const notifId = getHabitNotificationId(h.id);
+
+      toSchedule.push({
+        id: notifId,
+        title: content.title,
+        body: content.body,
+        channelId: 'daybyday_reminders',
+        smallIcon: 'ic_stat_flame',
+        largeIcon: 'ic_launcher',
+        iconColor: '#F97316',
+        schedule: {
+          on: {
+            hour,
+            minute,
+          },
+          allowWhileIdle: true,
+        },
+        autoCancel: true,
+      });
+    }
+
+    if (toSchedule.length > 0) {
+      // Cancel previous instances of these IDs so new times replace old ones cleanly
+      await LocalNotifications.cancel({
+        notifications: toSchedule.map((n) => ({ id: n.id })),
+      }).catch(() => {});
+      await LocalNotifications.schedule({ notifications: toSchedule });
+    }
+  } catch (err) {
+    console.warn('Notice syncing native habit schedules:', err);
+  }
+}
+
 // ─── Dispatch habit reminder notification ─────────────────────────────────
 export async function dispatchHabitNotification(habit) {
   const content = getHabitNotificationContent(habit);
@@ -258,9 +367,7 @@ export async function dispatchHabitNotification(habit) {
   if (Capacitor.isNativePlatform()) {
     try {
       await ensureAndroidChannel();
-      const notifId = Math.abs(
-        String(habit.id || 'habit').split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0)
-      ) % 100000 || Math.floor(Math.random() * 90000 + 1000);
+      const notifId = getHabitNotificationId(habit.id);
       await LocalNotifications.schedule({
         notifications: [{
           id: notifId,
@@ -271,7 +378,7 @@ export async function dispatchHabitNotification(habit) {
           largeIcon: 'ic_launcher',
           iconColor: '#F97316',
           autoCancel: true,
-          schedule: { at: new Date(Date.now() + 200) },
+          schedule: { at: new Date(Date.now() + 100), allowWhileIdle: true },
         }],
       });
       return true;

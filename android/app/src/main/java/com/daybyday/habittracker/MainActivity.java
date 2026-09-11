@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AppInstallerPlugin.class);
         registerPlugin(FitnessSyncPlugin.class);
+        registerPlugin(BatteryOptimizationPlugin.class);
         super.onCreate(savedInstanceState);
         cleanupCachedApk();
         requestNotificationPermission();

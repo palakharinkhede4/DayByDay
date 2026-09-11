@@ -50,6 +50,8 @@ import {
   isIosStandalone,
   isIosSafariBrowser,
   dispatchTestNotification,
+  ensureAndroidChannel,
+  syncHabitScheduledReminders,
 } from '../utils/notifications';
 import {
   initPersistentStorage,
@@ -1254,6 +1256,7 @@ export const HabitProvider = ({ children }) => {
   // Persistent Storage Vault initialization (iOS Safari ITP protection & Android WebView recovery)
   useEffect(() => {
     initPersistentStorage();
+    ensureAndroidChannel().catch(() => {});
 
     const checkVaultSession = async () => {
       try {
@@ -1343,6 +1346,7 @@ export const HabitProvider = ({ children }) => {
                 if (activeUser.id) {
                   syncUserHabitsRemote(activeUser.id, cleanRemote, null, todayKey).catch(() => {});
                 }
+                syncHabitScheduledReminders(cleanRemote).catch(() => {});
               }
               if (remoteData.preferences) {
                 applyPreferences(remoteData.preferences);
@@ -1530,7 +1534,7 @@ export const HabitProvider = ({ children }) => {
   const refreshUserHabitsRemote = useCallback(async (force = false) => {
     const activeUser = userRef.current;
     if (!activeUser?.username || !activeUser?.id) return;
-    if (!force && Date.now() - lastLocalEditTimeRef.current < 2500) return;
+    if (!force && Date.now() - lastLocalEditTimeRef.current < 1500) return;
 
     try {
       const remoteData = await fetchUserRemote(activeUser.username);
@@ -1538,14 +1542,27 @@ export const HabitProvider = ({ children }) => {
         const todayKey = getLocalDateKey();
         const currentLocalHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : [];
         const localHistoryMap = new Map(currentLocalHabits.map((lh) => [lh.id, cleanHistory(lh.history)]));
+        const isRecentlyEditedLocally = Date.now() - lastLocalEditTimeRef.current < 5000;
 
         const mergedRemoteHabits = remoteData.habits.map((rh) => {
+          const locHabit = currentLocalHabits.find((lh) => lh.id === rh.id);
           const locHist = localHistoryMap.get(rh.id) || {};
           const remHist = cleanHistory(rh.history);
           const isStep = (rh.id || '').toLowerCase() === 'steps' || (rh.unit || '').toLowerCase() === 'steps';
           const healthHist = isStep ? getStoredHealthHistory() : {};
+
+          // If local client recently changed reminders or targets, protect them from older remote snapshots
+          const reminderTime = (isRecentlyEditedLocally && locHabit?.reminderTime !== undefined)
+            ? locHabit.reminderTime
+            : (rh.reminderTime || locHabit?.reminderTime || null);
+          const reminderDays = (isRecentlyEditedLocally && locHabit?.reminderDays !== undefined)
+            ? locHabit.reminderDays
+            : (rh.reminderDays || locHabit?.reminderDays || null);
+
           return {
             ...rh,
+            reminderTime,
+            reminderDays,
             history: cleanHistory([locHist, healthHist, remHist], todayKey),
           };
         });
@@ -1557,6 +1574,8 @@ export const HabitProvider = ({ children }) => {
           if (cur.user1 !== ch.user1) return true;
           if (cur.completed !== ch.completed) return true;
           if (Number(cur.streak) !== Number(ch.streak)) return true;
+          if (cur.reminderTime !== ch.reminderTime) return true;
+          if (JSON.stringify(cur.reminderDays || []) !== JSON.stringify(ch.reminderDays || [])) return true;
           return false;
         }) || cleanRemote.length !== currentLocalHabits.length;
 
@@ -1566,7 +1585,9 @@ export const HabitProvider = ({ children }) => {
           try {
             localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
             localStorage.setItem('daybyday_last_active_date', todayKey);
+            setVaultItem('daybyday_habits', cleanRemote).catch(() => {});
           } catch {}
+          syncHabitScheduledReminders(cleanRemote).catch(() => {});
         }
       }
     } catch {
@@ -1611,11 +1632,11 @@ export const HabitProvider = ({ children }) => {
       }
     };
 
-    // Real-Time adaptive poll (Unmetered Oracle Cloud Always Free VM - 10s)
+    // Real-Time adaptive poll: 1-second instantaneous sync
     const syncInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       performSync();
-    }, 10000);
+    }, 1000);
 
     // Immediate sync on tab visibility or window focus
     const handleVisibilityOrFocus = () => {
@@ -2317,34 +2338,50 @@ export const HabitProvider = ({ children }) => {
   // Reorder habit up or down
   const reorderHabit = (habitId, direction) => {
     sound.tap();
-    setHabits((prev) => {
-      const idx = prev.findIndex((h) => h.id === habitId);
-      if (idx === -1) return prev;
-      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
-      const copy = [...prev];
-      const temp = copy[idx];
-      copy[idx] = copy[targetIdx];
-      copy[targetIdx] = temp;
+    const currentList = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const idx = currentList.findIndex((h) => h.id === habitId);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= currentList.length) return;
+    const copy = [...currentList];
+    const temp = copy[idx];
+    copy[idx] = copy[targetIdx];
+    copy[targetIdx] = temp;
+
+    habitsRef.current = copy;
+    setHabits(copy);
+    try {
       localStorage.setItem('daybyday_habits', JSON.stringify(copy));
-      return copy;
-    });
+      setVaultItem('daybyday_habits', copy).catch(() => {});
+    } catch {}
+    if (user?.id) {
+      lastLocalEditTimeRef.current = Date.now();
+      syncUserHabitsRemote(user.id, copy, null, getLocalDateKey(), true).catch(() => {});
+    }
   };
 
   // Reorder habit directly to target index (atomic drag-and-drop)
   const reorderHabitToIndex = (habitId, targetIdx) => {
     sound.press();
-    setHabits((prev) => {
-      const fromIdx = prev.findIndex((h) => h.id === habitId);
-      if (fromIdx === -1 || targetIdx < 0 || targetIdx >= prev.length || fromIdx === targetIdx) {
-        return prev;
-      }
-      const copy = [...prev];
-      const [moved] = copy.splice(fromIdx, 1);
-      copy.splice(targetIdx, 0, moved);
+    const currentList = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const fromIdx = currentList.findIndex((h) => h.id === habitId);
+    if (fromIdx === -1 || targetIdx < 0 || targetIdx >= currentList.length || fromIdx === targetIdx) {
+      return;
+    }
+    const copy = [...currentList];
+    const [moved] = copy.splice(fromIdx, 1);
+    copy.splice(targetIdx, 0, moved);
+
+    habitsRef.current = copy;
+    setHabits(copy);
+    try {
       localStorage.setItem('daybyday_habits', JSON.stringify(copy));
-      return copy;
-    });
+      setVaultItem('daybyday_habits', copy).catch(() => {});
+    } catch {}
+    if (user?.id) {
+      lastLocalEditTimeRef.current = Date.now();
+      syncUserHabitsRemote(user.id, copy, null, getLocalDateKey(), true).catch(() => {});
+    }
   };
 
   // Track Partner by Secret Code (Multi-Partner support up to 5 friends)
@@ -3879,7 +3916,7 @@ export const HabitProvider = ({ children }) => {
       refreshPodAndCheers();
       refreshPodActivities();
       refreshUserHabitsRemote();
-    }, 12000);
+    }, 1000); // 1-second instantaneous sync loop across Android, iOS & Web
 
     const handleFocus = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
@@ -4226,59 +4263,106 @@ export const HabitProvider = ({ children }) => {
   // Add Custom or Preset Goal
   const addGoal = (newGoal) => {
     sound.tap();
+    const todayKey = getLocalDateKey();
     const safeGoal = {
       ...newGoal,
       name: sanitizeInput(newGoal.name),
       unit: sanitizeInput(newGoal.unit || 'times'),
       delta: Math.max(1, Number(newGoal.delta) || (newGoal.unit === 'steps' ? 1000 : 1)),
     };
-    setHabits((prev) => {
-      const next = [...prev, safeGoal];
-      if (user?.id) {
-        lastLocalEditTimeRef.current = Date.now();
-        syncUserHabitsRemote(user.id, next, null, getLocalDateKey(), true).catch(() => {});
-      }
-      return next;
-    });
+    const currentList = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const next = [...currentList, safeGoal];
+
+    // 1. Instant local memory & storage persistence (0ms delay)
+    habitsRef.current = next;
+    setHabits(next);
+    try {
+      localStorage.setItem('daybyday_habits', JSON.stringify(next));
+      localStorage.setItem('daybyday_last_active_date', todayKey);
+      setVaultItem('daybyday_habits', next).catch(() => {});
+    } catch {}
+
+    // 2. Schedule native OS alarms for reminders (Android AlarmManager)
+    syncHabitScheduledReminders(next).catch(() => {});
+
+    // 3. Instant cloud database push
+    if (user?.id) {
+      lastLocalEditTimeRef.current = Date.now();
+      syncUserHabitsRemote(user.id, next, null, todayKey, true).catch(() => {});
+    }
+
     triggerIslandNotification(`Added habit: ${safeGoal.name}`, 'plus');
   };
 
   // Remove Goal
   const removeGoal = (goalId) => {
     sound.tap();
+    const todayKey = getLocalDateKey();
     if (pinnedHabitId === goalId) {
       unpinHabitForLiveTracking();
     }
-    setHabits((prev) => prev.filter((h) => h.id !== goalId));
+    const currentList = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const next = currentList.filter((h) => h.id !== goalId);
+
+    // 1. Instant local memory & storage persistence (0ms delay)
+    habitsRef.current = next;
+    setHabits(next);
+    try {
+      localStorage.setItem('daybyday_habits', JSON.stringify(next));
+      localStorage.setItem('daybyday_last_active_date', todayKey);
+      setVaultItem('daybyday_habits', next).catch(() => {});
+    } catch {}
+
+    // 2. Reschedule/Cancel native OS alarms
+    syncHabitScheduledReminders(next).catch(() => {});
+
+    // 3. Instant cloud database push
     if (user?.id) {
       deleteHabitRemote(user.id, goalId).catch(() => {});
+      lastLocalEditTimeRef.current = Date.now();
+      syncUserHabitsRemote(user.id, next, null, todayKey, true).catch(() => {});
     }
+
     triggerIslandNotification('Habit removed', 'trash');
   };
 
   // Edit Goal (Name, Target, Step Delta, Reminders)
   const editHabit = (goalId, updates) => {
     sound.tap();
-    setHabits((prev) => {
-      const next = prev.map((h) => {
-        if (h.id === goalId) {
-          const updated = { ...h, ...updates };
-          if (updates.target !== undefined && typeof updated.user1 === 'number') {
-            updated.completed = updated.user1 >= updated.target;
-          }
-          if (updates.delta !== undefined) {
-            updated.delta = Math.max(1, Number(updates.delta) || 1);
-          }
-          return updated;
+    const todayKey = getLocalDateKey();
+    const currentList = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : habits;
+    const next = currentList.map((h) => {
+      if (h.id === goalId) {
+        const updated = { ...h, ...updates };
+        if (updates.target !== undefined && typeof updated.user1 === 'number') {
+          updated.completed = updated.user1 >= updated.target;
         }
-        return h;
-      });
-      if (user?.id) {
-        lastLocalEditTimeRef.current = Date.now();
-        syncUserHabitsRemote(user.id, next, null, getLocalDateKey(), true).catch(() => {});
+        if (updates.delta !== undefined) {
+          updated.delta = Math.max(1, Number(updates.delta) || 1);
+        }
+        return updated;
       }
-      return next;
+      return h;
     });
+
+    // 1. Instant local memory & storage persistence (0ms delay - prevents force-close revert)
+    habitsRef.current = next;
+    setHabits(next);
+    try {
+      localStorage.setItem('daybyday_habits', JSON.stringify(next));
+      localStorage.setItem('daybyday_last_active_date', todayKey);
+      setVaultItem('daybyday_habits', next).catch(() => {});
+    } catch {}
+
+    // 2. Schedule native OS alarms for reminders (Android AlarmManager heads-up & lock screen banner)
+    syncHabitScheduledReminders(next).catch(() => {});
+
+    // 3. Instant cloud database push
+    if (user?.id) {
+      lastLocalEditTimeRef.current = Date.now();
+      syncUserHabitsRemote(user.id, next, null, todayKey, true).catch(() => {});
+    }
+
     triggerIslandNotification('Habit updated', 'check');
   };
 
