@@ -1022,6 +1022,13 @@ export const HabitProvider = ({ children }) => {
     groupPodRef.current = groupPod;
   }, [groupPod]);
 
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const lastLocalEditTimeRef = useRef(0);
+
   // Beyond Today list
   const [beyondGoals, setBeyondGoals] = useState(() => {
     const saved = localStorage.getItem('daybyday_beyond') || localStorage.getItem('duotrack_beyond');
@@ -1517,6 +1524,54 @@ export const HabitProvider = ({ children }) => {
 
     window.addEventListener('storage', handleStorageEvent);
     return () => window.removeEventListener('storage', handleStorageEvent);
+  }, []);
+
+  // Universal Live Habit Synchronization across Android, iOS & Web
+  const refreshUserHabitsRemote = useCallback(async (force = false) => {
+    const activeUser = userRef.current;
+    if (!activeUser?.username || !activeUser?.id) return;
+    if (!force && Date.now() - lastLocalEditTimeRef.current < 2500) return;
+
+    try {
+      const remoteData = await fetchUserRemote(activeUser.username);
+      if (remoteData?.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
+        const todayKey = getLocalDateKey();
+        const currentLocalHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : [];
+        const localHistoryMap = new Map(currentLocalHabits.map((lh) => [lh.id, cleanHistory(lh.history)]));
+
+        const mergedRemoteHabits = remoteData.habits.map((rh) => {
+          const locHist = localHistoryMap.get(rh.id) || {};
+          const remHist = cleanHistory(rh.history);
+          const isStep = (rh.id || '').toLowerCase() === 'steps' || (rh.unit || '').toLowerCase() === 'steps';
+          const healthHist = isStep ? getStoredHealthHistory() : {};
+          return {
+            ...rh,
+            history: cleanHistory([locHist, healthHist, remHist], todayKey),
+          };
+        });
+        const cleanRemote = getCleanDailyHabits(mergedRemoteHabits, todayKey);
+
+        const hasChanges = cleanRemote.some((ch) => {
+          const cur = currentLocalHabits.find((lh) => lh.id === ch.id);
+          if (!cur) return true;
+          if (cur.user1 !== ch.user1) return true;
+          if (cur.completed !== ch.completed) return true;
+          if (Number(cur.streak) !== Number(ch.streak)) return true;
+          return false;
+        }) || cleanRemote.length !== currentLocalHabits.length;
+
+        if (hasChanges) {
+          habitsRef.current = cleanRemote;
+          setHabits(cleanRemote);
+          try {
+            localStorage.setItem('daybyday_habits', JSON.stringify(cleanRemote));
+            localStorage.setItem('daybyday_last_active_date', todayKey);
+          } catch {}
+        }
+      }
+    } catch {
+      // Non-blocking background sync
+    }
   }, []);
 
   // LIVE CLOUD SYNCHRONIZATION: Adaptive sync (event-driven on focus + 35s idle poll, zero polling when hidden)
@@ -3722,11 +3777,12 @@ export const HabitProvider = ({ children }) => {
     window.addEventListener('focus', handleVisibilityOrFocus);
 
     // 3. Frequent periodic background sync every 2 minutes while active
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       syncDeviceHealth({ silent: true, force: true });
+      await refreshUserHabitsRemote();
       const currentList = habitsRef.current;
       if (user?.id && Array.isArray(currentList) && currentList.length > 0) {
-        syncUserHabitsRemote(user.id, currentList, null, getLocalDateKey()).catch(() => {});
+        syncUserHabitsRemote(user.id, currentList, null, getLocalDateKey(), false).catch(() => {});
       }
     }, 2 * 60 * 1000);
 
@@ -3817,28 +3873,45 @@ export const HabitProvider = ({ children }) => {
 
     refreshPodAndCheers();
     refreshPodActivities();
+    refreshUserHabitsRemote();
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       refreshPodAndCheers();
       refreshPodActivities();
+      refreshUserHabitsRemote();
     }, 12000);
 
     const handleFocus = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
         refreshPodAndCheers();
         refreshPodActivities();
+        refreshUserHabitsRemote();
       }
     };
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleFocus);
+    document.addEventListener('resume', handleFocus);
+
+    let appStateSub = null;
+    if (window.Capacitor?.Plugins?.App?.addListener) {
+      try {
+        appStateSub = window.Capacitor.Plugins.App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            handleFocus();
+          }
+        });
+      } catch {}
+    }
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
+      document.removeEventListener('resume', handleFocus);
+      appStateSub?.then?.(sub => sub?.remove?.())?.catch?.(() => {});
     };
-  }, [groupPod?.code, user?.id, user?.username]);
+  }, [groupPod?.code, user?.id, user?.username, refreshUserHabitsRemote]);
 
 
   // Pair with Partner via Secret Code
@@ -4047,7 +4120,8 @@ export const HabitProvider = ({ children }) => {
 
     // Sync to user's habits in Neon DB if logged in
     if (user?.id && updatedList.length > 0) {
-      syncUserHabitsRemote(user.id, updatedList, null, todayKey).catch(() => {});
+      lastLocalEditTimeRef.current = Date.now();
+      syncUserHabitsRemote(user.id, updatedList, null, todayKey, true).catch(() => {});
     }
 
     // Keep Health Stats and Together Pod goals synchronized with exact habits
@@ -4161,7 +4235,8 @@ export const HabitProvider = ({ children }) => {
     setHabits((prev) => {
       const next = [...prev, safeGoal];
       if (user?.id) {
-        syncUserHabitsRemote(user.id, next, null, getLocalDateKey()).catch(() => {});
+        lastLocalEditTimeRef.current = Date.now();
+        syncUserHabitsRemote(user.id, next, null, getLocalDateKey(), true).catch(() => {});
       }
       return next;
     });
@@ -4199,7 +4274,8 @@ export const HabitProvider = ({ children }) => {
         return h;
       });
       if (user?.id) {
-        syncUserHabitsRemote(user.id, next, null, getLocalDateKey()).catch(() => {});
+        lastLocalEditTimeRef.current = Date.now();
+        syncUserHabitsRemote(user.id, next, null, getLocalDateKey(), true).catch(() => {});
       }
       return next;
     });
@@ -4406,6 +4482,7 @@ export const HabitProvider = ({ children }) => {
         isLiveActivitySupported: () => false,
         requestLiveActivityPermission: async () => false,
         updateHabit,
+        refreshUserHabitsRemote,
         editHabit,
         updateBeyondGoal,
         addGoal,

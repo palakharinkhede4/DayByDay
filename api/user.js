@@ -351,16 +351,20 @@ function formatHabitFromRow(row, explicitSql = null) {
   const target = Number(row.target) || 1;
   const rowTodayVal = (row.today_value !== undefined && row.today_value !== null) ? (Number(row.today_value) || 0) : 0;
 
+  const isStep = (row.habit_id || '').toLowerCase() === 'steps' ||
+                 (row.unit || '').toLowerCase() === 'steps' ||
+                 (row.name || '').toLowerCase().includes('step') ||
+                 (row.name || '').toLowerCase().includes('walk');
+
   // ── Carry-over guard (server side) ───────────────────────────────────────────
+  // ONLY for pedometer steps if row was NOT updated today:
   // If history[today] === history[yesterday], the stale sync-loop wrote yesterday's
   // value into today's slot. Wipe it so the server never serves it back to the app.
   const yesterdayHistVal = history[yesterdayKey] !== undefined ? (Number(history[yesterdayKey]) || 0) : null;
-  if (!isBool && yesterdayHistVal !== null && yesterdayHistVal > 0) {
+  if (!isBool && isStep && !wasUpdatedToday && yesterdayHistVal !== null && yesterdayHistVal > 0) {
     if (Number(history[todayKey]) === yesterdayHistVal && rowTodayVal === yesterdayHistVal) {
       // Both the history slot AND the DB column still hold yesterday's value → carry-over
       history[todayKey] = 0;
-      // wasUpdatedToday stays as-is; todayVal logic below will use rowTodayVal = yesterdayHistVal
-      // but we override that below explicitly.
     }
   }
 
@@ -388,7 +392,7 @@ function formatHabitFromRow(row, explicitSql = null) {
     const histTodayVal = history[todayKey] !== undefined ? (isBool ? Boolean(history[todayKey]) : (Number(history[todayKey]) || 0)) : null;
     const colVal = isBool ? Boolean(row.completed) : rowTodayVal;
     // If history slot was cleared by carry-over guard above (now 0) but column still has carry-over, use 0
-    if (!isBool && yesterdayHistVal !== null && yesterdayHistVal > 0 && colVal === yesterdayHistVal) {
+    if (!isBool && isStep && !wasUpdatedToday && yesterdayHistVal !== null && yesterdayHistVal > 0 && colVal === yesterdayHistVal) {
       todayVal = 0;
     } else {
       todayVal = histTodayVal !== null ? histTodayVal : colVal;
@@ -2014,7 +2018,7 @@ export default async function handler(req, res) {
 
     // ACTION: SYNC HABITS (Save user's habits & preferences)
     if (action === 'sync_habits') {
-      const { userId, habits, preferences, lastActiveDate } = req.body;
+      const { userId, habits, preferences, lastActiveDate, isExplicitEdit } = req.body;
       if (!userId || !Array.isArray(habits)) {
         return res.status(400).json({ error: 'User ID and habits array required' });
       }
@@ -2031,11 +2035,13 @@ export default async function handler(req, res) {
           const isPriorDaySync = Boolean(clientActiveDate && clientActiveDate !== todayStr);
 
           // Fetch existing habits for user to merge & preserve all historical dates in memory before writing
-          const existingHabits = await sql`SELECT habit_id, history FROM daybyday_habits WHERE user_id = ${userId}`;
+          const existingHabits = await sql`SELECT habit_id, history, today_value, completed, updated_at FROM daybyday_habits WHERE user_id = ${userId}`;
+          const existingMap = new Map(existingHabits.map((r) => [r.habit_id, r]));
           const existingHistoryMap = new Map(existingHabits.map((r) => [r.habit_id, cleanHistory(r.history)]));
 
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
+            const existingRow = existingMap.get(h.id);
             const existingHist = existingHistoryMap.get(h.id) || {};
             const incomingHist = cleanHistory(h.history);
             const historyObj = cleanHistory([existingHist, incomingHist]);
@@ -2058,6 +2064,21 @@ export default async function handler(req, res) {
               todayValueToSave = isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal;
               completedToSave = Boolean(h.completed);
               historyObj[todayStr] = todayValueToSave;
+
+              // NON-DOWNGRADE PROTECTION:
+              // If this is an automated background sync (not an explicit user edit),
+              // and the DB already has legitimate today's progress recorded from another device,
+              // do NOT let a stale background sync wipe that progress back to 0!
+              if (!isExplicitEdit && existingRow) {
+                const existingVal = isBool ? Boolean(existingRow.completed) : (Number(existingRow.today_value) || 0);
+                const hasExistingProgress = isBool ? existingVal : existingVal > 0;
+                const hasIncomingProgress = isBool ? numOrBoolVal : numOrBoolVal > 0;
+                if (hasExistingProgress && !hasIncomingProgress) {
+                  todayValueToSave = isBool ? (existingVal ? 1 : 0) : existingVal;
+                  completedToSave = Boolean(existingRow.completed);
+                  historyObj[todayStr] = todayValueToSave;
+                }
+              }
             }
 
             await sql`

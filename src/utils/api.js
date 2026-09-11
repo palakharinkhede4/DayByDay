@@ -405,7 +405,7 @@ export const resetPasswordRemote = async (username, securityAnswer, newPassword)
   }
 };
 
-export const syncHabitsRemote = async (userId, habits, preferences, lastActiveDate = null) => {
+export const syncHabitsRemote = async (userId, habits, preferences, lastActiveDate = null, isExplicitEdit = false) => {
   if (!hasRemoteBackend() || !userId) return null;
   const baseUrl = getApiBaseUrl();
   try {
@@ -418,6 +418,7 @@ export const syncHabitsRemote = async (userId, habits, preferences, lastActiveDa
         habits,
         preferences,
         lastActiveDate,
+        isExplicitEdit: Boolean(isExplicitEdit),
       }),
     });
     if (!res.ok) return null;
@@ -434,7 +435,7 @@ export const fetchUserRemote = async (usernameOrCode) => {
   const baseUrl = getApiBaseUrl();
   const clean = String(usernameOrCode).trim().replace(/^@/, '');
   try {
-    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(clean)}`);
+    const res = await apiFetch(`${baseUrl}/api/user?username=${encodeURIComponent(clean)}&t=${Date.now()}`);
     if (!res.ok) return null;
     return await parseJsonSafe(res);
   } catch {
