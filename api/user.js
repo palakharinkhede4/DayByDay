@@ -115,6 +115,19 @@ export function isValidProfilePicture(pic) {
   return true;
 }
 
+export function calculateProportionalPercent(habitsList) {
+  if (!Array.isArray(habitsList) || habitsList.length === 0) return 0;
+  const total = habitsList.length;
+  const totalProgress = habitsList.reduce((acc, h) => {
+    const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+    if (isBool) return acc + (Boolean(h.user1) ? 100 : 0);
+    const val = Math.max(0, Number(h.user1) || 0);
+    const target = Math.max(1, Number(h.target) || 1);
+    return acc + Math.min(100, Math.round((val / target) * 100));
+  }, 0);
+  return Math.round(totalProgress / total);
+}
+
 export function cleanPreferences(raw) {
   if (!raw) return {};
   let cur = raw;
@@ -604,12 +617,7 @@ async function formatGroupPodFromRow(row, sql = null) {
     let pct = m.todayPercent || 0;
     let streak = m.streak || 0;
     if (mHabits.length > 0) {
-      const total = mHabits.length;
-      const completed = mHabits.filter((h) => {
-        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-        return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-      }).length;
-      pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      pct = calculateProportionalPercent(mHabits);
       streak = mHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
     }
     const cleanPic = isValidProfilePicture(m.profilePicture) ? m.profilePicture : null;
@@ -1299,12 +1307,7 @@ export default async function handler(req, res) {
           }
         }
 
-        const totalHabits = formattedHabits.length;
-        const completedCount = formattedHabits.filter(h => {
-          const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-          return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-        }).length;
-        const todayPercent = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
+        const todayPercent = calculateProportionalPercent(formattedHabits);
         const streak = formattedHabits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
 
 
@@ -1410,12 +1413,7 @@ export default async function handler(req, res) {
         }
       }
 
-      const totalHabits = habits.length;
-      const completedCount = habits.filter(h => {
-        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-        return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-      }).length;
-      const todayPercent = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
+      const todayPercent = calculateProportionalPercent(habits);
       const streak = habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
 
       return res.status(200).json({
@@ -2543,11 +2541,6 @@ export default async function handler(req, res) {
             const u = uRows[0];
             const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId}`;
             const formatted = habits.map(formatHabitFromRow);
-            const total = formatted.length;
-            const completed = formatted.filter(h => {
-              const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-              return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-            }).length;
             ownerMember = {
               id: u.id,
               username: u.username,
@@ -2555,7 +2548,7 @@ export default async function handler(req, res) {
               avatar: u.avatar || 'star',
               profilePicture: parseSafeJson(u.preferences, {}).profilePicture || null,
               role: 'Owner',
-              todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+              todayPercent: calculateProportionalPercent(formatted),
               streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
             };
           }
@@ -2670,11 +2663,6 @@ export default async function handler(req, res) {
             const u = uRows[0];
             const habits = await sql`SELECT * FROM daybyday_habits WHERE user_id = ${userId}`;
             const formatted = habits.map(formatHabitFromRow);
-            const total = formatted.length;
-            const completed = formatted.filter(h => {
-              const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-              return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-            }).length;
             memberObj = {
               id: u.id,
               username: u.username,
@@ -2682,7 +2670,7 @@ export default async function handler(req, res) {
               avatar: u.avatar || 'star',
               profilePicture: parseSafeJson(u.preferences, {}).profilePicture || null,
               role: 'Member',
-              todayPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+              todayPercent: calculateProportionalPercent(formatted),
               streak: formatted.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0),
             };
           }
@@ -3243,15 +3231,14 @@ export default async function handler(req, res) {
       try {
         let pod = null;
         if (sql) {
-          const rows = await sql`SELECT * FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode} LIMIT 1`;
-          if (rows.length > 0) {
-            const r = rows[0];
-            await sql`
-              UPDATE daybyday_group_pods
-              SET name = ${cleanName}, updated_at = CURRENT_TIMESTAMP
-              WHERE UPPER(code) = ${cleanCode}
-            `;
-            pod = { ...(await formatGroupPodFromRow(r, sql)), name: cleanName };
+          const updateRows = await sql`
+            UPDATE daybyday_group_pods
+            SET name = ${cleanName}, updated_at = CURRENT_TIMESTAMP
+            WHERE UPPER(code) = ${cleanCode}
+            RETURNING *
+          `;
+          if (updateRows.length > 0) {
+            pod = await formatGroupPodFromRow(updateRows[0], sql);
           }
         } else {
           pod = memoryDb.getGroupPod(cleanCode);
@@ -3510,26 +3497,78 @@ export default async function handler(req, res) {
         }
 
         if (pod) {
-          const remaining = pod.members.filter(m => m.id !== userId);
+          const remaining = (pod.members || []).filter(m => {
+            const mId = m.id ? String(m.id).toLowerCase() : '';
+            const mUname = m.username ? String(m.username).toLowerCase() : '';
+            const targetId = String(userId).toLowerCase();
+            return mId !== targetId && mUname !== targetId;
+          });
+
           if (sql) {
             if (remaining.length === 0) {
               await sql`DELETE FROM daybyday_group_pods WHERE UPPER(code) = ${cleanCode}`;
+              await sql`DELETE FROM daybyday_cheers WHERE UPPER(pod_code) = ${cleanCode}`;
+              try {
+                const affectedUsers = await sql`
+                  SELECT id, preferences FROM daybyday_users
+                  WHERE preferences::text ILIKE ${'%' + cleanCode + '%'}
+                `;
+                for (const u of affectedUsers) {
+                  const p = parseSafeJson(u.preferences, {});
+                  let modified = false;
+                  if (Array.isArray(p.groupPodCodes) && p.groupPodCodes.some(c => c && c.toUpperCase() === cleanCode)) {
+                    p.groupPodCodes = p.groupPodCodes.filter(c => c && c.toUpperCase() !== cleanCode);
+                    modified = true;
+                  }
+                  if (p.groupPodCode && p.groupPodCode.toUpperCase() === cleanCode) {
+                    p.groupPodCode = (p.groupPodCodes && p.groupPodCodes[0]) || null;
+                    modified = true;
+                  }
+                  if (modified) {
+                    await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(p)}::jsonb WHERE id = ${u.id}`;
+                  }
+                }
+              } catch (cleanErr) {
+                console.warn('Notice removing groupPodCodes globally after pod deletion:', cleanErr.message);
+              }
             } else {
-              await sql`UPDATE daybyday_group_pods SET members = ${JSON.stringify(remaining)}::jsonb WHERE UPPER(code) = ${cleanCode}`;
+              await sql`
+                UPDATE daybyday_group_pods
+                SET members = ${JSON.stringify(remaining)}::jsonb, updated_at = CURRENT_TIMESTAMP
+                WHERE UPPER(code) = ${cleanCode}
+              `;
             }
 
             // Remove pod code from leaving user's preferences
             try {
-              const uRows = await sql`SELECT id, preferences FROM daybyday_users WHERE id = ${userId} LIMIT 1`;
+              const uRows = await sql`
+                SELECT id, preferences FROM daybyday_users
+                WHERE id = ${userId}
+                   OR LOWER(username) = LOWER(${userId})
+                LIMIT 1
+              `;
               if (uRows.length > 0) {
                 const existingPrefs = parseSafeJson(uRows[0].preferences, {});
                 const existingCodes = Array.isArray(existingPrefs.groupPodCodes) ? existingPrefs.groupPodCodes : [];
                 const updatedCodes = existingCodes.filter((c) => c && c.toUpperCase() !== cleanCode);
-                const updatedPrefs = { ...existingPrefs, groupPodCodes: updatedCodes };
-                await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${userId}`;
+                const updatedPrefs = {
+                  ...existingPrefs,
+                  groupPodCodes: updatedCodes,
+                  groupPodCode: (existingPrefs.groupPodCode && existingPrefs.groupPodCode.toUpperCase() === cleanCode)
+                    ? (updatedCodes[0] || null)
+                    : existingPrefs.groupPodCode,
+                };
+                await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${uRows[0].id}`;
               }
             } catch (prefErr) {
               console.warn('Notice removing groupPodCodes from prefs after leave:', prefErr.message);
+            }
+          } else {
+            if (remaining.length === 0) {
+              memoryDb.deleteGroupPod?.(cleanCode);
+            } else {
+              pod.members = remaining;
+              memoryDb.saveGroupPod(pod);
             }
           }
         }

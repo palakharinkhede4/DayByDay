@@ -16,6 +16,19 @@ export const isHealthSyncEnabled = () => {
   }
 };
 
+export const initFitnessSyncState = async () => {
+  try {
+    if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.isFitnessSyncEnabled) {
+      const res = await window.Capacitor.Plugins.FitnessSync.isFitnessSyncEnabled();
+      if (res && res.enabled !== undefined) {
+        localStorage.setItem(ENABLED_KEY, res.enabled ? 'true' : 'false');
+        return Boolean(res.enabled);
+      }
+    }
+  } catch {}
+  return isHealthSyncEnabled();
+};
+
 export const setHealthSyncEnabled = (enabled) => {
   try {
     localStorage.setItem(ENABLED_KEY, enabled ? 'true' : 'false');

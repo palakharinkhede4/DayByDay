@@ -65,6 +65,7 @@ import {
   importDeviceHealthStats,
   syncHealthDataToHabitsAndPod,
   isHealthSyncEnabled,
+  initFitnessSyncState,
   setHealthSyncEnabled,
   getStoredHealthData,
   updateCustomHealthStats,
@@ -646,7 +647,7 @@ export function mergeGroupPodSafely(localPod, remotePod) {
 
   return {
     ...cleanRemote,
-    name: cleanLocal.name && cleanLocal.name !== cleanRemote.name ? cleanLocal.name : cleanRemote.name,
+    name: cleanRemote.name || cleanLocal.name,
     sharedGoals: mergedGoals,
   };
 }
@@ -657,6 +658,7 @@ export const HabitProvider = ({ children }) => {
   const isHealthSyncRunningRef = useRef(false);
   const seenCheerIdsRef = useRef(new Set());
   const receivedCheerIdsRef = useRef(new Set());
+  const isRemoteProfileLoadedRef = useRef(false);
 
   // 1. User Identity (Unique @username and Secret Code)
   const [user, setUser] = useState(() => {
@@ -1035,6 +1037,19 @@ export const HabitProvider = ({ children }) => {
   // Native Health & Fitness Sync state (persisted across restarts)
   const [healthSyncEnabled, setHealthSyncEnabledState] = useState(() => isHealthSyncEnabled());
   const [healthStats, setHealthStats] = useState(() => getStoredHealthData());
+
+  // On mount, query Android native SharedPreferences or Vault to restore healthSyncEnabled across updates
+  useEffect(() => {
+    initFitnessSyncState().then((enabled) => {
+      if (enabled) {
+        setHealthSyncEnabledState(true);
+      }
+    }).catch(() => {});
+    const fallbackTimer = setTimeout(() => {
+      isRemoteProfileLoadedRef.current = true;
+    }, 3500);
+    return () => clearTimeout(fallbackTimer);
+  }, []);
 
   // App Features & Onboarding Tour modal state
   const [isFeaturesGuideOpen, setIsFeaturesGuideOpen] = useState(false);
@@ -1626,6 +1641,7 @@ export const HabitProvider = ({ children }) => {
       }
     }
     if (!prefs || typeof prefs !== 'object') return;
+    isRemoteProfileLoadedRef.current = true;
 
     if (prefs.themeColor) {
       setThemeColor(prefs.themeColor);
@@ -1744,7 +1760,7 @@ export const HabitProvider = ({ children }) => {
       isInitialPrefsMount.current = false;
       return;
     }
-    if (!user?.id) return;
+    if (!user?.id || isSessionRestoring || !isRemoteProfileLoadedRef.current) return;
 
     const trackedCodes = trackedPartners.map((p) => p.secretCode || p.secret_code).filter(Boolean);
     const validPic = typeof profilePicture === 'string' && profilePicture.length > 250 && !profilePicture.includes('AAAAEAAAAB') ? profilePicture : null;
@@ -3006,16 +3022,48 @@ export const HabitProvider = ({ children }) => {
   const leaveGroupPod = async (codeToLeave) => {
     sound.tap();
     const targetCode = (codeToLeave || groupPod?.code || activeGroupPodCode || '').toUpperCase();
+    if (!targetCode) return;
+
+    // 1. Immediately clean up local state
+    setGroupPods((prev) => {
+      const nextList = (prev || []).filter((p) => (p.code || '').toUpperCase() !== targetCode);
+      try { localStorage.setItem('daybyday_group_pods', JSON.stringify(nextList)); } catch {}
+      return nextList;
+    });
+
+    // 2. Clear or reassign active group pod
+    setGroupPod((prev) => {
+      if ((prev?.code || '').toUpperCase() === targetCode) {
+        const nextActive = (groupPods || []).find((p) => (p.code || '').toUpperCase() !== targetCode) || null;
+        try {
+          if (nextActive) {
+            localStorage.setItem('daybyday_group_pod', JSON.stringify(nextActive));
+            localStorage.setItem('daybyday_active_group_pod_code', nextActive.code);
+            setActiveGroupPodCode(nextActive.code);
+          } else {
+            localStorage.removeItem('daybyday_group_pod');
+            localStorage.removeItem('daybyday_active_group_pod_code');
+            setActiveGroupPodCode('');
+          }
+        } catch {}
+        return nextActive;
+      }
+      return prev;
+    });
+
     if (targetCode && user?.id) {
-      leaveGroupPodRemote(targetCode, user.id).catch(() => {});
-      const remainingCodes = groupPods.filter((p) => (p.code || '').toUpperCase() !== targetCode).map((p) => p.code);
-      syncPreferencesRemote(user.id, {
-        ...(user.preferences || {}),
-        groupPodCode: remainingCodes[0] || null,
-        groupPodCodes: remainingCodes,
-      }).catch(() => {});
+      try {
+        await leaveGroupPodRemote(targetCode, user.id);
+        const remainingCodes = (groupPods || []).filter((p) => (p.code || '').toUpperCase() !== targetCode).map((p) => p.code);
+        await syncPreferencesRemote(user.id, {
+          ...(user.preferences || {}),
+          groupPodCode: remainingCodes[0] || null,
+          groupPodCodes: remainingCodes,
+        });
+      } catch (err) {
+        console.warn('leaveGroupPod remote notice:', err);
+      }
     }
-    setGroupPod(null);
     triggerIslandNotification('Left group pod', 'user');
   };
 
@@ -3058,7 +3106,7 @@ export const HabitProvider = ({ children }) => {
     const trimmedName = newName.trim();
     sound.press();
 
-    // 1. Optimistically update all groupPods in state & storage
+    // 1. Optimistically update both groupPods list & active groupPod in state & storage
     setGroupPods((prev) => {
       const nextList = (prev || []).map((p) =>
         (p.code || '').toUpperCase() === cleanCode ? { ...p, name: trimmedName } : p
@@ -3069,6 +3117,13 @@ export const HabitProvider = ({ children }) => {
         if (active) localStorage.setItem('daybyday_group_pod', JSON.stringify(active));
       } catch {}
       return nextList;
+    });
+
+    setGroupPod((prev) => {
+      if ((prev?.code || '').toUpperCase() === cleanCode) {
+        return { ...prev, name: trimmedName };
+      }
+      return prev;
     });
 
     try {
@@ -3085,6 +3140,12 @@ export const HabitProvider = ({ children }) => {
             if (active) localStorage.setItem('daybyday_group_pod', JSON.stringify(active));
           } catch {}
           return nextList;
+        });
+        setGroupPod((prev) => {
+          if ((prev?.code || '').toUpperCase() === cleanCode) {
+            return { ...prev, ...updatedPod, name: trimmedName };
+          }
+          return prev;
         });
       }
       triggerIslandNotification('Group name updated!', 'check');

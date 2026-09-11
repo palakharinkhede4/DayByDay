@@ -6,7 +6,6 @@ import {
   TrendingUp,
   CheckCircle2,
   Calendar as CalendarIcon,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -35,7 +34,7 @@ const MONTH_NAMES = [
 const DAY_LETTERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const InsightsScreen = () => {
-  const { habits, pod, syncDeviceHealth } = useHabits();
+  const { habits, pod, syncDeviceHealth, currentPercent } = useHabits();
 
   // Mode: 'weekly' (7-day pulse) or 'calendar' (full interactive month view)
   const [viewMode, setViewMode] = useState('weekly');
@@ -122,6 +121,7 @@ export const InsightsScreen = () => {
       let completedOnDate = 0;
       let daySteps = 0;
       let hasAnyActivity = false;
+      let dayTotalProgress = 0;
 
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
@@ -135,6 +135,8 @@ export const InsightsScreen = () => {
           if (isBool ? Boolean(val) : num > 0) {
             hasAnyActivity = true;
           }
+          const itemPct = isBool ? (Boolean(val) ? 100 : 0) : Math.min(100, Math.round((num / target) * 100));
+          dayTotalProgress += itemPct;
         }
         const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps' || (h.name || '').toLowerCase().includes('step');
         if (isStep) {
@@ -142,6 +144,10 @@ export const InsightsScreen = () => {
           daySteps = Math.max(daySteps, Number(stepVal) || 0);
         }
       });
+
+      const dayPct = habits.length > 0
+        ? (isToday && currentPercent !== undefined ? currentPercent : Math.round(dayTotalProgress / habits.length))
+        : 0;
 
       result.push({
         dayName,
@@ -151,12 +157,13 @@ export const InsightsScreen = () => {
         completedCount: completedOnDate,
         daySteps,
         total: habits.length || 1,
-        isSuccess: completedOnDate > 0,
+        pct: dayPct,
+        isSuccess: dayPct >= 50 || completedOnDate > 0,
         hasActivity: hasAnyActivity || daySteps > 0,
       });
     }
     return result;
-  }, [habits]);
+  }, [habits, currentPercent]);
 
   // Dedicated 7-day steps statistics for weekly pulse and activity trends
   const stepsWeeklyStats = useMemo(() => {
@@ -215,18 +222,24 @@ export const InsightsScreen = () => {
       const isFuture = new Date(calYear, calMonth, day) > now;
 
       let completedCount = 0;
+      let dayTotalProgress = 0;
       habits.forEach((h) => {
         const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
         const target = Number(h.target) || 1;
         const { val, hasRecord } = getHistoricalValue(h, dateKey, isToday);
         if (hasRecord) {
-          const isDone = isBool ? Boolean(val) : (Number(val) || 0) >= target;
+          const num = Number(val) || 0;
+          const isDone = isBool ? Boolean(val) : num >= target;
           if (isDone) completedCount++;
+          const itemPct = isBool ? (Boolean(val) ? 100 : 0) : Math.min(100, Math.round((num / target) * 100));
+          dayTotalProgress += itemPct;
         }
       });
 
       const totalHabits = habits.length || 1;
-      const pct = Math.min(100, Math.round((completedCount / totalHabits) * 100));
+      const pct = isToday && currentPercent !== undefined
+        ? currentPercent
+        : Math.min(100, Math.round(dayTotalProgress / totalHabits));
 
       cells.push({
         type: 'day',
@@ -241,7 +254,7 @@ export const InsightsScreen = () => {
     }
 
     return cells;
-  }, [calYear, calMonth, habits]);
+  }, [calYear, calMonth, habits, currentPercent]);
 
   // 3. Selected Day Details Inspector
   const selectedDayDetails = useMemo(() => {
@@ -279,7 +292,16 @@ export const InsightsScreen = () => {
     });
 
     const total = habits.length || 1;
-    const percent = Math.round((completedCount / total) * 100);
+    const dayTotalProgress = items.reduce((acc, item) => {
+      if (!item.hasRecord) return acc;
+      if (item.isBool) return acc + (item.isDone ? 100 : 0);
+      const num = Number(item.recordedValue) || 0;
+      const t = Number(item.target) || 1;
+      return acc + Math.min(100, Math.round((num / t) * 100));
+    }, 0);
+    const percent = isToday && currentPercent !== undefined
+      ? currentPercent
+      : Math.round(dayTotalProgress / total);
 
     return {
       dateFormatted,
@@ -289,7 +311,7 @@ export const InsightsScreen = () => {
       percent,
       items,
     };
-  }, [selectedDateKey, habits, todayKey]);
+  }, [selectedDateKey, habits, todayKey, currentPercent]);
 
   // Active current streak (highest consecutive streak among active habits)
   const activeStreak = useMemo(() => {
@@ -297,24 +319,23 @@ export const InsightsScreen = () => {
     return habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
   }, [habits]);
 
-  // Overall completion rate for today
-  const completedToday = useMemo(() => {
-    return habits.filter((h) => {
-      const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-      const target = Number(h.target) || 1;
-      const val = Math.max(Number(h.history?.[todayKey]) || 0, Number(h.user1) || 0);
-      return isBool ? (Boolean(h.user1) || Boolean(h.history?.[todayKey])) : val >= target;
-    }).length;
-  }, [habits, todayKey]);
+  // Overall completion rate for today (Unified with Habits & Track tabs)
+  const completionPercent = currentPercent !== undefined
+    ? currentPercent
+    : (habits.length > 0
+      ? Math.round((habits.reduce((acc, h) => {
+          const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+          if (isBool) return acc + (Boolean(h.user1) ? 100 : 0);
+          const val = Math.max(0, Number(h.user1) || 0);
+          const target = Math.max(1, Number(h.target) || 1);
+          return acc + Math.min(100, Math.round((val / target) * 100));
+        }, 0) / habits.length))
+      : 0);
 
-  const completionPercent = habits.length > 0
-    ? Math.round((completedToday / habits.length) * 100)
-    : 0;
-
-  // 7-day average consistency rate
+  // 7-day average consistency rate (Unified proportional progress)
   const weeklyAverage = useMemo(() => {
     if (!weekDays.length) return 0;
-    const sumPct = weekDays.reduce((acc, d) => acc + Math.round((d.completedCount / d.total) * 100), 0);
+    const sumPct = weekDays.reduce((acc, d) => acc + (d.pct !== undefined ? d.pct : Math.round((d.completedCount / d.total) * 100)), 0);
     return Math.round(sumPct / weekDays.length);
   }, [weekDays]);
 
@@ -683,43 +704,6 @@ export const InsightsScreen = () => {
 
       {/* Dedicated Steps & Distance Trends Card */}
       {renderStepsActivityCard()}
-
-      {/* Overall Habit Progress Breakdown List */}
-      <div className="insights-section-card">
-        <div className="section-card-header">
-          <div className="section-card-title-group">
-            <Sparkles size={18} className="text-purple-400" />
-            <h3 className="section-card-title font-bold">Habit Completion Overview</h3>
-          </div>
-          <span className="section-card-tag font-semibold">{habits.length} Habits</span>
-        </div>
-
-        <div className="insights-habits-list">
-          {habits.map((h) => {
-            const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-            const val = Number(h.user1) || 0;
-            const target = Number(h.target) || 1;
-            const isDone = isBool ? Boolean(h.user1) : val >= target;
-            const pct = isBool ? (isDone ? 100 : 0) : Math.min(100, Math.round((val / target) * 100));
-
-            return (
-              <div key={h.id} className="insight-habit-item">
-                <div className="insight-habit-info">
-                  <span className="insight-habit-name font-bold">{h.name}</span>
-                  <span className="insight-habit-cat font-medium">{h.category || 'Daily'}</span>
-                </div>
-
-                <div className="insight-habit-progress-wrap">
-                  <div className="insight-bar-track">
-                    <div className="insight-bar-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="insight-pct-badge font-bold">{pct}%</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 };

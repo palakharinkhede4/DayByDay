@@ -158,6 +158,13 @@ export async function persistSessionSnapshot(user, partner, habits, pod, groupPo
       localStorage.setItem('daybyday_active_tracked_code', activeTrackedCode);
       await setVaultItem('daybyday_active_tracked_code', activeTrackedCode);
     }
+
+    try {
+      const healthEnabled = localStorage.getItem('daybyday_health_sync_enabled');
+      if (healthEnabled !== null) {
+        await setVaultItem('daybyday_health_sync_enabled', healthEnabled);
+      }
+    } catch {}
   } catch (err) {
     console.warn('Session persistence notice:', err.message);
   }
@@ -172,7 +179,7 @@ export async function clearVaultSession() {
       'daybyday_tracked_partner', 'daybyday_tracked_partners', 'daybyday_active_tracked_code',
       'daybyday_profile_picture', 'daybyday_profile_pic', 'daybyday_active_focus_habit',
       'daybyday_focus_habit_id', 'daybyday_beyond_goals', 'daybyday_beyond',
-      'daybyday_health_sync_data', 'daybyday_seen_cheer_ids',
+      'daybyday_health_sync_data', 'daybyday_health_sync_enabled', 'daybyday_seen_cheer_ids',
       'duotrack_user', 'duotrack_partner', 'duotrack_habits', 'duotrack_pod', 'duotrack_tracked_partner', 'duotrack_group_pod'
     ];
     keys.forEach((k) => {
@@ -240,6 +247,10 @@ export async function recoverSessionFromVault() {
       }
       if (vaultActiveTrackedCode) {
         localStorage.setItem('daybyday_active_tracked_code', vaultActiveTrackedCode);
+      }
+      const vaultHealthSync = await getVaultItem('daybyday_health_sync_enabled');
+      if (vaultHealthSync !== null) {
+        localStorage.setItem('daybyday_health_sync_enabled', String(vaultHealthSync));
       }
     } catch {
       // LocalStorage quota or restricted mode fallback

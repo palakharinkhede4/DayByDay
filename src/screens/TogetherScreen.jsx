@@ -683,6 +683,7 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
   const {
     user,
     habits = [],
+    currentPercent,
     addGoal,
     groupPod,
     groupPods = [],
@@ -1037,13 +1038,25 @@ export const TogetherScreen = ({ onNavigateToHabits }) => {
                 let displayPercent = m.todayPercent || 0;
                 let displayStreak = m.streak || 0;
                 if (isMe && Array.isArray(habits)) {
-                  const total = habits.length;
-                  const completed = habits.filter((h) => {
-                    const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-                    return isBool ? Boolean(h.user1) : (Number(h.user1) || 0) >= (Number(h.target) || 1);
-                  }).length;
-                  displayPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  displayPercent = currentPercent ?? (habits.length > 0
+                    ? Math.round((habits.reduce((acc, h) => {
+                        const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+                        if (isBool) return acc + (Boolean(h.user1) ? 100 : 0);
+                        const val = Math.max(0, Number(h.user1) || 0);
+                        const target = Math.max(1, Number(h.target) || 1);
+                        return acc + Math.min(100, Math.round((val / target) * 100));
+                      }, 0) / habits.length))
+                    : 0);
                   displayStreak = habits.reduce((acc, h) => Math.max(acc, Number(h.streak) || 0), 0);
+                } else {
+                  const matchingTracked = (trackedPartners || []).find((tp) =>
+                    (tp.id && m.id && String(tp.id) === String(m.id)) ||
+                    (tp.username && m.username && String(tp.username).toLowerCase() === String(m.username).toLowerCase())
+                  );
+                  if (matchingTracked && matchingTracked.todayPercent !== undefined) {
+                    displayPercent = matchingTracked.todayPercent;
+                    if (matchingTracked.streak !== undefined) displayStreak = matchingTracked.streak;
+                  }
                 }
 
                 return (
