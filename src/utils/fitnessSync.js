@@ -623,7 +623,8 @@ export const syncHealthDataToHabitsAndPod = async ({
     // Example: User sets 0 manually → walks 50 → sensor total = 50 → delta = 50 → shown = 50.
     const manualStepsDate = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_date') : null;
     const isUserManualLocked = (manualStepsDate === todayKey);
-    if (!isManual && isUserManualLocked && (metric === 'steps' || h.id === 'steps')) {
+    const isNativeAndroid = window.Capacitor?.isNativePlatform?.();
+    if (!isNativeAndroid && !isManual && isUserManualLocked && (metric === 'steps' || h.id === 'steps')) {
       const rawManualBase = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_value') : null;
       const rawSensorAtEdit = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_sensor_at_edit') : null;
       const manualBase = rawManualBase !== null ? Number(rawManualBase) : null;
