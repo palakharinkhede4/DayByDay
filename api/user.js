@@ -36,7 +36,7 @@ export function cleanHistory(raw, todayKey = null) {
         let parsed = JSON.parse(item);
         if (typeof parsed === 'string') parsed = JSON.parse(parsed);
         extract(parsed);
-      } catch {}
+      } catch { }
       return;
     }
     if (Array.isArray(item)) {
@@ -156,7 +156,7 @@ export function cleanPreferences(raw) {
         try {
           parsed = JSON.parse(parsed);
           if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        } catch {}
+        } catch { }
       }
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         candidates.push(parsed);
@@ -328,75 +328,21 @@ function getIstYesterdayKey(date = new Date()) {
   }
 }
 
-function formatHabitFromRow(row, explicitSql = null) {
+function formatHabitFromRow(row) {
   if (!row) return null;
-  const sql = (typeof explicitSql === 'function') ? explicitSql : getDb();
   const todayKey = getIstDateKey();
-  const yesterdayKey = getIstYesterdayKey();
   const history = cleanHistory(row.history);
-
-  // Determine if this habit row was updated today in IST
-  let wasUpdatedToday = false;
-  let lastUpdatedDateKey = null;
-  if (row.updated_at) {
-    try {
-      lastUpdatedDateKey = getIstDateKey(new Date(row.updated_at));
-      wasUpdatedToday = (lastUpdatedDateKey === todayKey);
-    } catch {
-      wasUpdatedToday = false;
-    }
-  }
-
   const isBool = row.unit === 'check';
   const target = Number(row.target) || 1;
-  const rowTodayVal = (row.today_value !== undefined && row.today_value !== null) ? (Number(row.today_value) || 0) : 0;
 
-  const isStep = (row.habit_id || '').toLowerCase() === 'steps' ||
-                 (row.unit || '').toLowerCase() === 'steps' ||
-                 (row.name || '').toLowerCase().includes('step') ||
-                 (row.name || '').toLowerCase().includes('walk');
-
-  // ── Carry-over guard (server side) ───────────────────────────────────────────
-  // ONLY for pedometer steps if row was NOT updated today:
-  // If history[today] === history[yesterday], the stale sync-loop wrote yesterday's
-  // value into today's slot. Wipe it so the server never serves it back to the app.
-  const yesterdayHistVal = history[yesterdayKey] !== undefined ? (Number(history[yesterdayKey]) || 0) : null;
-  if (!isBool && isStep && !wasUpdatedToday && yesterdayHistVal !== null && yesterdayHistVal > 0) {
-    if (Number(history[todayKey]) === yesterdayHistVal && rowTodayVal === yesterdayHistVal) {
-      // Both the history slot AND the DB column still hold yesterday's value → carry-over
-      history[todayKey] = 0;
-    }
-  }
-
-  // 1. If row was NOT updated today in IST:
-  // Any value in row.today_value belongs to lastUpdatedDateKey (yesterday or earlier)
-  if (!wasUpdatedToday && lastUpdatedDateKey) {
-    if (history[lastUpdatedDateKey] === undefined && (rowTodayVal > 0 || row.completed)) {
-      history[lastUpdatedDateKey] = isBool ? Boolean(row.completed) : rowTodayVal;
-    }
-    // And today's history entry cannot hold yesterday's lingering value
-    if (history[todayKey] !== undefined && history[todayKey] !== 0 && history[todayKey] !== false) {
-      history[todayKey] = isBool ? false : 0;
-    }
-  }
-
-  // 2. Authoritative today's value:
-  // If row was NOT updated today, todayVal is strictly 0.
-  // If updated today, use the DB column (today_value) as ground truth — NOT history[todayKey],
-  // which can be polluted by carry-over writes from the stale sync loop.
+  // ── Date-Partitioned Ledger: history[todayKey] is the SOLE source of truth ──
+  // If today's key is absent → the user has not logged anything today → 0.
+  // We NEVER fall back to row.today_value or yesterday's value.
   let todayVal;
-  if (!wasUpdatedToday) {
-    todayVal = isBool ? false : 0;
+  if (history[todayKey] !== undefined && history[todayKey] !== null) {
+    todayVal = isBool ? Boolean(history[todayKey]) : (Number(history[todayKey]) || 0);
   } else {
-    // Prefer the actual DB column; if it was a carry-over it was already cleared to 0 in history above
-    const histTodayVal = history[todayKey] !== undefined ? (isBool ? Boolean(history[todayKey]) : (Number(history[todayKey]) || 0)) : null;
-    const colVal = isBool ? Boolean(row.completed) : rowTodayVal;
-    // If history slot was cleared by carry-over guard above (now 0) but column still has carry-over, use 0
-    if (!isBool && isStep && !wasUpdatedToday && yesterdayHistVal !== null && yesterdayHistVal > 0 && colVal === yesterdayHistVal) {
-      todayVal = 0;
-    } else {
-      todayVal = histTodayVal !== null ? histTodayVal : colVal;
-    }
+    todayVal = isBool ? false : 0;
   }
 
   const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= target;
@@ -501,7 +447,7 @@ async function formatGroupPodFromRow(row, sql = null) {
           WHERE user_id = ANY(${allUserIds})
         `;
         habitRows.forEach((hr) => {
-          const formattedH = formatHabitFromRow(hr, todayKey);
+          const formattedH = formatHabitFromRow(hr);
           const uId = hr.user_id;
           const uName = idToUser.get(uId);
 
@@ -555,8 +501,8 @@ async function formatGroupPodFromRow(row, sql = null) {
       const mName = m.username ? String(m.username).toLowerCase() : null;
 
       const mHabits = (mId && memberHabitsMap.get(mId)) ||
-                      (mName && memberHabitsMap.get(mName)) ||
-                      [];
+        (mName && memberHabitsMap.get(mName)) ||
+        [];
 
       const matchingHabit = mHabits.find((h) => isHabitMatchingSharedGoal(h, sg));
       if (matchingHabit) {
@@ -616,8 +562,8 @@ async function formatGroupPodFromRow(row, sql = null) {
     const mId = m.id ? String(m.id) : null;
     const mName = m.username ? String(m.username).toLowerCase() : null;
     const mHabits = (mId && memberHabitsMap.get(mId)) ||
-                    (mName && memberHabitsMap.get(mName)) ||
-                    [];
+      (mName && memberHabitsMap.get(mName)) ||
+      [];
     let pct = m.todayPercent || 0;
     let streak = m.streak || 0;
     if (mHabits.length > 0) {
@@ -1180,8 +1126,8 @@ export default async function handler(req, res) {
                       const validPic = isValidProfilePicture(u.profile_picture)
                         ? u.profile_picture
                         : (isValidProfilePicture(parseSafeJson(u.preferences, {}).profilePicture)
-                            ? parseSafeJson(u.preferences, {}).profilePicture
-                            : (isValidProfilePicture(m.profilePicture) ? m.profilePicture : null));
+                          ? parseSafeJson(u.preferences, {}).profilePicture
+                          : (isValidProfilePicture(m.profilePicture) ? m.profilePicture : null));
                       return {
                         ...m,
                         username: u.username || m.username,
@@ -1218,9 +1164,9 @@ export default async function handler(req, res) {
         let formattedHabits = habits.map((h) => formatHabitFromRow(h, sql)).map((h) => {
           if (remoteHealthSteps > 0) {
             const isStep = (h.id || '').toLowerCase() === 'steps' ||
-                           (h.unit || '').toLowerCase() === 'steps' ||
-                           (h.name || '').toLowerCase().includes('step') ||
-                           (h.name || '').toLowerCase().includes('walk');
+              (h.unit || '').toLowerCase() === 'steps' ||
+              (h.name || '').toLowerCase().includes('step') ||
+              (h.name || '').toLowerCase().includes('walk');
             if (isStep && (Number(h.user1) || 0) < remoteHealthSteps) {
               return {
                 ...h,
@@ -1577,9 +1523,9 @@ export default async function handler(req, res) {
               let foundStepHabit = false;
               for (const h of userHabits) {
                 const isStep = (h.habit_id || '').toLowerCase() === 'steps' ||
-                               (h.unit || '').toLowerCase() === 'steps' ||
-                               (h.name || '').toLowerCase().includes('step') ||
-                               (h.name || '').toLowerCase().includes('walk');
+                  (h.unit || '').toLowerCase() === 'steps' ||
+                  (h.name || '').toLowerCase().includes('step') ||
+                  (h.name || '').toLowerCase().includes('walk');
                 if (isStep) {
                   foundStepHabit = true;
                   const existingHist2 = cleanHistory(h.history);
@@ -1714,15 +1660,15 @@ export default async function handler(req, res) {
           const userPrefs = cleanPreferences(user.preferences);
           user.preferences = userPrefs;
           try {
-            sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(userPrefs)}::jsonb WHERE id = ${user.id}`.catch(() => {});
-          } catch {}
+            sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(userPrefs)}::jsonb WHERE id = ${user.id}`.catch(() => { });
+          } catch { }
 
           // Ensure user has a distinct, unique secret code (upgrade legacy/missing/dummy codes)
           if (!user.secret_code || user.secret_code === 'DAY-1000' || user.secret_code === 'DBD-1000' || user.secret_code === 'DUO-1000') {
             user.secret_code = generateSecretCode(user.username);
             try {
-              sql`UPDATE daybyday_users SET secret_code = ${user.secret_code} WHERE id = ${user.id}`.catch(() => {});
-            } catch {}
+              sql`UPDATE daybyday_users SET secret_code = ${user.secret_code} WHERE id = ${user.id}`.catch(() => { });
+            } catch { }
           }
 
           const trackedCodes = Array.isArray(userPrefs.trackedPartnerCodes)
@@ -2041,44 +1987,86 @@ export default async function handler(req, res) {
 
           for (const h of habits) {
             const reminderDaysStr = Array.isArray(h.reminderDays) ? h.reminderDays.join(',') : (h.reminderDays || null);
-            const existingRow = existingMap.get(h.id);
             const existingHist = existingHistoryMap.get(h.id) || {};
             const incomingHist = cleanHistory(h.history);
-            const historyObj = cleanHistory([existingHist, incomingHist]);
             const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
-            const habitVal = h.user1 ?? h.todayValue ?? (historyObj[todayStr] !== undefined ? historyObj[todayStr] : 0);
-            const numOrBoolVal = isBool ? Boolean(habitVal) : (Number(habitVal) || 0);
+
+            // ── Date-Partitioned Ledger merge ────────────────────────────────────
+            // Merge rule for PAST dates: high-water mark (never diminish history).
+            // Merge rule for TODAY: determined below based on sync type.
+            // We build historyObj from past dates only first, then handle today explicitly.
+            const historyObj = {};
+            // 1. Seed with all existing past dates (DB is authoritative for history)
+            for (const [k, v] of Object.entries(existingHist)) {
+              if (k < todayStr) historyObj[k] = v;
+            }
+            // 2. Merge incoming past dates (high-water mark — never reduce history)
+            for (const [k, v] of Object.entries(incomingHist)) {
+              if (k < todayStr) {
+                const cur = historyObj[k];
+                const inNum = isBool ? (v ? 1 : 0) : (Number(v) || 0);
+                const curNum = cur !== undefined ? (isBool ? (cur ? 1 : 0) : (Number(cur) || 0)) : -1;
+                if (inNum > curNum) historyObj[k] = v;
+              }
+            }
 
             let todayValueToSave;
             let completedToSave;
 
             if (isPriorDaySync) {
-              // The incoming habit data is from clientActiveDate (yesterday or earlier).
-              historyObj[clientActiveDate] = numOrBoolVal;
-              if (historyObj[todayStr] === undefined) {
+              // ── Prior-day sync: client's active date was clientActiveDate (yesterday or earlier) ──
+              // Archive h.user1 under that prior date.
+              // Today's value: preserve whatever is already in the DB. Never create from prior data.
+              const priorVal = h.user1 !== undefined
+                ? (isBool ? Boolean(h.user1) : (Number(h.user1) || 0))
+                : (incomingHist[clientActiveDate] !== undefined
+                  ? (isBool ? Boolean(incomingHist[clientActiveDate]) : (Number(incomingHist[clientActiveDate]) || 0))
+                  : (isBool ? false : 0));
+              historyObj[clientActiveDate] = priorVal;
+
+              // Preserve today from existing DB; if absent → 0
+              const existingToday = existingHist[todayStr];
+              historyObj[todayStr] = existingToday !== undefined ? existingToday : (isBool ? false : 0);
+              const resolvedToday = historyObj[todayStr];
+              todayValueToSave = isBool ? (resolvedToday ? 1 : 0) : (Number(resolvedToday) || 0);
+              completedToSave = isBool ? Boolean(resolvedToday) : (Number(resolvedToday) || 0) >= (Number(h.target) || 1);
+
+            } else if (isExplicitEdit) {
+              // ── Explicit user action: trust incomingHist[todayStr], fallback to h.user1 ──
+              // This is the ONLY path where h.user1 is used as today's value.
+              let explicitVal;
+              if (incomingHist[todayStr] !== undefined) {
+                explicitVal = isBool ? Boolean(incomingHist[todayStr]) : (Number(incomingHist[todayStr]) || 0);
+              } else {
+                explicitVal = h.user1 !== undefined ? (isBool ? Boolean(h.user1) : (Number(h.user1) || 0)) : (isBool ? false : 0);
+              }
+              historyObj[todayStr] = explicitVal;
+              todayValueToSave = isBool ? (explicitVal ? 1 : 0) : explicitVal;
+              completedToSave = isBool ? Boolean(explicitVal) : (Number(explicitVal) || 0) >= (Number(h.target) || 1);
+
+            } else {
+              // ── Passive background sync (tab focus, app resume, polling) ──
+              // Rule: NEVER use h.user1 to create today's entry.
+              // Today = max(incomingHist[today], existingHist[today]) if both exist,
+              // or whichever exists, or 0 if neither.
+              const hasIncomingToday = incomingHist[todayStr] !== undefined;
+              const hasExistingToday = existingHist[todayStr] !== undefined;
+
+              if (hasIncomingToday && hasExistingToday) {
+                const inVal = isBool ? Boolean(incomingHist[todayStr]) : (Number(incomingHist[todayStr]) || 0);
+                const exVal = isBool ? Boolean(existingHist[todayStr]) : (Number(existingHist[todayStr]) || 0);
+                historyObj[todayStr] = isBool ? (inVal || exVal) : Math.max(inVal, exVal);
+              } else if (hasIncomingToday) {
+                historyObj[todayStr] = isBool ? Boolean(incomingHist[todayStr]) : (Number(incomingHist[todayStr]) || 0);
+              } else if (hasExistingToday) {
+                historyObj[todayStr] = isBool ? Boolean(existingHist[todayStr]) : (Number(existingHist[todayStr]) || 0);
+              } else {
                 historyObj[todayStr] = isBool ? false : 0;
               }
-              todayValueToSave = historyObj[todayStr] !== undefined ? (isBool ? (historyObj[todayStr] ? 1 : 0) : (Number(historyObj[todayStr]) || 0)) : (isBool ? false : 0);
-              completedToSave = isBool ? Boolean(todayValueToSave) : (Number(todayValueToSave) || 0) >= (Number(h.target) || 1);
-            } else {
-              todayValueToSave = isBool ? (numOrBoolVal ? 1 : 0) : numOrBoolVal;
-              completedToSave = Boolean(h.completed);
-              historyObj[todayStr] = todayValueToSave;
 
-              // NON-DOWNGRADE PROTECTION:
-              // If this is an automated background sync (not an explicit user edit),
-              // and the DB already has legitimate today's progress recorded from another device,
-              // do NOT let a stale background sync wipe that progress back to 0!
-              if (!isExplicitEdit && existingRow) {
-                const existingVal = isBool ? Boolean(existingRow.completed) : (Number(existingRow.today_value) || 0);
-                const hasExistingProgress = isBool ? existingVal : existingVal > 0;
-                const hasIncomingProgress = isBool ? numOrBoolVal : numOrBoolVal > 0;
-                if (hasExistingProgress && !hasIncomingProgress) {
-                  todayValueToSave = isBool ? (existingVal ? 1 : 0) : existingVal;
-                  completedToSave = Boolean(existingRow.completed);
-                  historyObj[todayStr] = todayValueToSave;
-                }
-              }
+              const resolvedToday = historyObj[todayStr];
+              todayValueToSave = isBool ? (resolvedToday ? 1 : 0) : (Number(resolvedToday) || 0);
+              completedToSave = isBool ? Boolean(resolvedToday) : (Number(resolvedToday) || 0) >= (Number(h.target) || 1);
             }
 
             await sql`
@@ -2834,7 +2822,7 @@ export default async function handler(req, res) {
                 prefCodes = uPrefs.groupPodCodes.filter(Boolean);
               }
             }
-          } catch {}
+          } catch { }
 
           const podCodeConds = prefCodes.length > 0
             ? sql`OR UPPER(code) IN ${sql(prefCodes.map((c) => c.toUpperCase()))}`
@@ -2870,8 +2858,8 @@ export default async function handler(req, res) {
                       const validPic = isValidProfilePicture(u.profile_picture)
                         ? u.profile_picture
                         : (isValidProfilePicture(parseSafeJson(u.preferences, {}).profilePicture)
-                            ? parseSafeJson(u.preferences, {}).profilePicture
-                            : (isValidProfilePicture(m.profilePicture) ? m.profilePicture : null));
+                          ? parseSafeJson(u.preferences, {}).profilePicture
+                          : (isValidProfilePicture(m.profilePicture) ? m.profilePicture : null));
                       return {
                         ...m,
                         username: u.username || m.username,
@@ -3054,17 +3042,17 @@ export default async function handler(req, res) {
             const memberProgress = { ...(g.memberProgress || {}) };
 
             if (userId) {
-              const foundMember = (pod.members || []).find(m => 
-                (m.id && String(m.id) === String(userId)) || 
+              const foundMember = (pod.members || []).find(m =>
+                (m.id && String(m.id) === String(userId)) ||
                 (m.username && m.username.toLowerCase() === String(userId).toLowerCase()) ||
                 (m.secretCode && m.secretCode.toUpperCase() === String(userId).toUpperCase()) ||
                 (m.secret_code && m.secret_code.toUpperCase() === String(userId).toUpperCase())
               );
 
               const currentMemberData = memberProgress[userId] ||
-                                        (foundMember && foundMember.id && memberProgress[foundMember.id]) ||
-                                        (foundMember && foundMember.username && memberProgress[foundMember.username]) ||
-                                        { value: 0, completed: false };
+                (foundMember && foundMember.id && memberProgress[foundMember.id]) ||
+                (foundMember && foundMember.username && memberProgress[foundMember.username]) ||
+                { value: 0, completed: false };
 
               let curMemberVal = 0;
               if (currentMemberData && typeof currentMemberData === 'object') {
@@ -3304,7 +3292,7 @@ export default async function handler(req, res) {
           });
           const loc = headRes.headers.get('location');
           if (loc) directCdnUrl = loc;
-        } catch {}
+        } catch { }
 
         return res.status(200).json({
           success: true,
@@ -3425,7 +3413,7 @@ export default async function handler(req, res) {
                 if (u.username) knownIds.add(u.username);
                 if (u.secret_code) knownIds.add(u.secret_code);
               }
-            } catch {}
+            } catch { }
           }
           const idsList = Array.from(knownIds).filter(Boolean);
 

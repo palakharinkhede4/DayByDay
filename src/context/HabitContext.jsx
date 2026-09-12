@@ -429,29 +429,12 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
     }
 
     const hasTodayEntry = history[targetDateKey] !== undefined;
-    let todayVal = 0;
-    if (hasTodayEntry) {
-      todayVal = isBool ? Boolean(history[targetDateKey]) : (Number(history[targetDateKey]) || 0);
-    } else if (isCurrentUser && !priorDateKey) {
-      todayVal = h.user1 !== undefined && h.user1 !== null ? (isBool ? Boolean(h.user1) : (Number(h.user1) || 0)) : (isBool ? false : 0);
-    } else {
-      // For remote partners or on day rollover, today strictly starts at 0!
-      todayVal = isBool ? false : 0;
-    }
-
-    // ── Carry-over guard (client side) ───────────────────────────────────────
-    // If today's value exactly matches yesterday's final count, this is stale
-    // data written by the sync loop (DB history["today"] = yesterday's steps).
-    // Reset to 0 so we never re-sync yesterday's number as today's value.
-    // This does NOT affect the history record for yesterday — that stays intact.
-    if (!isBool && isCurrentUser && isStep && todayVal > 0) {
-      const priorKey = priorDateKey || getIstYesterdayKey();
-      const yesterdayVal = Number(history[priorKey]) || 0;
-      if (yesterdayVal > 0 && todayVal === yesterdayVal) {
-        todayVal = 0;
-        history[targetDateKey] = 0;
-      }
-    }
+    // ── Date-Partitioned Ledger: history[targetDateKey] is the SOLE source of truth ──
+    // If the entry is absent, the user has not logged anything for this date → 0.
+    // We NEVER fall back to h.user1 (which may carry yesterday's synced value).
+    const todayVal = hasTodayEntry
+      ? (isBool ? Boolean(history[targetDateKey]) : (Number(history[targetDateKey]) || 0))
+      : (isBool ? false : 0);
 
     const isCompleted = isBool ? Boolean(todayVal) : (Number(todayVal) || 0) >= (Number(h.target) || 1);
     const streak = calculateConsecutiveStreak(history, h.target, isBool);
@@ -1030,6 +1013,53 @@ export const HabitProvider = ({ children }) => {
   }, [user]);
 
   const lastLocalEditTimeRef = useRef(0);
+
+  // Active Date-Partition Watcher
+  const currentDateKeyRef = useRef(getLocalDateKey());
+  useEffect(() => {
+    const checkDateChange = () => {
+      const nowKey = getLocalDateKey();
+      if (currentDateKeyRef.current !== nowKey) {
+        const oldKey = currentDateKeyRef.current;
+        currentDateKeyRef.current = nowKey;
+        lastActiveDateRef.current = nowKey;
+        try { localStorage.setItem('daybyday_last_active_date', nowKey); } catch {}
+        
+        setHabits(prev => {
+          const updated = getCleanDailyHabits(prev, nowKey, oldKey, true);
+          try { localStorage.setItem('daybyday_habits', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+
+        if (userRef.current?.id && !isCrossSyncingRef.current) {
+           syncUserHabitsRemote(userRef.current.id, habitsRef.current).catch(() => {});
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkDateChange, 1000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkDateChange();
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    
+    // Attempt to hook into Capacitor's appStateChange if available
+    let capListener = null;
+    if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+       window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+          if (state.isActive) checkDateChange();
+       }).then(l => { capListener = l; }).catch(() => {});
+    }
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+      if (capListener) capListener.remove();
+    };
+  }, []);
 
   // Beyond Today list
   const [beyondGoals, setBeyondGoals] = useState(() => {
@@ -2750,8 +2780,8 @@ export const HabitProvider = ({ children }) => {
     window.addEventListener('focus', checkDateOnWake);
     window.addEventListener('visibilitychange', checkDateOnWake);
 
-    // Heartbeat check every 30 seconds in case device slept through setTimeout
-    const heartbeat = setInterval(checkDateOnWake, 30000);
+    // Heartbeat: check every 1 second so midnight IST rollover is caught immediately
+    const heartbeat = setInterval(checkDateOnWake, 1000);
 
     return () => {
       if (midnightTimer) clearTimeout(midnightTimer);
@@ -4070,10 +4100,15 @@ export const HabitProvider = ({ children }) => {
     const updatedList = currentList.map((h) => {
       if (h.id !== habitId) return h;
 
-      let current = h[userId];
+      const currentHistory = cleanHistory(h.history);
+      const isBool = typeof h.user1 === 'boolean' || h.unit === 'check';
+      let current = currentHistory[todayKey];
+      if (current === undefined) {
+        current = isBool ? false : 0;
+      }
       let nextValue = current;
 
-      if (typeof current === 'boolean') {
+      if (isBool) {
         nextValue = isAbsolute ? amountOrValue : !current;
       } else {
         nextValue = isAbsolute ? amountOrValue : Math.max(0, (current || 0) + amountOrValue);
@@ -4088,8 +4123,6 @@ export const HabitProvider = ({ children }) => {
         extra[`${userId}Display`] = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
       }
 
-      // Maintain single-row history map: { "YYYY-MM-DD": value }
-      const currentHistory = cleanHistory(h.history);
       currentHistory[todayKey] = nextValue;
       const isStep = (h.id || '').toLowerCase() === 'steps' || (h.unit || '').toLowerCase() === 'steps';
       if (isStep && Number(nextValue) > 0) {
