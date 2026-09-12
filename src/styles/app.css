@@ -13143,3 +13143,13 @@ button:active {
   border-radius: 6px;
 }
 
+
+/* Light mode inputs fix */
+[data-theme-mode=light] .form-input, [data-theme-mode=light] .time-input {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme-mode=light] .form-input::placeholder {
+  color: #94a3b8 !important;
+}

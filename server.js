@@ -14,6 +14,8 @@ import userHandler, { cleanPreferences, isValidProfilePicture } from './api/user
 import activityHandler from './api/activity.js';
 import podHandler from './api/pod.js';
 import { getDb, ensureTables } from './api/db.js';
+import { handleSubscription } from './api/push.js';
+import { startScheduler } from './api/scheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -109,6 +111,8 @@ app.all('/api/pod', async (req, res) => {
   }
 });
 
+app.post('/api/push/subscribe', handleSubscription);
+
 // Serve frontend static build (SPA)
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
@@ -133,6 +137,9 @@ app.listen(PORT, '0.0.0.0', async () => {
       console.log('Pre-warming PostgreSQL connection & ensuring tables...');
       await ensureTables();
       console.log('PostgreSQL tables ensured and ready.');
+
+      // Start the notification scheduler
+      startScheduler();
 
       // Universal Auto-Heal: Profile picture restoration, tracked partners recovery, and preference cleanup
       try {

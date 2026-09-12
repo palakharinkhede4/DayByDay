@@ -1,7 +1,7 @@
 {
   "name": "daybyday",
   "private": true,
-  "version": "4.14.0",
+  "version": "4.15.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,14 +17,17 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.5.1",
     "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/push-notifications": "^8.1.2",
     "@neondatabase/serverless": "^1.1.0",
     "canvas-confetti": "^1.9.4",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "firebase-admin": "^14.4.0",
     "lucide-react": "^1.41.0",
     "postgres": "^3.4.9",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

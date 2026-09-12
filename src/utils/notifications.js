@@ -340,6 +340,7 @@ export async function syncHabitScheduledReminders(habits) {
             hour,
             minute,
           },
+          every: 'day',
           allowWhileIdle: true,
         },
         autoCancel: true,

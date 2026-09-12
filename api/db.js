@@ -152,6 +152,25 @@ export async function ensureTables(force = false) {
         CREATE INDEX IF NOT EXISTS idx_daybyday_cheers_created ON daybyday_cheers(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_daybyday_activity_pod ON daybyday_activity(pod_code, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_daybyday_activity_user ON daybyday_activity(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS push_subscriptions ( 
+          id VARCHAR(48) PRIMARY KEY, 
+          user_id VARCHAR(48) NOT NULL REFERENCES daybyday_users(id) ON DELETE CASCADE, 
+          platform VARCHAR(32) NOT NULL CHECK (platform IN ('ios_web', 'android')), 
+          provider VARCHAR(32) NOT NULL CHECK (provider IN ('webpush', 'fcm')), 
+          endpoint TEXT, 
+          p256dh TEXT, 
+          auth TEXT, 
+          fcm_token TEXT, 
+          device_id VARCHAR(64), 
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, 
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          last_success_at TIMESTAMPTZ, 
+          last_failure_at TIMESTAMPTZ, 
+          disabled_at TIMESTAMPTZ 
+        ); 
+        CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id); 
+        CREATE INDEX IF NOT EXISTS idx_push_subscriptions_active ON push_subscriptions(user_id) WHERE disabled_at IS NULL;
       `);
 
       tablesInitialized = true;

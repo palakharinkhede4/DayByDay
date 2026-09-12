@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import confetti from 'canvas-confetti';
 import { sound } from '../utils/sound';
 import { sanitizeInput, exportLocalBackup, parseLocalBackup, wipeLocalData } from '../utils/security';
+import { registerPushNotifications } from '../utils/pushNotifications';
 import {
   fetchRemotePod,
   pushHabitUpdate,
@@ -666,6 +667,12 @@ export const HabitProvider = ({ children }) => {
     } catch (e) { }
     return null; // Triggers OnboardingModal if null
   });
+
+  useEffect(() => {
+    if (user?.id) {
+      registerPushNotifications(user.id);
+    }
+  }, [user?.id]);
 
   // Flag to avoid modal flicker while querying IndexedDB Vault if localStorage was cleared
   const [isSessionRestoring, setIsSessionRestoring] = useState(() => {
@@ -1577,6 +1584,9 @@ export const HabitProvider = ({ children }) => {
 
     try {
       const remoteData = await fetchUserRemote(activeUser.username);
+      // Re-check after await to prevent race condition where local edit happened during fetch
+      if (!force && Date.now() - lastLocalEditTimeRef.current < 1500) return;
+
       if (remoteData?.habits && Array.isArray(remoteData.habits) && remoteData.habits.length > 0) {
         const todayKey = getLocalDateKey();
         const currentLocalHabits = (habitsRef.current && habitsRef.current.length) ? habitsRef.current : [];
@@ -1608,6 +1618,15 @@ export const HabitProvider = ({ children }) => {
             history: cleanHistory([locHist, healthHist, remHist], todayKey),
           };
         });
+
+        // Preserve unmerged local habits that were created but haven't reached the server yet
+        if (isRecentlyEditedLocally) {
+          const unmergedLocalHabits = currentLocalHabits.filter((lh) => !remoteData.habits.some((rh) => rh.id === lh.id));
+          if (unmergedLocalHabits.length > 0) {
+            mergedRemoteHabits.push(...unmergedLocalHabits);
+          }
+        }
+
         const cleanRemote = getCleanDailyHabits(mergedRemoteHabits, todayKey);
 
         const hasChanges = cleanRemote.some((ch) => {
@@ -1742,7 +1761,8 @@ export const HabitProvider = ({ children }) => {
       });
     };
 
-    const reminderTimer = setInterval(checkScheduledReminders, 25000);
+    // Reduced interval to 3 seconds for faster notifications
+    const reminderTimer = setInterval(checkScheduledReminders, 3000);
     checkScheduledReminders();
     return () => clearInterval(reminderTimer);
   }, [habits]);
@@ -4446,6 +4466,11 @@ export const HabitProvider = ({ children }) => {
     const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
     if (granted && !isNative) {
       getOrRegisterServiceWorker().catch(() => {});
+    }
+    
+    // Register backend push tokens if granted
+    if (granted && userRef.current?.id) {
+      registerPushNotifications(userRef.current.id);
     }
     return granted;
   };
