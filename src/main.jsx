@@ -1,4 +1,4 @@
-﻿import { StrictMode } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/index.css'
 import App from './App.jsx'
@@ -11,6 +11,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   const isNative = window.Capacitor?.isNativePlatform?.() ?? false;
   if (!isNative) {
     getOrRegisterServiceWorker();
+  } else {
+    document.documentElement.classList.add('capacitor-native');
   }
 }
 

@@ -606,11 +606,49 @@ export const syncHealthDataToHabitsAndPod = async ({
 
     const isManual = Boolean(healthData.isManualOverride || healthData.source === 'manual_entry');
 
-    // USER SUPREMACY GUARD: If the user manually edited steps today,
-    // background sensor sync MUST NEVER overwrite their explicit input!
+    // USER SUPREMACY — DELTA MODE:
+    // If the user manually edited steps today, we do NOT let the sensor replace their value.
+    // Instead, we compute how many NEW steps the sensor counted SINCE the manual edit,
+    // and add only that delta on top of the manual baseline.
+    //
+    // Example: User sets 100 manually → walks 50 more → sensor total becomes 150 → delta = 50 → shown = 150.
+    // Example: User sets 0 manually → walks 50 → sensor total = 50 → delta = 50 → shown = 50.
     const manualStepsDate = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_date') : null;
     const isUserManualLocked = (manualStepsDate === todayKey);
     if (!isManual && isUserManualLocked && (metric === 'steps' || h.id === 'steps')) {
+      const rawManualBase = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_value') : null;
+      const rawSensorAtEdit = typeof window !== 'undefined' ? localStorage.getItem('daybyday_manual_steps_sensor_at_edit') : null;
+      const manualBase = rawManualBase !== null ? Number(rawManualBase) : null;
+      // sensorAtEdit: the raw sensor total that was captured when the user made their manual edit.
+      // If missing (legacy), fall back to manualBase for backward compat.
+      const sensorAtEdit = rawSensorAtEdit !== null ? Number(rawSensorAtEdit) : manualBase;
+
+      if (manualBase !== null && sensorAtEdit !== null) {
+        // CORRECT DELTA FORMULA:
+        //   sensorAtEdit = raw sensor reading when user typed their value (e.g. 2806)
+        //   targetVal    = raw sensor reading NOW (e.g. 2856)
+        //   delta        = new physical steps since edit     (e.g. 50)
+        //   display      = userTypedValue + delta            (e.g. 100 + 50 = 150)
+        //
+        // This makes "set to 100, walk 50 → sensor goes from 2806→2856 → delta=50 → shows 150" work.
+        const delta = Math.max(0, targetVal - sensorAtEdit);
+        const currentHabitVal = Number(h.history?.[todayKey]) || 0;
+        const newVal = manualBase + delta;
+        if (delta > 0) {
+          // Advance the sensor floor so next sync only counts NEW steps from here
+          try {
+            localStorage.setItem('daybyday_manual_steps_sensor_at_edit', String(targetVal));
+            localStorage.setItem('daybyday_manual_steps_value', String(newVal));
+          } catch {}
+          if (newVal !== currentHabitVal && typeof onUpdateHabit === 'function') {
+            onUpdateHabit(h.id, activeUserId, newVal, true, silent);
+            updatedHabitsCount++;
+          }
+        }
+        // Sensor hasn't moved beyond the baseline yet — no update needed
+        continue;
+      }
+      // No stored baseline — fall through to standard guard below
       continue;
     }
 

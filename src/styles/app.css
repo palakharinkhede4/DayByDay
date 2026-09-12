@@ -350,6 +350,10 @@ html, body {
   z-index: 100;
 }
 
+.capacitor-native .mobile-ios-island-bar {
+  padding-top: max(env(safe-area-inset-top, 24px) + 0.5rem, 2.5rem);
+}
+
 .dynamic-island-wrapper {
   position: relative;
   display: flex;
@@ -1780,6 +1784,10 @@ html, body {
 .bottom-navigation-bar.android {
   background: var(--bg-surface-container);
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 6px);
+}
+
+.capacitor-native .bottom-navigation-bar.android {
+  padding-bottom: max(env(safe-area-inset-bottom, 24px), 24px);
 }
 
 .nav-inner {

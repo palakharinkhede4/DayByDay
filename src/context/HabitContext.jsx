@@ -411,6 +411,9 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
       try {
         const healthHist = getStoredHealthHistory();
         for (const [d, s] of Object.entries(healthHist)) {
+          // BUG1 FIX: NEVER inject health history into today's slot — today must start clean.
+          // The Date-Partitioned Ledger owns today. Sensor history only fills past dates.
+          if (d === targetDateKey) continue;
           const sNum = Number(s) || 0;
           if (sNum > 0 && (!history[d] || Number(history[d]) === 0)) {
             history[d] = sNum;
@@ -421,7 +424,8 @@ export function getCleanDailyHabits(rawHabits, targetDateKey = getLocalDateKey()
           const yObj = JSON.parse(rawY);
           const yDate = (yObj.date && /^\d{4}-\d{2}-\d{2}$/.test(yObj.date)) ? yObj.date : getIstYesterdayKey();
           const ySteps = Number(yObj.steps) || 0;
-          if (ySteps > 0 && (!history[yDate] || Number(history[yDate]) === 0)) {
+          // BUG1 FIX: Also guard yesterday key — it might equal today if clock drift occurs.
+          if (yDate !== targetDateKey && ySteps > 0 && (!history[yDate] || Number(history[yDate]) === 0)) {
             history[yDate] = ySteps;
           }
         }
@@ -1350,7 +1354,12 @@ export const HabitProvider = ({ children }) => {
                   const locHist = localHistoryMap.get(rh.id) || {};
                   const remHist = cleanHistory(rh.history);
                   const isStep = (rh.id || '').toLowerCase() === 'steps' || (rh.unit || '').toLowerCase() === 'steps';
-                  const healthHist = isStep ? getStoredHealthHistory() : {};
+                  // BUG2 FIX: Strip todayKey from healthHist before merging.
+                  // If the Android sensor wrote history["2026-09-12"] = 2806 before midnight,
+                  // passing it to cleanHistory would overwrite today's clean 0 via "latest wins" rule.
+                  const rawHealthHist = isStep ? getStoredHealthHistory() : {};
+                  const healthHist = { ...rawHealthHist };
+                  delete healthHist[todayKey];
                   return {
                     ...rh,
                     history: cleanHistory([locHist, healthHist, remHist], todayKey),
@@ -1579,7 +1588,10 @@ export const HabitProvider = ({ children }) => {
           const locHist = localHistoryMap.get(rh.id) || {};
           const remHist = cleanHistory(rh.history);
           const isStep = (rh.id || '').toLowerCase() === 'steps' || (rh.unit || '').toLowerCase() === 'steps';
-          const healthHist = isStep ? getStoredHealthHistory() : {};
+          // BUG2 FIX: Strip todayKey from healthHist before merging (live sync path).
+          const rawHealthHist = isStep ? getStoredHealthHistory() : {};
+          const healthHist = { ...rawHealthHist };
+          delete healthHist[todayKey];
 
           // If local client recently changed reminders or targets, protect them from older remote snapshots
           const reminderTime = (isRecentlyEditedLocally && locHabit?.reminderTime !== undefined)
@@ -2651,6 +2663,9 @@ export const HabitProvider = ({ children }) => {
         if (isStep) {
           const healthHist = getStoredHealthHistory();
           for (const [d, s] of Object.entries(healthHist)) {
+            // BUG1b FIX: NEVER fill today's slot from health history during midnight rollover.
+            // Today starts at 0. The sensor will write the correct value on next sync.
+            if (d === todayKey) continue;
             const sNum = Number(s) || 0;
             if (sNum > 0 && (!history[d] || Number(history[d]) === 0)) {
               history[d] = sNum;
@@ -2695,6 +2710,12 @@ export const HabitProvider = ({ children }) => {
     });
 
     // Reset healthStats for the new day
+    // Also clear manual step lock so the new day starts fresh (no stale baseline from yesterday)
+    try {
+      localStorage.removeItem('daybyday_manual_steps_date');
+      localStorage.removeItem('daybyday_manual_steps_value');
+      localStorage.removeItem('daybyday_manual_steps_sensor_at_edit');
+    } catch {}
     setHealthStats((prev) => {
       if (prev && (prev.steps > 0 || prev.calories > 0)) {
         try {
@@ -4210,6 +4231,15 @@ export const HabitProvider = ({ children }) => {
           if (isUserEdit) {
             try {
               localStorage.setItem('daybyday_manual_steps_date', todayKey);
+              // Store what the USER typed (their authoritative baseline for display).
+              localStorage.setItem('daybyday_manual_steps_value', String(steps));
+              // ALSO store the current raw sensor total as the "sensor floor" for delta-mode.
+              // Delta-mode in fitnessSync will compute:
+              //   delta = newSensorReading - sensorAtEditTime
+              //   newDisplayValue = userTypedValue + delta
+              // This makes "set to 100, walk 50 → sensor goes from 2806→2856 → delta=50 → shows 150".
+              const currentSensorTotal = healthStats?.steps ?? steps;
+              localStorage.setItem('daybyday_manual_steps_sensor_at_edit', String(currentSensorTotal));
             } catch {}
           }
           const healthPayload = {
