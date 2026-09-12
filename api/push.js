@@ -54,6 +54,14 @@ export async function sendFCM(fcmToken, payload) {
         title: payload.title,
         body: payload.body
       },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'daybyday_reminders',
+          icon: 'ic_stat_flame',
+          sound: 'default'
+        }
+      },
       data: payload.data || {}
     });
     return { success: true };

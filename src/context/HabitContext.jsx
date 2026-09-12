@@ -4473,7 +4473,7 @@ export const HabitProvider = ({ children }) => {
     
     // Register backend push tokens if granted
     if (granted && userRef.current?.id) {
-      registerPushNotifications(userRef.current.id);
+      registerPushNotifications(userRef.current.id, true);
     }
     return granted;
   };

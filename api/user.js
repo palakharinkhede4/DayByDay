@@ -1,6 +1,7 @@
 // Vercel Serverless Function: User Accounts, Authentication, Security Questions & Partner Pairing
 import crypto from 'crypto';
 import { getDb, ensureTables, memoryDb, isTablesInitialized } from './db.js';
+import { sendNotification } from './push.js';
 
 function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(String(password), String(salt), 1000, 32, 'sha256').toString('hex');
@@ -3380,6 +3381,16 @@ export default async function handler(req, res) {
           goal_name: goalName,
           is_read: false,
         });
+
+        // Trigger Real-Time Push Notification
+        if (finalToId && finalToId !== 'teammate') {
+          // Fire and forget, don't await blocking response
+          sendNotification(finalToId, {
+            title: 'DayByDay Encouragement ??',
+            body: cheerMessage,
+            data: { url: '/' }
+          }).catch(err => console.warn('Failed to dispatch cheer push:', err.message));
+        }
 
         return res.status(200).json({ success: true, message: 'Encouragement delivered!' });
       } catch (err) {

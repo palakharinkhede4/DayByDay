@@ -20,7 +20,7 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-export async function registerPushNotifications(userId) {
+export async function registerPushNotifications(userId, isInteractive = false) {
   if (!userId) return;
 
   try {
@@ -60,6 +60,7 @@ export async function registerPushNotifications(userId) {
       let subscription = await registration.pushManager.getSubscription();
       
       if (!subscription) {
+        if (!isInteractive) return; // iOS Safari blocks subscribe() unless directly inside a user tap event
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
