@@ -3,11 +3,22 @@ import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { getDb } from './db.js';
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || 'mailto:palakharinkhede1@gmail.com',
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+let vapidInitialized = false;
+
+function initVapid() {
+  if (vapidInitialized) return true;
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn('Web Push keys not set. Web pushes will fail.');
+    return false;
+  }
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:palakharinkhede1@gmail.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+  vapidInitialized = true;
+  return true;
+}
 
 let messaging;
 try {
@@ -18,6 +29,7 @@ try {
 }
 
 export async function sendWebPush(subscription, payload) {
+  if (!initVapid()) return { success: false, error: new Error('VAPID not configured') };
   try {
     const pushSub = {
       endpoint: subscription.endpoint,
