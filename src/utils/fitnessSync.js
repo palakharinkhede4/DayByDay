@@ -284,7 +284,8 @@ export const importDeviceHealthStats = async (user = null, hintSteps = 0) => {
     // 2. Native Android Hardware Step Counter via Capacitor Plugin
     if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync) {
       const existingStored = getStoredHealthData() || {};
-      const calculatedHint = Math.max(0, Number(hintSteps) || Number(existingStored.steps) || 0);
+      const hintValue = hintSteps !== undefined && hintSteps !== null ? Number(hintSteps) : Number(existingStored.steps);
+      const calculatedHint = Math.max(0, !isNaN(hintValue) ? hintValue : 0);
       const stats = await window.Capacitor.Plugins.FitnessSync.getFitnessStats({ currentSteps: calculatedHint });
       if (stats && stats.success) {
         const steps = Math.max(0, Number(stats.steps) || 0);
