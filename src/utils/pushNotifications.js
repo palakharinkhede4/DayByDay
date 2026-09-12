@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { getApiBaseUrl } from '../api.js';
+import { getApiBaseUrl } from './api.js';
 import { requestIgnoreBatteryOptimization } from './notifications.js';
 
 const VAPID_PUBLIC_KEY = 'BBluDIIVxB9g-I9SbgJy_Z0eJODvpBLjs-otPdzdNzBrM4Ezl6OROaozgRreotkvouGnSOvpacFqifLwplUf7_c';
