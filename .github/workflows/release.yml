@@ -67,12 +67,39 @@ jobs:
       - name: Sync Web Assets to Capacitor Android
         run: npx cap sync android
 
+      - name: Create google-services.json from Secret
+        shell: bash
+        env:
+          FIREBASE_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          
+          data = os.environ.get("FIREBASE_GOOGLE_SERVICES_JSON")
+          if data:
+              Path("android/app/google-services.json").write_text(
+                  data,
+                  encoding="utf-8"
+              )
+          else:
+              print("::error::FIREBASE_GOOGLE_SERVICES_JSON is empty or not set!")
+              exit(1)
+          PY
+
+      - name: Verify google-services.json exists
+        run: test -f android/app/google-services.json
+
       - name: Build Android Release APK with Gradle
         run: |
           chmod +x android/gradlew
           cd android
           ./gradlew assembleRelease --no-daemon
           cd ..
+
+      - name: Cleanup temporary credentials
+        if: always()
+        run: rm -f android/app/google-services.json
 
       - name: Extract Version & Check If New Release Needed
         id: versioning
