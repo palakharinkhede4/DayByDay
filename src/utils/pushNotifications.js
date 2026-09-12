@@ -42,7 +42,8 @@ export async function registerPushNotifications(userId) {
               userId,
               platform: 'android',
               provider: 'fcm',
-              fcmToken: token.value
+              fcmToken: token.value,
+              timezoneOffset: new Date().getTimezoneOffset()
             })
           });
         });
@@ -74,7 +75,8 @@ export async function registerPushNotifications(userId) {
           platform: 'ios_web',
           provider: 'webpush',
           endpoint: subJSON.endpoint,
-          keys: subJSON.keys
+          keys: subJSON.keys,
+          timezoneOffset: new Date().getTimezoneOffset()
         })
       });
     }

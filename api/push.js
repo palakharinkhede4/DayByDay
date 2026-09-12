@@ -97,7 +97,7 @@ export async function handleSubscription(req, res) {
   const sql = getDb();
   if (!sql) return res.status(500).json({ error: 'Database not available' });
 
-  const { userId, platform, provider, endpoint, keys, fcmToken, deviceId } = req.body;
+  const { userId, platform, provider, endpoint, keys, fcmToken, deviceId, timezoneOffset } = req.body;
 
   if (!userId || !platform || !provider) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -110,20 +110,20 @@ export async function handleSubscription(req, res) {
     if (provider === 'webpush' && endpoint) {
       const existing = await sql`SELECT id FROM push_subscriptions WHERE endpoint = ${endpoint} AND user_id = ${userId}`;
       if (existing.length > 0) {
-        await sql`UPDATE push_subscriptions SET disabled_at = NULL, updated_at = NOW() WHERE id = ${existing[0].id}`;
+        await sql`UPDATE push_subscriptions SET disabled_at = NULL, updated_at = NOW(), timezone_offset = ${timezoneOffset || 0} WHERE id = ${existing[0].id}`;
         return res.json({ success: true, id: existing[0].id });
       }
     } else if (provider === 'fcm' && fcmToken) {
       const existing = await sql`SELECT id FROM push_subscriptions WHERE fcm_token = ${fcmToken} AND user_id = ${userId}`;
       if (existing.length > 0) {
-        await sql`UPDATE push_subscriptions SET disabled_at = NULL, updated_at = NOW() WHERE id = ${existing[0].id}`;
+        await sql`UPDATE push_subscriptions SET disabled_at = NULL, updated_at = NOW(), timezone_offset = ${timezoneOffset || 0} WHERE id = ${existing[0].id}`;
         return res.json({ success: true, id: existing[0].id });
       }
     }
 
     await sql`
-      INSERT INTO push_subscriptions (id, user_id, platform, provider, endpoint, p256dh, auth, fcm_token, device_id)
-      VALUES (${id}, ${userId}, ${platform}, ${provider}, ${endpoint || null}, ${keys?.p256dh || null}, ${keys?.auth || null}, ${fcmToken || null}, ${deviceId || null})
+      INSERT INTO push_subscriptions (id, user_id, platform, provider, endpoint, p256dh, auth, fcm_token, device_id, timezone_offset)
+      VALUES (${id}, ${userId}, ${platform}, ${provider}, ${endpoint || null}, ${keys?.p256dh || null}, ${keys?.auth || null}, ${fcmToken || null}, ${deviceId || null}, ${timezoneOffset || 0})
     `;
     return res.json({ success: true, id });
   } catch (err) {

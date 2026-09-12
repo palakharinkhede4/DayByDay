@@ -14,21 +14,22 @@ export function startScheduler() {
     if (!sql) return;
 
     try {
-      const now = new Date();
-      const h = String(now.getHours()).padStart(2, '0');
-      const m = String(now.getMinutes()).padStart(2, '0');
-      const currentTime = `${h}:${m}`;
-      
-      const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-      const currentDay = days[now.getDay()];
-
-      // Find all habits that are due right now and haven't been completed today
-      // Wait, we can just notify all due habits, user clicks and opens app.
+      // Calculate the local time dynamically for each user based on their timezone_offset
+      // JS getTimezoneOffset() returns (UTC - Local) in minutes. So Local = UTC - timezone_offset.
       const dueHabits = await sql`
-        SELECT user_id, name, target, unit
-        FROM daybyday_habits 
-        WHERE reminder_time = ${currentTime}
-          AND (reminder_days IS NULL OR reminder_days = '' OR reminder_days LIKE ${'%' + currentDay + '%'})
+        SELECT DISTINCT h.user_id, h.name, h.target, h.unit
+        FROM daybyday_habits h
+        JOIN push_subscriptions ps ON h.user_id = ps.user_id
+        WHERE ps.disabled_at IS NULL
+          AND h.reminder_time = to_char(
+              (NOW() AT TIME ZONE 'UTC') - (ps.timezone_offset * INTERVAL '1 minute'),
+              'HH24:MI'
+          )
+          AND (
+              h.reminder_days IS NULL 
+              OR h.reminder_days = '' 
+              OR h.reminder_days ILIKE '%' || lower(trim(to_char((NOW() AT TIME ZONE 'UTC') - (ps.timezone_offset * INTERVAL '1 minute'), 'Dy'))) || '%'
+          )
       `;
 
       // Group by user_id to avoid sending 5 notifications if 5 habits are due at the exact same time

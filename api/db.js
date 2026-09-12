@@ -163,12 +163,14 @@ export async function ensureTables(force = false) {
           auth TEXT, 
           fcm_token TEXT, 
           device_id VARCHAR(64), 
+          timezone_offset INT DEFAULT 0,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, 
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           last_success_at TIMESTAMPTZ, 
           last_failure_at TIMESTAMPTZ, 
           disabled_at TIMESTAMPTZ 
         ); 
+        ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS timezone_offset INT DEFAULT 0;
         CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id); 
         CREATE INDEX IF NOT EXISTS idx_push_subscriptions_active ON push_subscriptions(user_id) WHERE disabled_at IS NULL;
       `);

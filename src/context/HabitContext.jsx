@@ -1676,7 +1676,10 @@ export const HabitProvider = ({ children }) => {
 
             if (remoteData.lastUpdatedBy && remoteData.lastUpdatedBy !== activeUserId) {
               if (remoteData.habits && remoteData.habits.length) {
-                setHabits(remoteData.habits);
+                // Prevent vanishing habits bug: Don't let Pod Sync overwrite local habits if user JUST added one
+                if (Date.now() - lastLocalEditTimeRef.current > 2500) {
+                  setHabits(remoteData.habits);
+                }
               }
               if (remoteData.lastActivity) {
                 triggerIslandNotification(remoteData.lastActivity, 'flame');
