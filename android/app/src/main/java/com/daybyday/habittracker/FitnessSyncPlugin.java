@@ -215,14 +215,19 @@ public class FitnessSyncPlugin extends Plugin {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String today = getIstToday();
 
-        int baselineSteps = prefs.getInt(KEY_BASELINE_STEPS, -1);
         int currentTotalLast = prefs.getInt(KEY_LAST_STEPS, 0);
         int currentOffset = prefs.getInt(KEY_MANUAL_OFFSET, 0);
-        int rawSensorSteps = Math.max(0, currentTotalLast - currentOffset);
-        int newOffset = targetSteps - rawSensorSteps;
+        int currentBaseline = Math.max(0, prefs.getInt(KEY_BASELINE_STEPS, 0));
+        
+        // Infer the current hardware sensor steps from the known formula variables
+        int inferredHardwareSteps = Math.max(0, currentTotalLast + currentBaseline - currentOffset);
+
+        int newBaseline = inferredHardwareSteps;
+        int newOffset = targetSteps;
 
         prefs.edit()
             .putString(KEY_BASELINE_DATE, today)
+            .putInt(KEY_BASELINE_STEPS, newBaseline)
             .putInt(KEY_MANUAL_OFFSET, newOffset)
             .putInt(KEY_LAST_STEPS, targetSteps)
             .apply();
@@ -233,6 +238,7 @@ public class FitnessSyncPlugin extends Plugin {
         ret.put("success", true);
         ret.put("calibratedSteps", targetSteps);
         ret.put("offset", newOffset);
+        ret.put("baseline", newBaseline);
         call.resolve(ret);
     }
 

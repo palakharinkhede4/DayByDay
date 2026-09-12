@@ -1489,6 +1489,8 @@ export default async function handler(req, res) {
           distanceKm: cleanDistance,
           source: healthData.source || 'fitness_sync',
           syncedAt: new Date().toISOString(),
+          isManualOverride: typeof healthData.isManualOverride === 'boolean' ? healthData.isManualOverride : undefined,
+          manualOverrideDate: typeof healthData.manualOverrideDate === 'string' ? healthData.manualOverrideDate : undefined,
         };
 
         if (sql) {
