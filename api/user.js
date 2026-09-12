@@ -221,6 +221,8 @@ export function cleanPreferences(raw) {
       activeCalories: Number(cur.healthData.activeCalories) || 0,
       distanceKm: Number(cur.healthData.distanceKm) || 0,
       syncedAt: typeof cur.healthData.syncedAt === 'string' ? cur.healthData.syncedAt : null,
+      isManualOverride: typeof cur.healthData.isManualOverride === 'boolean' ? cur.healthData.isManualOverride : undefined,
+      manualOverrideDate: typeof cur.healthData.manualOverrideDate === 'string' ? cur.healthData.manualOverrideDate : undefined,
     };
   }
   if (Array.isArray(cur.customCategories)) {
@@ -729,6 +731,8 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
     distanceKm: isToday ? distanceKm : 0,
     source: healthPayload.source || 'apple_health',
     syncedAt: healthPayload.syncedAt || new Date().toISOString(),
+    isManualOverride: healthPayload.isManualOverride,
+    manualOverrideDate: healthPayload.manualOverrideDate,
   };
 
   if (sql && targetUser?.id) {

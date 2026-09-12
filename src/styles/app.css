@@ -4567,6 +4567,10 @@ button:active {
   -webkit-backdrop-filter: none;
 }
 
+.capacitor-native .mobile-app-header {
+  padding-top: max(env(safe-area-inset-top, 28px) + 0.45rem, 2.25rem);
+}
+
 [data-theme-mode="light"] .mobile-app-header {
   background: #FFFFFF !important;
   border-bottom: 1px solid #E2E8F0 !important;
