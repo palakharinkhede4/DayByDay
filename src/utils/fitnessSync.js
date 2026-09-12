@@ -318,6 +318,7 @@ export const importDeviceHealthStats = async (user = null, hintSteps = 0) => {
           distanceKm: Number(stats.distanceKm) || Math.round(steps * 0.000762 * 100) / 100,
           source: stats.source || 'android_step_counter',
           syncedAt: new Date().toISOString(),
+          date: stats.date || todayKey,
           yesterdaySteps: stats.yesterdaySteps || 0,
           yesterdayDate: stats.yesterdayDate || null,
           history: healthHist,
@@ -581,6 +582,13 @@ export const syncHealthDataToHabitsAndPod = async ({
   if (!healthData || typeof healthData !== 'object') return null;
 
   const todayKey = getIstDateKey();
+  
+  // If healthData explicitly has a date that doesn't match today, it's stale sensor data. Reject it.
+  if (healthData.date && healthData.date !== todayKey) {
+    console.log('Skipping sync: healthData.date is past date', healthData.date, 'today is', todayKey);
+    return null;
+  }
+  
   // If healthData has a syncedAt from prior date, skip syncing to today's habits
   if (healthData.syncedAt) {
     const syncDate = getIstDateKey(new Date(healthData.syncedAt));

@@ -51,6 +51,12 @@ public class FitnessSyncPlugin extends Plugin {
     private Sensor stepCounterSensor;
     private Sensor stepDetectorSensor;
 
+    private String getIstToday() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));
+        return sdf.format(new Date());
+    }
+
     private synchronized void updateStepHistory(SharedPreferences prefs, String date, int steps) {
         if (prefs == null || date == null || date.isEmpty() || steps <= 0) return;
         try {
@@ -107,7 +113,7 @@ public class FitnessSyncPlugin extends Plugin {
         if (context == null) return;
 
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+        String today = getIstToday();
         String savedDate = prefs.getString(KEY_BASELINE_DATE, "");
 
         if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
@@ -207,7 +213,7 @@ public class FitnessSyncPlugin extends Plugin {
             return;
         }
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+        String today = getIstToday();
 
         int baselineSteps = prefs.getInt(KEY_BASELINE_STEPS, -1);
         int currentTotalLast = prefs.getInt(KEY_LAST_STEPS, 0);
@@ -294,7 +300,7 @@ public class FitnessSyncPlugin extends Plugin {
         }
 
         final SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        final String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+        final String today = getIstToday();
         final String savedDate = prefs.getString(KEY_BASELINE_DATE, "");
 
         if (stepSensor == null) {

@@ -4240,6 +4240,16 @@ export const HabitProvider = ({ children }) => {
               // This makes "set to 100, walk 50 → sensor goes from 2806→2856 → delta=50 → shows 150".
               const currentSensorTotal = healthStats?.steps ?? steps;
               localStorage.setItem('daybyday_manual_steps_sensor_at_edit', String(currentSensorTotal));
+              
+              // Prevent race condition: asynchronously fetch true native sensor value
+              if (window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.FitnessSync?.getFitnessStats) {
+                window.Capacitor.Plugins.FitnessSync.getFitnessStats({ currentSteps: 0 })
+                  .then(stats => {
+                    const trueNativeSteps = Number(stats?.steps) || 0;
+                    localStorage.setItem('daybyday_manual_steps_sensor_at_edit', String(trueNativeSteps));
+                  })
+                  .catch(() => {});
+              }
             } catch {}
           }
           const healthPayload = {
