@@ -128,11 +128,32 @@ jobs:
 
       - name: Publish or Update GitHub Release
         run: |
-          gh release create ${{ steps.versioning.outputs.APP_TAG }} \
-            DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk \
-            --title "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
-            --notes "New release for DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
-            --target ${{ github.sha }}
+          TAG="${{ steps.versioning.outputs.APP_TAG }}"
+          APK="DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk"
+
+          echo "Checking tag..."
+          git fetch --tags origin
+          git rev-parse "refs/tags/${TAG}"
+
+          echo "Checking whether release already exists..."
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Release already exists. Updating it..."
+
+              gh release edit "$TAG" \
+                --title "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
+                --notes "New release for DayByDay v${{ steps.versioning.outputs.APP_VERSION }}"
+
+              gh release upload "$TAG" "$APK" --clobber
+          else
+              echo "Creating release..."
+
+              gh release create "$TAG" \
+                "$APK" \
+                --title "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
+                --notes "New release for DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
+                --verify-tag
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
