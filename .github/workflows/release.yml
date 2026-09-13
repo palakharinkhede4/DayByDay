@@ -133,7 +133,11 @@ jobs:
 
           echo "Checking tag..."
           git fetch --tags origin
-          git rev-parse "refs/tags/${TAG}"
+          if ! git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} missing. Creating and pushing it automatically..."
+            git tag "${TAG}"
+            git push origin "${TAG}"
+          fi
 
           echo "Checking whether release already exists..."
 
