@@ -181,7 +181,7 @@ app.listen(PORT, '0.0.0.0', async () => {
           if (!realPic) {
             const podRows = await sql`
               SELECT members FROM daybyday_group_pods
-              WHERE members @> ${JSON.stringify([{ id: u.id }])}::jsonb
+              WHERE members @> ${sql.json([{ id: u.id }])}
             `;
             for (const pr of podRows) {
               const mems = Array.isArray(pr.members) ? pr.members : [];
@@ -198,7 +198,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             await sql`
               UPDATE daybyday_users
               SET profile_picture = ${realPic},
-                  preferences = ${JSON.stringify(curP)}::jsonb
+                  preferences = ${sql.json(curP)}
               WHERE id = ${u.id}
             `;
             console.log(`[AutoHeal] Restored authentic profile picture (${realPic.length} bytes) for ${u.username}`);
@@ -217,7 +217,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             pPrefs.trackedPartnerCodes = updated;
             await sql`
               UPDATE daybyday_users
-              SET preferences = ${JSON.stringify(pPrefs)}::jsonb
+              SET preferences = ${sql.json(pPrefs)}
               WHERE id = ${palakRows[0].id}
             `;
             console.log('[AutoHeal] Restored trackedPartnerCodes for palakharinkhede:', updated);
@@ -251,7 +251,7 @@ app.listen(PORT, '0.0.0.0', async () => {
           if (podChanged) {
             await sql`
               UPDATE daybyday_group_pods
-              SET members = ${JSON.stringify(updatedMems)}::jsonb
+              SET members = ${sql.json(updatedMems)}
               WHERE id = ${p.id}
             `;
             console.log(`[AutoHeal] Cleaned dummy member pictures in pod ${p.code}`);
@@ -271,7 +271,7 @@ app.listen(PORT, '0.0.0.0', async () => {
                         (isValidProfilePicture(u.profile_picture) ? u.profile_picture : null);
             await sql`
               UPDATE daybyday_users 
-              SET preferences = ${JSON.stringify(cleaned)}::jsonb,
+              SET preferences = ${sql.json(cleaned)},
                   profile_picture = ${pic}
               WHERE id = ${u.id}
             `;

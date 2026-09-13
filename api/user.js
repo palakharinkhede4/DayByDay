@@ -595,8 +595,8 @@ async function formatGroupPodFromRow(row, sql = null) {
   if ((goalsChanged || membersChanged) && sql && row.id) {
     sql`
       UPDATE daybyday_group_pods 
-      SET shared_goals = ${JSON.stringify(cleanGoals)}::jsonb,
-          members = ${JSON.stringify(updatedMembers)}::jsonb,
+      SET shared_goals = ${sql.json(cleanGoals)},
+          members = ${sql.json(updatedMembers)},
           updated_at = CURRENT_TIMESTAMP 
       WHERE id = ${row.id}
     `.catch((saveErr) => console.warn('[Pod Reconcile] Auto-save healed goals error:', saveErr.message));
@@ -748,7 +748,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
     const updatedPrefs = { ...existingPrefs, healthData: normalized };
     await sql`
       UPDATE daybyday_users 
-      SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
+      SET preferences = ${sql.json(updatedPrefs)}, last_active = CURRENT_TIMESTAMP
       WHERE id = ${targetUser.id}
     `;
 
@@ -806,7 +806,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
               UPDATE daybyday_habits
               SET today_value = ${effectiveSteps},
                   completed = ${completed},
-                  history = ${JSON.stringify(history)}::jsonb,
+                  history = ${sql.json(history)},
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${sh.id}
             `;
@@ -815,7 +815,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
             // (touching updated_at would make wasUpdatedToday=true and show stale data)
             await sql`
               UPDATE daybyday_habits
-              SET history = ${JSON.stringify(history)}::jsonb
+              SET history = ${sql.json(history)}
               WHERE id = ${sh.id}
             `;
           }
@@ -841,7 +841,7 @@ async function applyHealthSyncToUser(sql, targetUser, healthPayload) {
           )
           VALUES (
             ${targetUser.id}, 'steps', 'Steps', 'Daily steps from device', 10000, 'steps', 'steps', 'Daily',
-            ${todayVal}, ${completed}, null, null, 1, ${JSON.stringify(incomingHist)}::jsonb, CURRENT_TIMESTAMP
+            ${todayVal}, ${completed}, null, null, 1, ${sql.json(incomingHist)}, CURRENT_TIMESTAMP
           )
           ON CONFLICT (user_id, habit_id) DO UPDATE SET
             today_value = EXCLUDED.today_value,
@@ -1254,7 +1254,7 @@ export default async function handler(req, res) {
                       if (sql && groupPod.id) {
                         sql`
                           UPDATE daybyday_group_pods
-                          SET shared_goals = ${JSON.stringify(groupPod.sharedGoals)}::jsonb,
+                          SET shared_goals = ${sql.json(groupPod.sharedGoals)},
                               updated_at = CURRENT_TIMESTAMP
                           WHERE id = ${groupPod.id}
                         `.catch((gpErr) => {
@@ -1462,7 +1462,7 @@ export default async function handler(req, res) {
             )
             VALUES (
               ${userId}, ${cleanUsername}, ${secretCode}, ${displayName}, ${avatar},
-              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}, ${salt}, ${JSON.stringify(initialPreferences)}::jsonb
+              ${passwordHash}, ${salt}, ${securityQuestion}, ${answerHash}, ${salt}, ${sql.json(initialPreferences)}
             )
             RETURNING *
           `;
@@ -1539,7 +1539,7 @@ export default async function handler(req, res) {
               ...currentPrefs,
               healthData: cleanHealthData,
             };
-            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${user.id}`;
+            await sql`UPDATE daybyday_users SET preferences = ${sql.json(updatedPrefs)} WHERE id = ${user.id}`;
 
             // Also keep user's step habit row in daybyday_habits in perfect sync
             try {
@@ -1594,14 +1594,14 @@ export default async function handler(req, res) {
                     const isDone = effectiveSteps2 >= targetNum;
                     await sql`
                       UPDATE daybyday_habits 
-                      SET today_value = ${effectiveSteps2}, history = ${JSON.stringify(history)}::jsonb, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
+                      SET today_value = ${effectiveSteps2}, history = ${sql.json(history)}, completed = ${isDone}, updated_at = CURRENT_TIMESTAMP
                       WHERE id = ${h.id}
                     `;
                   } else {
                     // Stale sync: archive to history ONLY — do NOT touch today_value or updated_at
                     await sql`
                       UPDATE daybyday_habits 
-                      SET history = ${JSON.stringify(history)}::jsonb
+                      SET history = ${sql.json(history)}
                       WHERE id = ${h.id}
                     `;
                   }
@@ -1624,7 +1624,7 @@ export default async function handler(req, res) {
                   )
                   VALUES (
                     ${user.id}, 'steps', 'Steps', 'Daily steps from device', 10000, 'steps', 'steps', 'Daily',
-                    ${isToday ? cleanHealthData.steps : 0}, ${isDone}, null, null, 1, ${JSON.stringify(incomingHist)}::jsonb, CURRENT_TIMESTAMP
+                    ${isToday ? cleanHealthData.steps : 0}, ${isDone}, null, null, 1, ${sql.json(incomingHist)}, CURRENT_TIMESTAMP
                   )
                   ON CONFLICT (user_id, habit_id) DO UPDATE SET
                     today_value = EXCLUDED.today_value,
@@ -1688,7 +1688,7 @@ export default async function handler(req, res) {
           const userPrefs = cleanPreferences(user.preferences);
           user.preferences = userPrefs;
           try {
-            sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(userPrefs)}::jsonb WHERE id = ${user.id}`.catch(() => { });
+            sql`UPDATE daybyday_users SET preferences = ${sql.json(userPrefs)} WHERE id = ${user.id}`.catch(() => { });
           } catch { }
 
           // Ensure user has a distinct, unique secret code (upgrade legacy/missing/dummy codes)
@@ -2001,7 +2001,7 @@ export default async function handler(req, res) {
         if (sql) {
           if (preferences) {
             const safePrefs = cleanPreferences(preferences);
-            await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(safePrefs)}::jsonb, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
+            await sql`UPDATE daybyday_users SET preferences = ${sql.json(safePrefs)}, last_active = CURRENT_TIMESTAMP WHERE id = ${userId}`;
           }
           const todayStr = getIstDateKey();
           const yesterdayStr = getIstYesterdayKey();
@@ -2105,7 +2105,7 @@ export default async function handler(req, res) {
               VALUES (
                 ${userId}, ${h.id}, ${h.name}, ${h.description || ''}, ${h.target || 1}, ${h.unit || ''}, ${h.icon || 'star'}, ${h.category || 'Daily'},
                 ${todayValueToSave}, ${completedToSave}, ${h.reminderTime || null}, ${reminderDaysStr},
-                ${h.streak || 0}, ${JSON.stringify(historyObj)}::jsonb, CURRENT_TIMESTAMP
+                ${h.streak || 0}, ${sql.json(historyObj)}, CURRENT_TIMESTAMP
               )
               ON CONFLICT (user_id, habit_id) DO UPDATE SET
                 today_value = EXCLUDED.today_value,
@@ -2141,7 +2141,7 @@ export default async function handler(req, res) {
                     manualOverrideDate: getIstDateKey(),
                     syncedAt: new Date().toISOString(),
                   };
-                  await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(curPrefs)}::jsonb WHERE id = ${userId}`;
+                  await sql`UPDATE daybyday_users SET preferences = ${sql.json(curPrefs)} WHERE id = ${userId}`;
                 }
               } catch (prefErr) {
                 console.warn('Notice syncing steps to preferences in SQL:', prefErr.message);
@@ -2224,7 +2224,7 @@ export default async function handler(req, res) {
                   return g;
                 });
                 if (changed) {
-                  await sql`UPDATE daybyday_group_pods SET shared_goals = ${JSON.stringify(sGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = ${gr.id}`;
+                  await sql`UPDATE daybyday_group_pods SET shared_goals = ${sql.json(sGoals)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${gr.id}`;
                 }
               }
             } catch (podSyncErr) {
@@ -2285,7 +2285,7 @@ export default async function handler(req, res) {
 
           await sql`
             UPDATE daybyday_users 
-            SET preferences = ${JSON.stringify(safePrefs)}::jsonb,
+            SET preferences = ${sql.json(safePrefs)},
                 profile_picture = ${newPic},
                 last_active = CURRENT_TIMESTAMP 
             WHERE id = ${userRecord.id}
@@ -2334,7 +2334,7 @@ export default async function handler(req, res) {
 
             await sql`
               UPDATE daybyday_users
-              SET preferences = ${JSON.stringify(currentPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
+              SET preferences = ${sql.json(currentPrefs)}, last_active = CURRENT_TIMESTAMP
               WHERE id = ${rows[0].id}
             `;
             return res.status(200).json({ success: true, trackedPartnerCodes: codes });
@@ -2381,7 +2381,7 @@ export default async function handler(req, res) {
 
             await sql`
               UPDATE daybyday_users
-              SET preferences = ${JSON.stringify(currentPrefs)}::jsonb, last_active = CURRENT_TIMESTAMP
+              SET preferences = ${sql.json(currentPrefs)}, last_active = CURRENT_TIMESTAMP
               WHERE id = ${rows[0].id}
             `;
             return res.status(200).json({ success: true, trackedPartnerCodes: codes });
@@ -2627,7 +2627,7 @@ export default async function handler(req, res) {
           }
           await sql`
             INSERT INTO daybyday_group_pods (id, name, code, members, shared_goals, created_at, updated_at)
-            VALUES (${id}, ${cleanName}, ${cleanCode}, ${JSON.stringify(podRecord.members)}::jsonb, ${JSON.stringify(goals)}::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (${id}, ${cleanName}, ${cleanCode}, ${sql.json(podRecord.members)}, ${sql.json(goals)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (code) DO UPDATE SET
               updated_at = CURRENT_TIMESTAMP
           `;
@@ -2641,7 +2641,7 @@ export default async function handler(req, res) {
                 const existingCodes = Array.isArray(existingPrefs.groupPodCodes) ? existingPrefs.groupPodCodes : [];
                 if (!existingCodes.includes(cleanCode)) {
                   const updatedPrefs = { ...existingPrefs, groupPodCodes: [...existingCodes, cleanCode] };
-                  await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${userId}`;
+                  await sql`UPDATE daybyday_users SET preferences = ${sql.json(updatedPrefs)} WHERE id = ${userId}`;
                 }
               }
             } catch (prefErr) {
@@ -2738,7 +2738,7 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_group_pods 
-            SET members = ${JSON.stringify(pod.members)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            SET members = ${sql.json(pod.members)}, updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(code) = ${cleanCode}
           `;
 
@@ -2752,7 +2752,7 @@ export default async function handler(req, res) {
                 const existingCodes = Array.isArray(existingPrefs.groupPodCodes) ? existingPrefs.groupPodCodes : [];
                 if (!existingCodes.includes(cleanCode)) {
                   const updatedPrefs = { ...existingPrefs, groupPodCodes: [...existingCodes, cleanCode] };
-                  await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${userId}`;
+                  await sql`UPDATE daybyday_users SET preferences = ${sql.json(updatedPrefs)} WHERE id = ${userId}`;
                 }
               }
             } catch (prefErr) {
@@ -3029,7 +3029,7 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_group_pods
-            SET shared_goals = ${JSON.stringify(updatedGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            SET shared_goals = ${sql.json(updatedGoals)}, updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(code) = ${cleanCode}
           `;
         }
@@ -3152,7 +3152,7 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_group_pods 
-            SET shared_goals = ${JSON.stringify(updatedGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            SET shared_goals = ${sql.json(updatedGoals)}, updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(code) = ${cleanCode}
           `;
         }
@@ -3189,7 +3189,7 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_group_pods 
-            SET shared_goals = ${JSON.stringify(updatedGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            SET shared_goals = ${sql.json(updatedGoals)}, updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(code) = ${cleanCode}
           `;
         }
@@ -3240,7 +3240,7 @@ export default async function handler(req, res) {
         if (sql) {
           await sql`
             UPDATE daybyday_group_pods 
-            SET shared_goals = ${JSON.stringify(updatedGoals)}::jsonb, updated_at = CURRENT_TIMESTAMP
+            SET shared_goals = ${sql.json(updatedGoals)}, updated_at = CURRENT_TIMESTAMP
             WHERE UPPER(code) = ${cleanCode}
           `;
         }
@@ -3568,7 +3568,7 @@ export default async function handler(req, res) {
                     modified = true;
                   }
                   if (modified) {
-                    await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(p)}::jsonb WHERE id = ${u.id}`;
+                    await sql`UPDATE daybyday_users SET preferences = ${sql.json(p)} WHERE id = ${u.id}`;
                   }
                 }
               } catch (cleanErr) {
@@ -3577,7 +3577,7 @@ export default async function handler(req, res) {
             } else {
               await sql`
                 UPDATE daybyday_group_pods
-                SET members = ${JSON.stringify(remaining)}::jsonb, updated_at = CURRENT_TIMESTAMP
+                SET members = ${sql.json(remaining)}, updated_at = CURRENT_TIMESTAMP
                 WHERE UPPER(code) = ${cleanCode}
               `;
             }
@@ -3601,7 +3601,7 @@ export default async function handler(req, res) {
                     ? (updatedCodes[0] || null)
                     : existingPrefs.groupPodCode,
                 };
-                await sql`UPDATE daybyday_users SET preferences = ${JSON.stringify(updatedPrefs)}::jsonb WHERE id = ${uRows[0].id}`;
+                await sql`UPDATE daybyday_users SET preferences = ${sql.json(updatedPrefs)} WHERE id = ${uRows[0].id}`;
               }
             } catch (prefErr) {
               console.warn('Notice removing groupPodCodes from prefs after leave:', prefErr.message);

@@ -128,7 +128,7 @@ export default async function handler(req, res) {
           ) VALUES (
             ${actId}, ${userId}, ${username || 'user'}, ${displayName || username || 'User'},
             ${avatar}, ${profilePicture}, ${type}, ${cleanPodCode},
-            ${title}, ${description}, ${JSON.stringify(parseSafeJson(metadata, {}))}::jsonb,
+            ${title}, ${description}, ${sql.json(parseSafeJson(metadata, {}))},
             CURRENT_TIMESTAMP
           )
         `;
