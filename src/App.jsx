@@ -69,12 +69,22 @@ class ScreenErrorBoundary extends React.Component {
 }
 
 const MainAppContent = () => {
-  const { user, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide, syncDeviceHealth, syncAllStats } = useHabits();
+  const { user, logoutUser, isSessionRestoring, isFeaturesGuideOpen, closeFeaturesGuide, syncDeviceHealth, syncAllStats } = useHabits();
   const [activeTab, setActiveTab] = useState('habits');
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+
+  // Automatically log out if backend rejects session token
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      console.warn('Session expired or invalid token detected. Forcing logout.');
+      logoutUser();
+    };
+    window.addEventListener('session-expired', handleSessionExpired);
+    return () => window.removeEventListener('session-expired', handleSessionExpired);
+  }, [logoutUser]);
 
   // Sync stats immediately when tab changes
   const prevTabRef = useRef(null);

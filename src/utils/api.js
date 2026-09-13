@@ -158,6 +158,7 @@ export async function apiFetch(url, options = {}) {
       }
       if (response.status === 401 && typeof window !== 'undefined') {
         localStorage.removeItem('daybyday_session_token');
+        window.dispatchEvent(new Event('session-expired'));
       }
 
       return {
@@ -187,6 +188,7 @@ export async function apiFetch(url, options = {}) {
         }
         if (status === 401 && typeof window !== 'undefined') {
           localStorage.removeItem('daybyday_session_token');
+          window.dispatchEvent(new Event('session-expired'));
         }
         return {
           ok: false,
@@ -211,6 +213,7 @@ export async function apiFetch(url, options = {}) {
   const response = await fetch(targetUrl, fetchOptions);
   if (response.status === 401 && typeof window !== 'undefined') {
     localStorage.removeItem('daybyday_session_token');
+    window.dispatchEvent(new Event('session-expired'));
   }
   return response;
 }
