@@ -127,18 +127,14 @@ jobs:
           echo "2. Install over your existing app — all user data is preserved." >> release_body.md
 
       - name: Publish or Update GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.versioning.outputs.APP_TAG }}
-          target_commitish: ${{ github.sha }}
-          name: "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}"
-          body_path: release_body.md
-          files: DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk
-          draft: false
-          prerelease: false
-          make_latest: true
+        run: |
+          gh release create ${{ steps.versioning.outputs.APP_TAG }} \
+            DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk \
+            --title "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
+            --notes-file release_body.md \
+            --target ${{ github.sha }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Summary
         run: |
