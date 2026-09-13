@@ -130,6 +130,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.versioning.outputs.APP_TAG }}
+          target_commitish: ${{ github.sha }}
           name: "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}"
           body_path: release_body.md
           files: DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk
