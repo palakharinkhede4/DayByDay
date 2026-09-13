@@ -131,7 +131,7 @@ jobs:
           gh release create ${{ steps.versioning.outputs.APP_TAG }} \
             DayByDay-v${{ steps.versioning.outputs.APP_VERSION }}.apk \
             --title "DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
-            --notes-file release_body.md \
+            --notes "New release for DayByDay v${{ steps.versioning.outputs.APP_VERSION }}" \
             --target ${{ github.sha }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
