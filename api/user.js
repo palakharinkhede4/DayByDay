@@ -1116,9 +1116,7 @@ export default async function handler(req, res) {
 
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE (members @> ${JSON.stringify([{ id: user.id }])}::jsonb)
-               OR (members @> ${JSON.stringify([{ username: user.username }])}::jsonb)
-               OR ( ${user.secret_code ? sql`members @> ${JSON.stringify([{ secretCode: user.secret_code }])}::jsonb` : sql`FALSE`} )
+            WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${user.username}))
                ${podCodeConditions}
             ORDER BY updated_at DESC
             LIMIT 10
@@ -1727,8 +1725,7 @@ export default async function handler(req, res) {
             `,
             sql`
               SELECT * FROM daybyday_group_pods 
-              WHERE (members @> ${JSON.stringify([{ id: user.id }])}::jsonb)
-                 OR (members @> ${JSON.stringify([{ username: user.username }])}::jsonb)
+              WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${user.username}))
                  ${podCodeConds}
               ORDER BY updated_at DESC
               LIMIT 10
@@ -2167,8 +2164,7 @@ export default async function handler(req, res) {
 
               const gRows = await sql`
                 SELECT id, members, shared_goals FROM daybyday_group_pods 
-                WHERE (members @> ${JSON.stringify([{ id: userId }])}::jsonb)
-                   OR (${cleanUName ? sql`members @> ${JSON.stringify([{ username: cleanUName }])}::jsonb` : sql`FALSE`})
+                WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${cleanUName}))
               `;
               for (const gr of gRows) {
                 let sGoals = parseSafeJson(gr.shared_goals, []);
@@ -2860,8 +2856,7 @@ export default async function handler(req, res) {
 
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE ( ${userId ? sql`members @> ${JSON.stringify([{ id: userId }])}::jsonb` : sql`FALSE`} )
-               OR ( ${cleanU ? sql`members @> ${JSON.stringify([{ username: cleanU }])}::jsonb` : sql`FALSE`} )
+            WHERE ( ${cleanU ? sql`EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = ${cleanU})` : sql`FALSE`} )
                ${podCodeConds}
             ORDER BY updated_at DESC
             LIMIT 10
