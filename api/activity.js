@@ -111,6 +111,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'User ID and title required' });
     }
 
+    // Security Authorization: Protect activity feed injection
+    if (!req.authUserId || req.authUserId !== userId) {
+      return res.status(401).json({ error: 'Unauthorized: No valid session token provided' });
+    }
+
     const actId = `act_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const cleanPodCode = podCode ? String(podCode).trim().toUpperCase() : null;
 

@@ -2,6 +2,13 @@
 import crypto from 'crypto';
 import { getDb, ensureTables, memoryDb, isTablesInitialized } from './db.js';
 import { sendNotification } from './push.js';
+import jwt from 'jsonwebtoken';
+
+export const JWT_SECRET = process.env.JWT_SECRET || 'daybyday-super-secret-key-2026';
+
+function generateToken(userId) {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
+}
 
 function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(String(password), String(salt), 1000, 32, 'sha256').toString('hex');
@@ -1021,7 +1028,7 @@ export default async function handler(req, res) {
         let user = null;
         const cleanCode = (code || '').trim().toUpperCase();
         const cleanUsername = (username || '').trim().replace(/^@/, '');
-        const isPartnerLookup = req.query.partner === '1' || req.query.isPartner === 'true' || (Boolean(cleanCode) && !cleanUsername);
+        let isPartnerLookup = req.query.partner === '1' || req.query.isPartner === 'true' || (Boolean(cleanCode) && !cleanUsername);
 
         // 1. Check by explicit code if provided
         if (cleanCode) {
@@ -1054,6 +1061,11 @@ export default async function handler(req, res) {
 
         if (!user) {
           return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Security: If not providing a valid JWT for the exact user being requested, force partner lookup to hide private data
+        if (!req.authUserId || req.authUserId !== user.id) {
+          isPartnerLookup = true;
         }
 
         // Fetch user's habits
@@ -1328,12 +1340,12 @@ export default async function handler(req, res) {
           user: safeUser,
           habits: formattedHabits,
           preferences: safePrefs,
-          partner,
-          podCode,
-          groupPod,
-          groupPods,
-          trackedPartners,
-          isSolo: !partner,
+          partner: isPartnerLookup ? null : partner,
+          podCode: isPartnerLookup ? null : podCode,
+          groupPod: isPartnerLookup ? null : groupPod,
+          groupPods: isPartnerLookup ? [] : groupPods,
+          trackedPartners: isPartnerLookup ? [] : trackedPartners,
+          isSolo: isPartnerLookup ? true : !partner,
           todayPercent,
           streak,
         });
@@ -1393,6 +1405,17 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const { action } = req.body || {};
 
+    // Security Authorization: Protect all modifying endpoints
+    const publicActions = ['register', 'create_user', 'login', 'get_security_question', 'reset_password', 'health_sync', 'sync_health', 'get_group_pod', 'resolve_latest_apk', 'resolve_cdn', 'upgrade_all_codes'];
+    if (!publicActions.includes(action)) {
+      if (!req.authUserId) {
+        return res.status(401).json({ error: 'Unauthorized: No valid session token provided' });
+      }
+      if (req.body.userId && req.body.userId !== req.authUserId) {
+        return res.status(403).json({ error: 'Forbidden: You cannot modify another user' });
+      }
+    }
+
     // ACTION: REGISTER / CREATE USER
     if (action === 'register' || action === 'create_user') {
       const rawUsername = (req.body.username || '').trim().replace(/^@/, '');
@@ -1445,7 +1468,7 @@ export default async function handler(req, res) {
             )
             RETURNING *
           `;
-          return res.status(201).json({ user: sanitizeUser(created[0]) });
+          return res.status(201).json({ token: generateToken(userId), user: sanitizeUser(created[0]) });
         }
 
         // Memory Store Fallback
@@ -1467,7 +1490,7 @@ export default async function handler(req, res) {
           createdAt: new Date().toISOString()
         };
         memoryDb.saveUser(user);
-        return res.status(201).json({ user: sanitizeUser(user) });
+        return res.status(201).json({ token: generateToken(userId), user: sanitizeUser(user) });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
@@ -1704,9 +1727,8 @@ export default async function handler(req, res) {
             `,
             sql`
               SELECT * FROM daybyday_group_pods 
-              WHERE (members::text ILIKE ${'%' + user.id + '%'})
-                 OR (members::text ILIKE ${'%' + user.username + '%'})
-                 OR ( ${user.secret_code ? sql`members::text ILIKE ${'%' + user.secret_code + '%'}` : sql`FALSE`} )
+              WHERE (members @> ${JSON.stringify([{ id: user.id }])}::jsonb)
+                 OR (members @> ${JSON.stringify([{ username: user.username }])}::jsonb)
                  ${podCodeConds}
               ORDER BY updated_at DESC
               LIMIT 10
@@ -1798,6 +1820,7 @@ export default async function handler(req, res) {
           const userHabitsFormatted = habits.map((h) => formatHabitFromRow(h, sql));
 
           return res.status(200).json({
+            token: generateToken(user.id),
             user: sanitizeUser(user),
             habits: userHabitsFormatted,
             preferences: userPrefs,
@@ -1823,6 +1846,7 @@ export default async function handler(req, res) {
         }
         const habits = memoryDb.getUserHabits(user.id);
         return res.status(200).json({
+          token: generateToken(user.id),
           user: sanitizeUser(user),
           habits,
           preferences: parseSafeJson(user.preferences, {}),
@@ -2143,9 +2167,8 @@ export default async function handler(req, res) {
 
               const gRows = await sql`
                 SELECT id, members, shared_goals FROM daybyday_group_pods 
-                WHERE (members::text LIKE ${'%"' + userId + '"%'})
-                   OR (${cleanUName ? sql`members::text ILIKE ${'%"' + cleanUName + '"%'}` : sql`FALSE`})
-                   OR (${cleanUCode ? sql`members::text ILIKE ${'%"' + cleanUCode + '"%'}` : sql`FALSE`})
+                WHERE (members @> ${JSON.stringify([{ id: userId }])}::jsonb)
+                   OR (${cleanUName ? sql`members @> ${JSON.stringify([{ username: cleanUName }])}::jsonb` : sql`FALSE`})
               `;
               for (const gr of gRows) {
                 let sGoals = parseSafeJson(gr.shared_goals, []);
@@ -2837,9 +2860,8 @@ export default async function handler(req, res) {
 
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE ( ${userId ? sql`members::text ILIKE ${'%' + userId + '%'}` : sql`FALSE`} )
-               OR ( ${cleanU ? sql`members::text ILIKE ${'%' + cleanU + '%'}` : sql`FALSE`} )
-               OR ( ${cleanCode ? sql`members::text ILIKE ${'%' + cleanCode + '%'}` : sql`FALSE`} )
+            WHERE ( ${userId ? sql`members @> ${JSON.stringify([{ id: userId }])}::jsonb` : sql`FALSE`} )
+               OR ( ${cleanU ? sql`members @> ${JSON.stringify([{ username: cleanU }])}::jsonb` : sql`FALSE`} )
                ${podCodeConds}
             ORDER BY updated_at DESC
             LIMIT 10

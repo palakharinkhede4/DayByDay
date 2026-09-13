@@ -1,7 +1,7 @@
 {
   "name": "daybyday",
   "private": true,
-  "version": "4.15.6",
+  "version": "4.16.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^14.4.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.41.0",
     "postgres": "^3.4.9",
     "react": "^19.2.8",

@@ -86,6 +86,11 @@ export default async function handler(req, res) {
     if (!cleanCode) {
       return res.status(400).json({ error: 'Pod code is required' });
     }
+
+    // Security Authorization: Protect pod modification
+    if (userId && (!req.authUserId || req.authUserId !== userId)) {
+      return res.status(401).json({ error: 'Unauthorized: No valid session token provided' });
+    }
     const podKey = `pod_${cleanCode}`;
 
     let currentPod = (await getKV(podKey)) || {

@@ -122,6 +122,9 @@ export async function apiFetch(url, options = {}) {
     targetUrl = DEFAULT_API_URL + endpoint;
   }
 
+  const sessionToken = typeof window !== 'undefined' ? localStorage.getItem('daybyday_session_token') : null;
+  const authHeaders = sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {};
+
   if (isNativePlatform()) {
     const method = (options.method || 'GET').toUpperCase();
     let data = options.body;
@@ -140,6 +143,7 @@ export async function apiFetch(url, options = {}) {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          ...authHeaders,
           ...(options.headers || {}),
         },
         data: method !== 'GET' ? data : undefined,
@@ -151,6 +155,9 @@ export async function apiFetch(url, options = {}) {
         try {
           responseData = JSON.parse(responseData);
         } catch {}
+      }
+      if (response.status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem('daybyday_session_token');
       }
 
       return {
@@ -178,6 +185,9 @@ export async function apiFetch(url, options = {}) {
             responseData = JSON.parse(responseData);
           } catch {}
         }
+        if (status === 401 && typeof window !== 'undefined') {
+          localStorage.removeItem('daybyday_session_token');
+        }
         return {
           ok: false,
           status,
@@ -191,7 +201,18 @@ export async function apiFetch(url, options = {}) {
     }
   }
 
-  return fetch(targetUrl, options);
+  const fetchOptions = {
+    ...options,
+    headers: {
+      ...authHeaders,
+      ...(options.headers || {}),
+    }
+  };
+  const response = await fetch(targetUrl, fetchOptions);
+  if (response.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem('daybyday_session_token');
+  }
+  return response;
 }
 
 // Safe JSON parser to handle both native responses and standard fetch responses
@@ -336,6 +357,9 @@ export const registerUserRemote = async (username, password, arg3, arg4, arg5, a
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Failed to create account'));
+    if (data && data.token && typeof window !== 'undefined') {
+      localStorage.setItem('daybyday_session_token', data.token);
+    }
     return data;
   } catch (err) {
     throw new Error(formatErrorMessage(err, 'Failed to create account'));
@@ -357,6 +381,9 @@ export const loginUserRemote = async (username, password) => {
     });
     const data = await parseJsonSafe(res);
     if (!res.ok) throw new Error(formatErrorMessage(data?.error || data, 'Invalid username or password'));
+    if (data && data.token && typeof window !== 'undefined') {
+      localStorage.setItem('daybyday_session_token', data.token);
+    }
     return data;
   } catch (err) {
     throw new Error(formatErrorMessage(err, 'Sign in failed. Check username and password.'));

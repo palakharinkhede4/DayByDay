@@ -24,6 +24,23 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
+import jwt from 'jsonwebtoken';
+export const JWT_SECRET = process.env.JWT_SECRET || 'daybyday-super-secret-key-2026';
+
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.authUserId = decoded.userId;
+    } catch (e) {
+      // Invalid token, ignore or let handlers reject
+    }
+  }
+  next();
+});
+
 // Global CORS & Request Timing Middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin || '*';
@@ -164,7 +181,7 @@ app.listen(PORT, '0.0.0.0', async () => {
           if (!realPic) {
             const podRows = await sql`
               SELECT members FROM daybyday_group_pods
-              WHERE members::text LIKE ${'%"' + u.id + '"%'}
+              WHERE members @> ${JSON.stringify([{ id: u.id }])}::jsonb
             `;
             for (const pr of podRows) {
               const mems = Array.isArray(pr.members) ? pr.members : [];
