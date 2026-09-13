@@ -1116,7 +1116,7 @@ export default async function handler(req, res) {
 
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${user.username}))
+            WHERE jsonb_typeof(members) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${user.username}))
                ${podCodeConditions}
             ORDER BY updated_at DESC
             LIMIT 10
@@ -1725,7 +1725,7 @@ export default async function handler(req, res) {
             `,
             sql`
               SELECT * FROM daybyday_group_pods 
-              WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${user.username}))
+              WHERE jsonb_typeof(members) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${user.username}))
                  ${podCodeConds}
               ORDER BY updated_at DESC
               LIMIT 10
@@ -2164,7 +2164,7 @@ export default async function handler(req, res) {
 
               const gRows = await sql`
                 SELECT id, members, shared_goals FROM daybyday_group_pods 
-                WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${cleanUName}))
+                WHERE jsonb_typeof(members) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = LOWER(${cleanUName}))
               `;
               for (const gr of gRows) {
                 let sGoals = parseSafeJson(gr.shared_goals, []);
@@ -2856,7 +2856,7 @@ export default async function handler(req, res) {
 
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE ( ${cleanU ? sql`EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = ${cleanU})` : sql`FALSE`} )
+            WHERE ( ${cleanU ? sql`jsonb_typeof(members) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(members) AS m WHERE LOWER(m->>'username') = ${cleanU})` : sql`FALSE`} )
                ${podCodeConds}
             ORDER BY updated_at DESC
             LIMIT 10

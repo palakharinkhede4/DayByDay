@@ -227,8 +227,20 @@ app.listen(PORT, '0.0.0.0', async () => {
         // 3. Ensure group pods members also have valid profile pictures (replace 118-byte dummy pixel)
         const allPods = await sql`SELECT id, code, members FROM daybyday_group_pods`;
         for (const p of allPods) {
-          const membersList = Array.isArray(p.members) ? p.members : [];
+          let parsedMembers = p.members;
+          if (typeof parsedMembers === 'string') {
+            try { parsedMembers = JSON.parse(parsedMembers); } catch(e){}
+            if (typeof parsedMembers === 'string') {
+              try { parsedMembers = JSON.parse(parsedMembers); } catch(e){}
+            }
+          }
+          const membersList = Array.isArray(parsedMembers) ? parsedMembers : [];
           let podChanged = false;
+          
+          if (!Array.isArray(p.members) || typeof p.members === 'string') {
+            podChanged = true;
+          }
+
           const updatedMems = membersList.map((m) => {
             if (m.profilePicture && !isValidProfilePicture(m.profilePicture)) {
               podChanged = true;
