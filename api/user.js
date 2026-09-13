@@ -1104,9 +1104,9 @@ export default async function handler(req, res) {
 
           const groupRows = await sql`
             SELECT * FROM daybyday_group_pods 
-            WHERE (members::text ILIKE ${'%' + user.id + '%'})
-               OR (members::text ILIKE ${'%' + user.username + '%'})
-               OR ( ${user.secret_code ? sql`members::text ILIKE ${'%' + user.secret_code + '%'}` : sql`FALSE`} )
+            WHERE (members @> ${JSON.stringify([{ id: user.id }])}::jsonb)
+               OR (members @> ${JSON.stringify([{ username: user.username }])}::jsonb)
+               OR ( ${user.secret_code ? sql`members @> ${JSON.stringify([{ secretCode: user.secret_code }])}::jsonb` : sql`FALSE`} )
                ${podCodeConditions}
             ORDER BY updated_at DESC
             LIMIT 10
